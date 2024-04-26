@@ -1,4 +1,4 @@
-from tasks.base import BaseTaskChain
+from .base import BaseTaskChain
 
 
 def task_chain_from_file(file_path: str, chain_class_name: str):
@@ -45,7 +45,7 @@ def task_chain_from_dict(task_chain_name: str,
     <ReportTaskChain object at 0x7f8b2c3b3d60>
     """
 
-    from tasks.base import TaskRegistry
+    from .base import TaskRegistry
     chain_class = TaskRegistry.get_task_class_by_name(target_name=chain_class_name,
                                                       target_task_type='taskchain')
 

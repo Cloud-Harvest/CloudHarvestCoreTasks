@@ -136,7 +136,7 @@ class TemplateTask(BaseTask):
         self.status = TaskStatusCodes.running
 
         for record in self.records:
-            from tasks.base import TaskConfiguration
+            from .base import TaskConfiguration
             task_configuration = TaskConfiguration(task_configuration=self.template.copy(),
                                                    task_chain=self.task_chain,
                                                    extra_vars=record)

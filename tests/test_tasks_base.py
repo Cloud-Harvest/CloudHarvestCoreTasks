@@ -114,17 +114,27 @@ class TestBaseAsyncTask(unittest.TestCase):
 
 
 class TestBaseTaskChain(unittest.TestCase):
+    """
+    Unit tests for the BaseTaskChain class.
+    """
+
     def setUp(self):
+        """
+        Set up the test environment for each test case.
+        """
         # Create a dummy task and add it to the task chain
         class DummyTask(BaseTask):
             pass
 
         self.dummy_task = DummyTask(name='dummy')
         self.task_configuration = {'dummy': {'name': 'dummy_task', 'description': 'This is a dummy task'}}
-        self.base_task_chain = BaseTaskChain(name='test_chain', task_templates=[self.task_configuration])
+        self.base_task_chain = BaseTaskChain(name='test_chain', template=self.task_configuration)
 
     def test_init(self):
-        # Test the __init__ method
+        """
+        Test the __init__ method of the BaseTaskChain class.
+        """
+        # Assert that the initial values of the task chain attributes are as expected
         self.assertEqual(self.base_task_chain.name, 'test_chain')
         self.assertEqual(self.base_task_chain.description, None)
         self.assertEqual(self.base_task_chain.variables, {})
@@ -135,26 +145,43 @@ class TestBaseTaskChain(unittest.TestCase):
         self.assertEqual(self.base_task_chain.meta, None)
 
     def test_run(self):
-        # Test the run method
+        """
+        Test the run method of the BaseTaskChain class.
+        """
+        # Run the task chain
         self.base_task_chain.run()
+        # Assert that the status of the task chain is 'running'
         self.assertEqual(self.base_task_chain.status, TaskStatusCodes.running)
 
     def test_on_complete(self):
-        # Test the on_complete method
+        """
+        Test the on_complete method of the BaseTaskChain class.
+        """
+        # Call the on_complete method of the task chain
         self.base_task_chain.on_complete()
+        # Assert that the status of the task chain is 'complete'
         self.assertEqual(self.base_task_chain.status, TaskStatusCodes.complete)
 
     def test_on_error(self):
-        # Test the on_error method
+        """
+        Test the on_error method of the BaseTaskChain class.
+        """
+        # Simulate an error
         try:
             raise Exception('Test exception')
         except Exception as e:
+            # Call the on_error method of the task chain
             self.base_task_chain.on_error(e)
+        # Assert that the status of the task chain is 'error'
         self.assertEqual(self.base_task_chain.status, TaskStatusCodes.error)
 
     def test_terminate(self):
-        # Test the terminate method
+        """
+        Test the terminate method of the BaseTaskChain class.
+        """
+        # Call the terminate method of the task chain
         self.base_task_chain.terminate()
+        # Assert that the status of the task chain is 'terminating'
         self.assertEqual(self.base_task_chain.status, TaskStatusCodes.terminating)
 
 

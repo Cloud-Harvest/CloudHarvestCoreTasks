@@ -450,10 +450,17 @@ class BaseTaskChain(List[BaseTask]):
         Returns the result of the task chain. This can be interpreted either as the 'result' variable in the task
         chain's variables or the data and meta of the last task in the chain.
         """
-        return {
-            'data': self._data or self.data or self[-1].data,
-            'meta': self._meta or self[-1].meta
-        }
+        try:
+            return {
+                'data': self._data or self.data or self[-1].data,
+                'meta': self._meta or self[-1].meta
+            }
+        except IndexError:
+            return {
+                'error': ' '.join([f'None of the {len(self.task_templates)} tasks in the task chain {self.name} were'
+                                   f' successfully instantiated.',
+                                   self._meta or 'No error message provided.'])
+            }
 
     @property
     def total(self) -> int:

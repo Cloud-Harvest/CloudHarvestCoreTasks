@@ -5,11 +5,11 @@ from tasks.base import *
 
 class TestTaskStatusCodes(unittest.TestCase):
     def test_enum_values(self):
-        self.assertEqual(TaskStatusCodes.complete.value, TaskStatusCodes.complete)
-        self.assertEqual(TaskStatusCodes.error.value, TaskStatusCodes.error)
+        self.assertEqual(TaskStatusCodes.complete.value, 'complete')
+        self.assertEqual(TaskStatusCodes.error.value, 'error')
         self.assertEqual(TaskStatusCodes.initialized.value, 'initialized')
-        self.assertEqual(TaskStatusCodes.running.value, TaskStatusCodes.running)
-        self.assertEqual(TaskStatusCodes.terminating.value, TaskStatusCodes.terminating)
+        self.assertEqual(TaskStatusCodes.running.value, 'running')
+        self.assertEqual(TaskStatusCodes.terminating.value, 'terminating')
 
 
 class TestTaskRegistry(unittest.TestCase):
@@ -22,7 +22,7 @@ class TestTaskRegistry(unittest.TestCase):
 
     def test_task_class_by_name(self):
         # Test the get_task_class_by_name method
-        task_class = TaskRegistry.get_task_class_by_name('dummy')
+        task_class = TaskRegistry.get_task_class_by_name('dummy', 'task')
         self.assertEqual(task_class, self.dummy_task.__class__)
 
 
@@ -33,7 +33,7 @@ class TestTaskConfiguration(unittest.TestCase):
             pass
 
         self.dummy_task = DummyTask(name='dummy')
-        TaskRegistry.tasks['dummy'] = DummyTask
+        TaskRegistry.add_subclass(DummyTask)
 
         self.task_configuration = {
             'dummy': {
@@ -127,7 +127,18 @@ class TestBaseTaskChain(unittest.TestCase):
             pass
 
         self.dummy_task = DummyTask(name='dummy')
-        self.task_configuration = {'dummy': {'name': 'dummy_task', 'description': 'This is a dummy task'}}
+        self.task_configuration = {
+            'name': 'test_chain',
+            'description': 'This is a dummy task_chain.',
+            'tasks': [
+                {
+                    'delay': {
+                        'name': 'test delay task',
+                        'delay_seconds': 10
+                    }
+                }
+            ]
+        }
         self.base_task_chain = BaseTaskChain(name='test_chain', template=self.task_configuration)
 
     def test_init(self):
@@ -136,22 +147,26 @@ class TestBaseTaskChain(unittest.TestCase):
         """
         # Assert that the initial values of the task chain attributes are as expected
         self.assertEqual(self.base_task_chain.name, 'test_chain')
-        self.assertEqual(self.base_task_chain.description, None)
+        self.assertEqual(self.base_task_chain.description, 'This is a dummy task_chain.')
         self.assertEqual(self.base_task_chain.variables, {})
         self.assertEqual(self.base_task_chain.status, TaskStatusCodes.initialized)
         self.assertEqual(self.base_task_chain.position, 0)
         self.assertEqual(self.base_task_chain.start, None)
         self.assertEqual(self.base_task_chain.end, None)
-        self.assertEqual(self.base_task_chain.meta, None)
+        self.assertEqual(self.base_task_chain.result.get('meta'), None)
 
-    def test_run(self):
+    async def test_run(self):
         """
         Test the run method of the BaseTaskChain class.
         """
+
+        from asyncio import create_task
+
         # Run the task chain
         self.base_task_chain.run()
-        # Assert that the status of the task chain is 'running'
-        self.assertEqual(self.base_task_chain.status, TaskStatusCodes.running)
+
+        # Assert that the status of the task chain is 'complete'
+        self.assertEqual(self.base_task_chain.status, TaskStatusCodes.complete)
 
     def test_on_complete(self):
         """

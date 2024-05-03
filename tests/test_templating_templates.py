@@ -1,5 +1,5 @@
 import unittest
-from tasks.templating.functions import template_object
+from templating.functions import template_object
 
 
 class TestTemplateObject(unittest.TestCase):

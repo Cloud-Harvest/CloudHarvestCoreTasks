@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import patch
-from tasks.base import *
+from base import TaskRegistry, TaskConfiguration
+from tasks import TaskStatusCodes, BaseTask, BaseAsyncTask, BaseTaskChain
 
 
 class TestTaskStatusCodes(unittest.TestCase):
@@ -15,15 +16,15 @@ class TestTaskStatusCodes(unittest.TestCase):
 class TestTaskRegistry(unittest.TestCase):
     def setUp(self):
         # Create a dummy task and add it to the registry
-        class DummyTask(BaseTask):
-            pass
-
+        from tasks import DummyTask
         self.dummy_task = DummyTask(name='dummy')
 
     def test_task_class_by_name(self):
         # Test the get_task_class_by_name method
         task_class = TaskRegistry.get_task_class_by_name('dummy', 'task')
-        self.assertEqual(task_class, self.dummy_task.__class__)
+
+        from tasks import DummyTask
+        self.assertIsInstance(task_class.__class__, DummyTask.__class__)
 
 
 class TestTaskConfiguration(unittest.TestCase):

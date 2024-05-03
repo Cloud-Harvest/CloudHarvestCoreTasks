@@ -1,6 +1,6 @@
-from typing import Any, List, Iterable
+from typing import List
 
-from .base import BaseAsyncTask, BaseTask, BaseTaskChain, TaskStatusCodes
+from base import BaseAsyncTask, BaseTask, BaseTaskChain, TaskStatusCodes
 
 
 # class ForEachTask(BaseTask):
@@ -73,6 +73,19 @@ class DelayTask(BaseTask):
                 break
 
         self.on_complete()
+
+
+class DummyTask(BaseTask):
+    """
+    The DummyTask class is a subclass of the Base
+    Task class. It represents a task that does nothing when run. Used for testing.
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        Initializes a new instance of the DummyTask class.
+        """
+        super().__init__(*args, **kwargs)
 
 
 class PruneTask(BaseTask):

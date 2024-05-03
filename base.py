@@ -1,4 +1,4 @@
-from .exceptions import BaseTaskException
+from exceptions import BaseTaskException
 from enum import Enum
 from typing import List, Literal
 from logging import getLogger
@@ -135,7 +135,7 @@ class TaskConfiguration:
             BaseTask: The instantiated task.
         """
 
-        from .templating.functions import template_object
+        from templating.functions import template_object
 
         # If a task chain is provided, get its variables. Otherwise, use an empty dictionary.
         task_chain_vars = self.task_chain.get_variables_by_names(self.task_configuration.get('with_vars')) \

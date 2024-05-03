@@ -1,3 +1,4 @@
-jinja2
+Jinja2
+PyYAML
 python-dateutil
-pyyaml
+setuptools

@@ -1,4 +1,0 @@
-Jinja2
-PyYAML
-python-dateutil
-setuptools

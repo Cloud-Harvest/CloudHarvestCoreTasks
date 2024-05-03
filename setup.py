@@ -9,7 +9,8 @@ setup(
     description='This is the Core Task system for CloudHarvest.',
     author='Cloud Harvest',
     url='https://github.com/Cloud-Harvest/CloudHarvestCoreTasks',
-    packages=find_packages(exclude=['tests', 'tests.*', 'venv']),
+    packages=find_packages(exclude=['tests', 'tests.*', 'venv'],
+                           include='cloud_harvest_core_tasks*'),
     install_requires=requirements,
     classifiers=[
         'Development Status :: 3 - Alpha',

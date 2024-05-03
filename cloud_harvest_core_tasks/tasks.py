@@ -1,6 +1,6 @@
 from typing import List
 
-from base import BaseAsyncTask, BaseTask, BaseTaskChain, TaskStatusCodes
+from .base import BaseAsyncTask, BaseTask, BaseTaskChain, TaskStatusCodes
 
 
 # class ForEachTask(BaseTask):

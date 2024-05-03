@@ -305,6 +305,22 @@ class BaseAsyncTask(BaseTask):
         return self
 
 
+class BaseAuthenticationTask(BaseTask):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.auth = None
+
+    def run(self, *args, **kwargs) -> 'BaseAuthenticationTask':
+        """
+        Override this method with code to run a task asynchronously.
+        """
+
+        self.status = TaskStatusCodes.running
+
+        return self
+
+
 class BaseTaskChain(List[BaseTask]):
     """
     The BaseTaskChain class is responsible for managing a chain of tasks.

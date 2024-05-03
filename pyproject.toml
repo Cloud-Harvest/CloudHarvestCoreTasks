@@ -1,13 +1,10 @@
-[build-system]
-requires = ["setuptools", "wheel"]
-
-[project]
+[tool.poetry]
 name = "CloudHarvestCoreTasks"
 version = "0.1.0"
 description = "This is the Core Task system for CloudHarvest."
-authors = [{name = "Cloud Harvest"}, {name = "Fiona June Leathers"}]
-readme = "README.md"
+authors = ["Cloud Harvest", "Fiona June Leathers"]
 license = "MIT"
+readme = "README.md"
 homepage = "https://github.com/Cloud-Harvest/CloudHarvestCoreTasks"
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -16,15 +13,18 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 
-[project.urls]
+[tool.poetry.urls]
 Source = "https://github.com/Cloud-Harvest/CloudHarvestCoreTasks"
 
-[project.scripts]
-
-[project.dependencies]
+[tool.poetry.dependencies]
+python = "^3.12"
 Jinja2 = "*"
 PyYAML = "*"
 python-dateutil = "*"
 setuptools = "*"
 
-[project.dev-dependencies]
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

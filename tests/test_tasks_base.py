@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
-from cloud_harvest_core_tasks.base import TaskRegistry, TaskConfiguration
-from cloud_harvest_core_tasks.tasks import TaskStatusCodes, BaseTask, BaseAsyncTask, BaseTaskChain
+from CloudHarvestCoreTasks.base import TaskRegistry, TaskConfiguration
+from CloudHarvestCoreTasks.tasks import TaskStatusCodes, BaseTask, BaseAsyncTask, BaseTaskChain
 
 
 class TestTaskStatusCodes(unittest.TestCase):
@@ -16,14 +16,14 @@ class TestTaskStatusCodes(unittest.TestCase):
 class TestTaskRegistry(unittest.TestCase):
     def setUp(self):
         # Create a dummy task and add it to the registry
-        from cloud_harvest_core_tasks.tasks import DummyTask
+        from CloudHarvestCoreTasks.tasks import DummyTask
         self.dummy_task = DummyTask(name='dummy')
 
     def test_task_class_by_name(self):
         # Test the get_task_class_by_name method
         task_class = TaskRegistry.get_task_class_by_name('dummy', 'task')
 
-        from cloud_harvest_core_tasks.tasks import DummyTask
+        from CloudHarvestCoreTasks.tasks import DummyTask
         self.assertIsInstance(task_class.__class__, DummyTask.__class__)
 
 

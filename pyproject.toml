@@ -14,7 +14,7 @@ classifiers = [
 ]
 
 [[tool.poetry.packages]]
-include = "cloud_harvest_core_tasks"
+include = "CloudHarvestCoreTasks"
 
 [tool.poetry.urls]
 Source = "https://github.com/Cloud-Harvest/CloudHarvestCoreTasks"

@@ -1,4 +1,5 @@
 Jinja2
 PyYAML
-poetry
+pytest
 python-dateutil
+setuptools

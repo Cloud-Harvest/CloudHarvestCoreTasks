@@ -23,7 +23,7 @@ Source = "https://github.com/Cloud-Harvest/CloudHarvestCoreTasks"
 # Python dependencies
 # The lower version of python satisfies the requirements of several dependencies
 # Actual testing and development is done with Python 3.12
-python = ">=3.7"
+python = ">=3.10"
 Jinja2 = "*"
 PyYAML = "*"
 python-dateutil = "*"

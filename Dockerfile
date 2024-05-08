@@ -6,10 +6,8 @@ ENV PIP_ROOT_USER_ACTION=ignore
 
 COPY . .
 
-RUN pip install poetry pytest \
+RUN pip install -r requirements.txt \
     && poetry config virtualenvs.create false \
-    && poetry install --no-interaction
+    && poetry install --only main --no-interaction
 
-RUN pytest tests/
-
-ENTRYPOINT /bin/bash
+ENTRYPOINT python CloudHarvestApi/wsgi.py

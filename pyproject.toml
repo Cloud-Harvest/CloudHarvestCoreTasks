@@ -23,10 +23,7 @@ Source = "https://github.com/Cloud-Harvest/CloudHarvestCoreTasks"
 # Python dependencies
 # The lower version of python satisfies the requirements of several dependencies
 # Actual testing and development is done with Python 3.12
-python = ">3.9,<3.13"
-Jinja2 = "*"
-PyYAML = "*"
-python-dateutil = "*"
+python = "~3.12"
 
 [tool.poetry.dev-dependencies]
 

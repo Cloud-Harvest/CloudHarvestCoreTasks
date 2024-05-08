@@ -7,6 +7,7 @@ ENV PIP_ROOT_USER_ACTION=ignore
 COPY . .
 
 RUN pip install -r requirements.txt \
+    && pip install poetry \
     && poetry config virtualenvs.create false \
     && poetry install --only main --no-interaction
 

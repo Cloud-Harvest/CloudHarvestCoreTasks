@@ -11,7 +11,11 @@ config = dict(name="CloudHarvestCoreTasks",
               license="CC Attribution-NonCommercial-ShareAlike 4.0 International",
               url="https://github.com/Cloud-Harvest/CloudHarvestCoreTasks",
               packages=find_packages(),
-              install_requires=requirements)
+              install_requires=requirements,
+              classifiers=[
+                  'Programming Language :: Python :: 3.12',
+              ],
+              )
 
 
 def main():

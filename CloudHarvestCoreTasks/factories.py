@@ -45,9 +45,18 @@ def task_chain_from_dict(task_chain_name: str,
     <ReportTaskChain object at 0x7f8b2c3b3d60>
     """
 
-    from .base import TaskRegistry
-    chain_class = TaskRegistry.get_task_class_by_name(target_name=chain_class_name,
-                                                      target_task_type='taskchain')
+    from CloudHarvestCorePluginManager import PluginRegistry
+
+    if '.' in task_chain_name:
+        package_name, provided_task_chain_name = task_chain_name.split('.')
+
+    else:
+        package_name = None
+        provided_task_chain_name = task_chain_name
+
+    chain_class = PluginRegistry.find_classes(class_name=provided_task_chain_name.title().replace('_', '') + 'TaskChain',
+                                              package_name=package_name,
+                                              is_subclass_of=BaseTaskChain)
 
     if 'name' not in task_chain.keys():
         task_chain['name'] = task_chain_name

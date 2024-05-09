@@ -21,63 +21,6 @@ class TaskStatusCodes(Enum):
     terminating = 'terminating'     # the thread was ordered to stop and is currently attempting to shut down
 
 
-class TaskRegistry:
-    """
-    This class is a registry for all Tasks available in the program. Tasks are automatically added when they inherit
-    BaseTask. As a result, all tasks should inherit BaseTask even if they do not use the BaseTask functionality.
-    """
-    tasks = []
-
-    @staticmethod
-    def add_subclass(subclass: 'BaseTask' or 'BaseTaskChain'):
-        """
-        Add a subclass to the TaskRegistry.
-        Args:
-            subclass: The subclass to add.
-        """
-        import re
-
-        if issubclass(subclass, BaseTask):
-            class_name = subclass.__name__[0:-4]
-
-        elif issubclass(subclass, BaseTaskChain):
-            class_name = subclass.__name__[0:-9]
-
-        else:
-            raise TypeError(f'Cannot add subclass of type {type(subclass)} to TaskRegistry. '
-                            f'Must be subclass of BaseTask or BaseTaskChain.')
-
-        class_name = str(class_name[0] + re.sub(r'([A-Z])', r'_\1', class_name[1:])).lower()
-
-        if class_name not in TaskRegistry.tasks:
-            TaskRegistry.tasks.append({class_name: subclass})
-
-    @staticmethod
-    def get_task_class_by_name(target_name: str,
-                               target_task_type: Literal['task', 'taskchain']) -> 'BaseTask' or 'BaseTaskChain' or None:
-        """
-        This method retrieves a task class by its name and type.
-        Args:
-            target_name: The desired task name.
-            target_task_type: The desired task type.
-
-        Returns:
-            'BaseTask', 'BaseTaskChain', or None
-        """
-
-        for task in TaskRegistry.tasks:
-            for task_name, task_type in task.items():
-                if task_name == target_name:
-                    match target_task_type:
-                        case 'task':
-                            if isinstance(task_type, BaseTask) or issubclass(task_type, BaseTask):
-                                return task_type
-
-                        case 'taskchain':
-                            if isinstance(task_type, BaseTaskChain) or issubclass(task_type, BaseTaskChain):
-                                return task_type
-
-
 class TaskConfiguration:
     """
     The TaskConfiguration class is responsible for managing the configuration of a task.
@@ -86,11 +29,10 @@ class TaskConfiguration:
     If a task chain is provided, it retrieves the variables from the task chain and uses them to template the task configuration.
 
     Attributes:
-        class_name (str): The name of the task class to instantiate.
+        provided_name (str): The name of the task class to instantiate.
         task_configuration (dict): The configuration for the task.
         name (str): The name of the task.
         description (str): A brief description of what the task does.
-        extra_vars (dict): Extra variables that can be used to template the task configuration.
         task_chain (BaseTaskChain): The task chain that the task belongs to.
         task_class (BaseTask): The class of the task to instantiate.
         instantiated_class (BaseTask): The instantiated task.
@@ -109,19 +51,38 @@ class TaskConfiguration:
             extra_vars (dict, optional): Extra variables that can be used to template the task configuration. Defaults to None.
         """
 
-        for class_name, task_configuration in task_configuration.items():
-            self.class_name = class_name
-            self.task_configuration = task_configuration.copy()
-            break
+        self.provided_name = list(task_configuration.keys())[0]
+        self.task_configuration = task_configuration[self.provided_name].copy()
 
         self.name = self.task_configuration['name']
         self.description = self.task_configuration.get('description')
 
         self.task_chain = task_chain
-        self.task_class = TaskRegistry.get_task_class_by_name(self.class_name, target_task_type='task')
+
+        self.task_class = self._get_class()
 
         self.instantiated_class = None
         self.kwargs = kwargs
+
+    def _get_class(self):
+        """
+        Retrieves the class of the task from the PluginRegistry based on the provided name.
+        When a user provides a task name with a '.' in it, the first position is the package name and the second
+        position is the class name. If no package name is provided, all plugins are scanned, retrieving the first
+        class that matches the provided name.
+        """
+
+        from CloudHarvestCorePluginManager import PluginRegistry
+        if '.' in self.provided_name:
+            package_name, class_name = self.provided_name.split('.')
+
+        else:
+            class_name = self.provided_name
+            package_name = None
+
+        return PluginRegistry.find_classes(class_name=class_name.title().replace('_', '') + 'Task',
+                                           package_name=package_name,
+                                           is_subclass_of=BaseTask)
 
     def instantiate(self) -> 'BaseTask':
         """
@@ -256,12 +217,6 @@ class BaseTask:
 
         return self
 
-    def __init_subclass__(cls, **kwargs):
-        """
-        This method is called when a subclass of BaseTask is created.
-        """
-        super().__init_subclass__(**kwargs)
-        TaskRegistry.add_subclass(cls)
 
     def __dict__(self) -> dict:
         return {
@@ -658,10 +613,3 @@ class BaseTaskChain(List[BaseTask]):
         self.status = TaskStatusCodes.terminating
 
         return self
-
-    def __init_subclass__(cls, **kwargs):
-        """
-        This method is called when a subclass of BaseTask is created.
-        """
-        super().__init_subclass__(**kwargs)
-        TaskRegistry.add_subclass(cls)

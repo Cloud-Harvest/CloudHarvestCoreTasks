@@ -1,7 +1,8 @@
 import unittest
 from unittest.mock import patch
-from ..CloudHarvestCoreTasks.base import TaskRegistry, TaskConfiguration
+from ..CloudHarvestCoreTasks.base import TaskConfiguration
 from ..CloudHarvestCoreTasks.tasks import TaskStatusCodes, BaseTask, BaseAsyncTask, BaseTaskChain
+from CloudHarvestCorePluginManager import PluginRegistry
 
 
 class TestTaskStatusCodes(unittest.TestCase):
@@ -13,20 +14,6 @@ class TestTaskStatusCodes(unittest.TestCase):
         self.assertEqual(TaskStatusCodes.terminating.value, 'terminating')
 
 
-class TestTaskRegistry(unittest.TestCase):
-    def setUp(self):
-        # Create a dummy task and add it to the registry
-        from ..CloudHarvestCoreTasks.tasks import DummyTask
-        self.dummy_task = DummyTask(name='dummy')
-
-    def test_task_class_by_name(self):
-        # Test the get_task_class_by_name method
-        task_class = TaskRegistry.get_task_class_by_name('dummy', 'task')
-
-        from ..CloudHarvestCoreTasks.tasks import DummyTask
-        self.assertIsInstance(task_class.__class__, DummyTask.__class__)
-
-
 class TestTaskConfiguration(unittest.TestCase):
     def setUp(self):
         # Create a dummy task and add it to the registry
@@ -34,7 +21,8 @@ class TestTaskConfiguration(unittest.TestCase):
             pass
 
         self.dummy_task = DummyTask(name='dummy')
-        TaskRegistry.add_subclass(DummyTask)
+
+        PluginRegistry.classes['TestPackage'] = {'DummyTask': DummyTask}
 
         self.task_configuration = {
             'dummy': {

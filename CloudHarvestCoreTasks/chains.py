@@ -1,4 +1,5 @@
 from .base import BaseTaskChain
+from typing import List
 
 
 class ReportTaskChain(BaseTaskChain):
@@ -22,7 +23,7 @@ class ReportTaskChain(BaseTaskChain):
         Removes a task from the task chain.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, headers: List[str] = None, *args, **kwargs):
         """
         Constructs all the necessary attributes for the ReportTaskChain object.
 
@@ -33,5 +34,6 @@ class ReportTaskChain(BaseTaskChain):
             **kwargs:
                 Arbitrary keyword arguments.
         """
+        self.headers = headers or []
 
         super().__init__(*args, **kwargs)

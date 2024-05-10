@@ -1,21 +1,14 @@
 from setuptools import setup, find_packages
+from CloudHarvestCoreTasks.meta import meta
 
 # Load requirements from requirements.txt
 with open('requirements.txt') as f:
     requirements = f.read().splitlines()
 
-config = dict(name="CloudHarvestCoreTasks",
-              version="0.1.0",
-              description="This is the Core Task system for CloudHarvest.",
-              author="Cloud Harvest, Fiona June Leathers",
-              license="CC Attribution-NonCommercial-ShareAlike 4.0 International",
-              url="https://github.com/Cloud-Harvest/CloudHarvestCoreTasks",
-              packages=find_packages(),
-              install_requires=requirements,
-              classifiers=[
-                  'Programming Language :: Python :: 3.12',
-              ],
-              )
+config = dict(packages=find_packages(),
+              install_requires=requirements)
+
+config = config | meta
 
 
 def main():

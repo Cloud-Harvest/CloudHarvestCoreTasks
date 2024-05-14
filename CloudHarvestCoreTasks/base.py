@@ -1,6 +1,6 @@
 from .exceptions import BaseTaskException
 from enum import Enum
-from typing import List, Literal
+from typing import List
 from logging import getLogger
 
 
@@ -59,19 +59,10 @@ class TaskConfiguration:
 
         self.task_chain = task_chain
 
-        self.task_class = self._get_class()
-
         self.instantiated_class = None
         self.kwargs = kwargs
 
-    def _get_class(self):
-        """
-        Retrieves the class of the task from the PluginRegistry based on the provided name.
-        When a user provides a task name with a '.' in it, the first position is the package name and the second
-        position is the class name. If no package name is provided, all plugins are scanned, retrieving the first
-        class that matches the provided name.
-        """
-
+        # Retrieve the class of the task to instantiate
         from CloudHarvestCorePluginManager import PluginRegistry
         if '.' in self.provided_name:
             package_name, class_name = self.provided_name.split('.')
@@ -80,9 +71,12 @@ class TaskConfiguration:
             class_name = self.provided_name
             package_name = None
 
-        return PluginRegistry.find_classes(class_name=class_name.title().replace('_', '') + 'Task',
-                                           package_name=package_name,
-                                           is_subclass_of=BaseTask)
+        planned_class_name = class_name.title().replace('_', '') + 'Task'
+
+        self.task_class = PluginRegistry.find_classes(class_name=planned_class_name,
+                                                      package_name=package_name,
+                                                      is_subclass_of=BaseTask,
+                                                      return_type='classes')
 
     def instantiate(self) -> 'BaseTask':
         """
@@ -217,7 +211,6 @@ class BaseTask:
 
         return self
 
-
     def __dict__(self) -> dict:
         return {
             'name': self.name,
@@ -295,7 +288,7 @@ class BaseTaskChain(List[BaseTask]):
         position (int): The current position in the task chain.
         start (datetime): The start time of the task chain.
         end (datetime): The end time of the task chain.
-        meta (Any): Any metadata associated with the task chain.
+        _meta (Any): Any metadata associated with the task chain.
 
     Methods:
         detailed_progress() -> dict: Returns a dictionary representing the progress of the task chain.

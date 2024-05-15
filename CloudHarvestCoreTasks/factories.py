@@ -56,9 +56,12 @@ def task_chain_from_dict(task_chain_name: str,
 
     chain_class = PluginRegistry.find_classes(class_name=provided_task_chain_name.title().replace('_', '') + 'TaskChain',
                                               package_name=package_name,
-                                              is_subclass_of=BaseTaskChain)
+                                              is_subclass_of=BaseTaskChain,
+                                              return_type='classes')
 
     if 'name' not in task_chain.keys():
         task_chain['name'] = task_chain_name
 
-    return chain_class(template=task_chain, extra_vars=extra_vars, **kwargs)
+    result = chain_class(template=task_chain, extra_vars=extra_vars, **kwargs)
+
+    return result

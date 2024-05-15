@@ -23,7 +23,7 @@ class ReportTaskChain(BaseTaskChain):
         Removes a task from the task chain.
     """
 
-    def __init__(self, headers: List[str] = None, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         """
         Constructs all the necessary attributes for the ReportTaskChain object.
 
@@ -34,6 +34,6 @@ class ReportTaskChain(BaseTaskChain):
             **kwargs:
                 Arbitrary keyword arguments.
         """
-        self.headers = headers or []
+        self.headers = kwargs.get('template', {}).get('headers') or None
 
         super().__init__(*args, **kwargs)

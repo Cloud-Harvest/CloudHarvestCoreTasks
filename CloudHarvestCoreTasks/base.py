@@ -421,9 +421,9 @@ class BaseTaskChain(List[BaseTask]):
             }
         except IndexError:
             return {
-                'error': ' '.join([f'None of the {len(self.task_templates)} tasks in the task chain {self.name} were'
-                                   f' successfully instantiated.',
-                                   self._meta or 'No error message provided.'])
+                'error': ' '.join([f'None of the {len(self.task_templates)} tasks in the task chain `{self.name}` were'
+                                   f' successfully instantiated. You may have a configuration error.',
+                                   str(self._meta) or 'No error message provided.'])
             }
 
     @property

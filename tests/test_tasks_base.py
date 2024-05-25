@@ -113,7 +113,8 @@ class TestBaseTaskChain(unittest.TestCase):
         """
         # Create a dummy task and add it to the task chain
         class DummyTask(BaseTask):
-            pass
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
 
         self.dummy_task = DummyTask(name='dummy')
         self.task_configuration = {
@@ -192,6 +193,7 @@ class TestBaseTaskChain(unittest.TestCase):
         """
         Test the performance_metric method of the BaseTaskChain class.
         """
+        self.base_task_chain.run()
         report = self.base_task_chain.performance_metrics()
 
         # Assert that the report is a dictionary

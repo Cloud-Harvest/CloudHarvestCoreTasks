@@ -27,11 +27,11 @@ class DelayTask(BaseTask):
         delay_seconds (float): The duration of the delay in seconds.
 
     Methods:
-        run(): Overrides the run method of the BaseTask class. It introduces a delay in the task chain execution.
+        method(): Overrides the run method of the BaseTask class. It introduces a delay in the task chain execution.
 
     Example:
         delay_task = DelayTask(delay_seconds=5)
-        delay_task.run()  # This will introduce a delay of 5 seconds.
+        delay_task.run()        # This will introduce a delay of 5 seconds.
     """
 
     def __init__(self, delay_seconds: float, **kwargs):
@@ -45,22 +45,23 @@ class DelayTask(BaseTask):
         super().__init__(**kwargs)
         self.delay_seconds = delay_seconds
 
-    def run(self):
+    def method(self) -> 'DelayTask':
         """
-        Runs the task. This method will introduce a delay in the task chain execution.
+        This method will introduce a delay in the task chain execution.
 
-        The delay is introduced using the sleep function from the time module. The duration of the delay is specified by the delay_seconds attribute.
+        The delay is introduced using the sleep function from the time module.
+        The duration of the delay is specified by the delay_seconds attribute.
 
-        The method also checks the status of the task during the delay. If the status changes to 'terminating', the delay is interrupted and the method exits.
+        The method also checks the status of the task during the delay. If the status changes to 'terminating',
+        the delay is interrupted and the method exits.
 
-        Once the delay is over or interrupted, the on_complete method is called to mark the task as complete or terminating respectively.
+        Once the delay is over or interrupted, the on_complete method is called to mark the task as complete or
+        terminating respectively.
 
         Example:
             delay_task = DelayTask(delay_seconds=5)
             delay_task.run()  # This will introduce a delay of 5 seconds or less if the task is terminated earlier.
         """
-        self.on_start()
-
         from datetime import datetime
         from time import sleep
 
@@ -70,7 +71,7 @@ class DelayTask(BaseTask):
             if self.status == TaskStatusCodes.terminating:
                 break
 
-        self.on_complete()
+        return self
 
 
 class DummyTask(BaseTask):
@@ -84,6 +85,15 @@ class DummyTask(BaseTask):
         Initializes a new instance of the DummyTask class.
         """
         super().__init__(*args, **kwargs)
+
+    def method(self) -> 'DummyTask':
+        """
+        This method does nothing. It is used to represent a task that does nothing when run.
+
+        Returns:
+            DummyTask: The current instance of the DummyTask class.
+        """
+        return self
 
 
 class PruneTask(BaseTask):
@@ -106,7 +116,7 @@ class PruneTask(BaseTask):
         self.previous_task_data = previous_task_data
         self.stored_variables = stored_variables
 
-    def _run(self) -> 'PruneTask':
+    def method(self) -> 'PruneTask':
         # If previous_task_data is True, clear the data of all previous tasks
         if self.previous_task_data:
             for i in range(self.task_chain.position):
@@ -116,11 +126,6 @@ class PruneTask(BaseTask):
         # If stored_variables is True, clear all variables stored in the task chain
         if self.stored_variables:
             self.task_chain.variables.clear()
-
-        return self
-
-    def on_complete(self) -> 'PruneTask':
-        self.status = TaskStatusCodes.complete
 
         return self
 
@@ -143,9 +148,7 @@ class TemplateTask(BaseTask):
         self.insert_tasks_before_name = insert_tasks_before_name
         self.insert_tasks_after_name = insert_tasks_after_name
 
-    def run(self, *args, **kwargs) -> 'TemplateTask':
-        self.on_start()
-
+    def method(self, *args, **kwargs) -> 'TemplateTask':
         for record in self.records:
             from .base import TaskConfiguration
             task_configuration = TaskConfiguration(task_configuration=self.template.copy(),
@@ -163,8 +166,6 @@ class TemplateTask(BaseTask):
 
             else:
                 self.task_chain.task_templates.append(task_configuration)
-
-        self.on_complete()
 
         return self
 
@@ -216,31 +217,23 @@ class WaitTask(BaseTask):
 
         super().__init__(**kwargs)
 
-    def on_complete(self):
-        self.status = TaskStatusCodes.complete
-
-    def run(self, *args, **kwargs):
+    def method(self, *args, **kwargs):
         """
-        Runs the task. This method will block until all conditions specified in the constructor are met.
+        Runs the task. This method will block until the conditions specified by the task attributes are met.
         """
-        self.on_start()
-
         from time import sleep
 
-        try:
-            while True:
-                if any([
-                    self.when_all_previous_async_tasks_complete,
-                    self.when_all_previous_tasks_complete,
-                    self.when_all_tasks_by_name_complete,
-                    self.when_any_tasks_by_name_complete,
-                    self.status == TaskStatusCodes.terminating
-                ]):
-                    break
+        while True:
+            if any([
+                self.when_all_previous_async_tasks_complete,
+                self.when_all_previous_tasks_complete,
+                self.when_all_tasks_by_name_complete,
+                self.when_any_tasks_by_name_complete,
+                self.status == TaskStatusCodes.terminating
+            ]):
+                break
 
-                sleep(self.check_time_seconds)
-        finally:
-            self.on_complete()
+            sleep(self.check_time_seconds)
 
     @property
     def when_all_previous_async_tasks_complete(self) -> bool:

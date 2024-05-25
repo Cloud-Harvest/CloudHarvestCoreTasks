@@ -10,4 +10,5 @@ class CacheDataCollector(BaseTask):
         super().__init__(name, **kwargs)
 
     def run(self):
+        self.on_start()
         pass

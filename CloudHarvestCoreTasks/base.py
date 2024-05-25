@@ -1,6 +1,7 @@
 from .exceptions import BaseTaskException
+from datetime import datetime, timezone
 from enum import Enum
-from typing import List
+from typing import Dict, List
 from logging import getLogger
 
 
@@ -142,7 +143,16 @@ class BaseTask:
 
         self.data = None
         self.meta = None
+        self.start = None
+        self.end = None
         self.result_as = result_as
+
+    @property
+    def duration(self) -> float:
+        """
+        Returns the duration of the task in seconds.
+        """
+        return (self.end or datetime.now(tz=timezone.utc) - self.start).total_seconds() if self.start else 0
 
     def run(self) -> 'BaseTask':
         """
@@ -150,13 +160,26 @@ class BaseTask:
         Note that this method should be overwritten in subclasses to provide specific functionality.
 
         Recommendations:
-        - Include on_complete() and on_error() calls within custom run() methods.
+        - Include on_complete(), on_error(), on_start() calls within custom run() methods.
         - Capture when the task_chain.status is set to 'terminating' and exit the run() method if prudent.
         - Return self at the end of the run() method.
 
         Returns:
             BaseTask: The instance of the task.
         """
+
+        try:
+            try:
+                self.on_start()
+
+            except Exception as ex:
+                self.on_error(ex)
+
+            else:
+                self.on_complete()
+
+        except Exception as ex:
+            raise BaseTaskException(f'Top level error while running task {self.name}: {ex}')
 
         return self
 
@@ -173,6 +196,8 @@ class BaseTask:
             self.task_chain.variables[self.result_as] = self.data
 
         self.status = TaskStatusCodes.complete
+
+        self.end = datetime.now(tz=timezone.utc)
 
         return self
 
@@ -194,6 +219,20 @@ class BaseTask:
             self.meta = ex.args
 
         logger.error(f'Error running task {self.name}: {ex}')
+
+        return self
+
+    def on_start(self) -> 'BaseTask':
+        """
+        Method to run when a task starts.
+        This method may be overridden in subclasses to provide specific start logic.
+
+        Returns:
+            BaseTask: The instance of the task.
+        """
+
+        self.status = TaskStatusCodes.running
+        self.start = datetime.now(tz=timezone.utc)
 
         return self
 
@@ -231,18 +270,20 @@ class BaseAsyncTask(BaseTask):
         """
         Override this method with code to run a task asynchronously.
         """
+        self.on_start()
+
         from threading import Thread
 
         self.thread = Thread(target=self._run, args=args, kwargs=kwargs)
         self.thread.start()
-
-        self.status = TaskStatusCodes.running
 
         return self
 
     def _run(self, *args, **kwargs):
         """
         Override this method with code to run a task.
+        Call self.on_complete() or self.on_error() from your thread to set the status of the task
+        and record timings.
         """
         pass
 
@@ -264,7 +305,7 @@ class BaseAuthenticationTask(BaseTask):
         Override this method with code to run a task asynchronously.
         """
 
-        self.status = TaskStatusCodes.running
+        self.on_start()
 
         return self
 
@@ -407,6 +448,167 @@ class BaseTaskChain(List[BaseTask]):
         Returns the current progress of the task chain as a percentage cast as float.
         """
         return self.position / self.total if self.total > 0 else -1
+
+    def performance_metrics(self) -> dict:
+        """
+        This method calculates and returns the performance metrics of the task chain.
+
+        The performance metrics include information about each task in the task chain, such as its position, name,
+        status, data size, duration, start and end times. It also includes system metrics like CPU and memory usage,
+        and disk space.
+
+        The method returns a dictionary with the following keys:
+
+        - 'TaskMetrics': Contains a list of dictionaries, each representing a task in the task chain. Each dictionary
+          includes the following keys:
+            - 'Position': The position of the task in the task chain.
+            - 'Name': The name of the task.
+            - 'Status': The status of the task.
+            - 'DataBytes': The size of the data produced by the task, in bytes.
+            - 'Records': The number of records in the task's data, if applicable.
+            - 'Duration': The duration of the task, in seconds.
+            - 'Start': The start time of the task.
+            - 'End': The end time of the task.
+
+        - 'Timings': Contains statistics about the durations of the tasks in the task chain, including the average,
+           maximum, minimum, and standard deviation.
+
+        - 'SystemMetrics': Contains a list of dictionaries, each representing a system metric. Each dictionary includes
+          the following keys:
+            - 'Name': The name of the metric.
+            - 'Value': The value of the metric.
+
+            The system metrics returned are:
+            - CPU Cores: The number of CPU cores.
+            - CPU Threads: The number of CPU threads.
+            - CPU Architecture: The CPU architecture.
+            - CPU Clock Speed: The CPU clock speed.
+            - OS Architecture: The OS architecture.
+            - OS Version: The OS version.
+            - OS 64/32 bit: Whether the OS is 64 or 32 bit.
+            - OS Runtime: The OS runtime.
+            - Total Memory: The total memory available.
+            - Available Memory: The available memory.
+            - Swap Size: The size of the swap space.
+            - Swap Usage: The amount of swap space used.
+            - Total Disk Space: The total disk space.
+            - Used Disk Space: The used disk space.
+            - Free Disk Space: The free disk space.
+
+        Returns:
+            dict: A dictionary representing the performance metrics of the task chain.
+        """
+        from sys import getsizeof
+        from statistics import mean, stdev
+
+        # This part of the report returns results for each task in the task chain.
+        task_metrics = [
+            {
+                'Position': self.position,
+                'Name': task.name,
+                'Status': task.status,
+                'DataBytes': getsizeof(task.data),
+                'Records': len(task.data) if hasattr(task.data, '__len__') else 'N/A',
+                'Duration': task.duration,
+                'Start': task.start,
+                'End': task.end,
+            }
+            for task in self
+        ]
+
+        # Add a total row to the task metrics
+        total_records = sum([len(task.data) for task in self if hasattr(task.data, '__len__')])
+        total_result_size = sum([getsizeof(task.data) for task in self])
+
+        task_metrics.append({
+            'Position': 'Total',
+            'Name': self.name,
+            'Status': self.status,
+            'Records': total_records,
+            'DataBytes': f'{getsizeof(self.data)} / {total_result_size}',
+            'Duration': (self.end - self.start).total_seconds() if self.start and self.end else -1,
+            'Start': self.start,
+            'End': self.end,
+        })
+
+        # The timings report returns the average, maximum, minimum, and standard deviation of the task durations.
+        durations = [task.duration for task in self]
+
+        timings = [
+            {
+                'Start': self.start,
+                'End': self.end,
+                'Duration': (self.end - self.start).total_seconds() if self.start and self.end else -1,
+                'AverageDuration': mean(durations) if durations else 0,
+                'MaxDuration': max(durations) if durations else 0,
+                'MinDuration': min(durations) if durations else 0,
+                'DurationStdev': stdev(durations) if durations else 0
+            }
+        ]
+
+        import psutil
+        import platform
+
+        # CPU information
+        cpu_info = psutil.cpu_freq()
+        cpu_cores = psutil.cpu_count(logical=False)
+        cpu_threads = psutil.cpu_count(logical=True)
+        cpu_metrics = [
+            {'Name': 'CPU Cores', 'Value': cpu_cores},
+            {'Name': 'CPU Threads', 'Value': cpu_threads},
+            {'Name': 'CPU Architecture', 'Value': platform.processor()},
+            {'Name': 'CPU Clock Speed', 'Value': f'{cpu_info.current:.2f} Mhz'}
+        ]
+
+        # OS information
+        os_metrics = [
+            {'Name': 'OS Architecture', 'Value': platform.architecture()[0]},
+            {'Name': 'OS Version', 'Value': platform.platform()},
+            {'Name': 'OS 64/32 bit', 'Value': platform.architecture()[0]},
+            {'Name': 'OS Runtime', 'Value': platform.system()}
+        ]
+
+        # Memory information
+        memory_info = psutil.virtual_memory()
+        swap_info = psutil.swap_memory()
+        memory_metrics = [
+            {'Name': 'Total Memory', 'Value': memory_info.total},
+            {'Name': 'Available Memory', 'Value': memory_info.available},
+            {'Name': 'Swap Size', 'Value': swap_info.total},
+            {'Name': 'Swap Usage', 'Value': swap_info.used}
+        ]
+
+        # Disk information
+        disk_info = psutil.disk_usage('/')
+        disk_metrics = [
+            {'Name': 'Total Disk Space', 'Value': disk_info.total},
+            {'Name': 'Used Disk Space', 'Value': disk_info.used},
+            {'Name': 'Free Disk Space', 'Value': disk_info.free}
+        ]
+
+        # Combine all metrics into a single list
+        system_metrics = cpu_metrics + os_metrics + memory_metrics + disk_metrics
+
+        return {
+            'TaskMetrics': {
+                'data': task_metrics,
+                'meta': {
+                    'headers': [k for k in task_metrics[0].keys()]
+                }
+            },
+            'Timings': {
+                'data': timings,
+                'meta': {
+                    'headers': [k for k in timings[0].keys()]
+                }
+            },
+            'SystemMetrics': {
+                'data': system_metrics,
+                'meta': {
+                    'headers': [k for k in system_metrics[0].keys()]
+                }
+            }
+        }
 
     @property
     def result(self) -> dict:
@@ -551,6 +753,17 @@ class BaseTaskChain(List[BaseTask]):
 
         return self
 
+    def on_start(self) -> 'BaseTaskChain':
+        """
+        Method to run when the task chain starts.
+        This method may be overridden in subclasses to provide specific start logic.
+        """
+
+        self.status = TaskStatusCodes.running
+        self.start = datetime.now(tz=timezone.utc)
+
+        return self
+
     def run(self) -> 'BaseTaskChain':
         """
         Runs the task chain. This method will block until all tasks in the chain are completed.
@@ -560,12 +773,8 @@ class BaseTaskChain(List[BaseTask]):
             BaseTaskChain: The instance of the task chain.
         """
 
-        from datetime import datetime, timezone
-        self.status = TaskStatusCodes.running
-
-        self.start = datetime.now(tz=timezone.utc)
-
         try:
+            self.on_start()
             self.position = 0
 
             while True:
@@ -584,8 +793,8 @@ class BaseTaskChain(List[BaseTask]):
                     break
 
                 if self.status == TaskStatusCodes.terminating:
-                    from .exceptions import TaskTerminationError
-                    raise TaskTerminationError('Task chain was instructed to terminate.')
+                    from .exceptions import TaskTerminationException
+                    raise TaskTerminationException('Task chain was instructed to terminate.')
 
         except Exception as ex:
             self.on_error(ex)

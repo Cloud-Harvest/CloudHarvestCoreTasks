@@ -54,7 +54,7 @@ class TestBaseTask(unittest.TestCase):
     def test_run(self):
         # Test the run method
         self.base_task.run()
-        self.assertEqual(self.base_task.status, TaskStatusCodes.initialized)
+        self.assertEqual(self.base_task.status, TaskStatusCodes.complete)
 
     def test_on_complete(self):
         # Test the on_complete method
@@ -187,6 +187,17 @@ class TestBaseTaskChain(unittest.TestCase):
         self.base_task_chain.terminate()
         # Assert that the status of the task chain is 'terminating'
         self.assertEqual(self.base_task_chain.status, TaskStatusCodes.terminating)
+
+    def test_performance_metrics(self):
+        """
+        Test the performance_metric method of the BaseTaskChain class.
+        """
+        report = self.base_task_chain.performance_metrics()
+
+        # Assert that the report is a dictionary
+        self.assertIsInstance(report, dict)
+        # Assert that the report contains the expected keys
+        self.assertTrue(all([key in report.keys() for key in ['TaskMetrics', 'Timings', 'SystemMetrics']]))
 
 
 if __name__ == '__main__':

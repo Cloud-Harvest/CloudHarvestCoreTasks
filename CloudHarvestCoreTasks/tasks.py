@@ -59,14 +59,12 @@ class DelayTask(BaseTask):
             delay_task = DelayTask(delay_seconds=5)
             delay_task.run()  # This will introduce a delay of 5 seconds or less if the task is terminated earlier.
         """
+        self.on_start()
 
         from datetime import datetime
         from time import sleep
 
-        self.status = TaskStatusCodes.running
-        start_time = datetime.now()
-
-        while (datetime.now() - start_time).total_seconds() < self.delay_seconds:
+        while (datetime.now() - self.start).total_seconds() < self.delay_seconds:
             sleep(1)
 
             if self.status == TaskStatusCodes.terminating:
@@ -146,7 +144,7 @@ class TemplateTask(BaseTask):
         self.insert_tasks_after_name = insert_tasks_after_name
 
     def run(self, *args, **kwargs) -> 'TemplateTask':
-        self.status = TaskStatusCodes.running
+        self.on_start()
 
         for record in self.records:
             from .base import TaskConfiguration
@@ -225,6 +223,7 @@ class WaitTask(BaseTask):
         """
         Runs the task. This method will block until all conditions specified in the constructor are met.
         """
+        self.on_start()
 
         from time import sleep
 

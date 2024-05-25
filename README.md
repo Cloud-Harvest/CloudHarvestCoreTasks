@@ -1,6 +1,13 @@
 # CloudHarvestCoreTasks
 This repository contains the base and common tasks found in CloudHarvest. Tasks and TaskChains are a fundamental part of the CloudHarvest framework, and are used to define workflows in every layer of the application.
 
+- [CloudHarvestCoreTasks](#cloudharvestcoretasks)
+- [Task Chains](#task-chains)
+- [Tasks](#tasks)
+  - [Tasks Declared in JSON/YAML](#tasks-declared-in-jsonyaml)
+  - [Tasks Declared in Python](#tasks-declared-in-python)
+- [License](#license)
+
 # Task Chains
 A TaskChain is a JSON or YAML file which describes the Tasks to be executed. Task Chains are used to define a workflow. 
 

@@ -127,7 +127,8 @@ class BaseTask:
             name (str): The name of the task.
             description (str): A brief description of what the task does.
             task_chain (BaseTaskChain): The task chain that this task belongs to, if applicable.
-            with_vars (list[str]): A list of variables that this task uses.
+            with_vars (list[str]): A list of variables that this task uses. These variables are retrieved from the task chain
+                and used in TaskConfiguration which templates this task's class.
             status (TaskStatusCodes): The current status of the task.
             data (Any): The data that this task produces, if applicable.
             meta (Any): Any metadata associated with this task.
@@ -154,15 +155,29 @@ class BaseTask:
         """
         return (self.end or datetime.now(tz=timezone.utc) - self.start).total_seconds() if self.start else 0
 
+    def method(self):
+        """
+        This method should be overwritten in subclasses to provide specific functionality.
+        """
+        # Example code to simulate a long-running task.
+        for i in range(10):
+
+            # Make sure to include a block which handles termination
+            if self.status == TaskStatusCodes.terminating:
+                from exceptions import TaskTerminationException
+                raise TaskTerminationException('Task was instructed to terminate.')
+
+            from time import sleep
+            sleep(1)
+
+        # Set the data attribute to the result of the task, otherwise `as_result` will not populate.
+        self.data = {'Test': 'Result'}
+
+        return self
+
     def run(self) -> 'BaseTask':
         """
-        Runs the task. This method will block until all conditions specified in the constructor are met.
-        Note that this method should be overwritten in subclasses to provide specific functionality.
-
-        Recommendations:
-        - Include on_complete(), on_error(), on_start() calls within custom run() methods.
-        - Capture when the task_chain.status is set to 'terminating' and exit the run() method if prudent.
-        - Return self at the end of the run() method.
+        Runs the task. This method will block until it completes, errors, or is terminated.
 
         Returns:
             BaseTask: The instance of the task.
@@ -171,6 +186,8 @@ class BaseTask:
         try:
             try:
                 self.on_start()
+
+                self.method()
 
             except Exception as ex:
                 self.on_error(ex)
@@ -192,6 +209,7 @@ class BaseTask:
             BaseTask: The instance of the task.
         """
 
+        # Store the result in the task chain's variables if a result_as variable is provided
         if self.result_as and self.task_chain:
             self.task_chain.variables[self.result_as] = self.data
 
@@ -224,7 +242,7 @@ class BaseTask:
 
     def on_start(self) -> 'BaseTask':
         """
-        Method to run when a task starts.
+        Method to run when a task starts but before `method()` is called.
         This method may be overridden in subclasses to provide specific start logic.
 
         Returns:
@@ -264,28 +282,63 @@ class BaseAsyncTask(BaseTask):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.thread = None
-
-    def run(self, *args, **kwargs) -> 'BaseAsyncTask':
-        """
-        Override this method with code to run a task asynchronously.
-        """
-        self.on_start()
-
         from threading import Thread
+        self.thread: (Thread or None) = None
 
-        self.thread = Thread(target=self._run, args=args, kwargs=kwargs)
-        self.thread.start()
+    def method(self) -> 'BaseAsyncTask':
+        """
+        This method should be overwritten in subclasses to provide specific functionality. However, to be fully functional,
+        it must include the on_error() and on_complete() methods.
+        """
+        try:
+            # Example code to simulate a long-running task.
+            for i in range(10):
+
+                # Make sure to include a block which handles termination.
+                if self.status == TaskStatusCodes.terminating:
+                    from exceptions import TaskTerminationException
+                    raise TaskTerminationException('Task was instructed to terminate.')
+
+                from time import sleep
+                sleep(1)
+
+            # Set the data attribute to the result of the task, otherwise `as_result` will not populate.
+            self.data = {'Test': 'Result'}
+
+        # Handle exceptions and errors by calling the on_error() method.
+        except Exception as ex:
+            self.on_error(ex)
+
+        # Otherwise call the on_complete() method at the end of the task.
+        else:
+            self.on_complete()
 
         return self
 
-    def _run(self, *args, **kwargs):
+    def run(self, *args, **kwargs) -> 'BaseAsyncTask':
         """
-        Override this method with code to run a task.
-        Call self.on_complete() or self.on_error() from your thread to set the status of the task
-        and record timings.
+        Runs the task. This method will create a Thread() which calls self.method() then unblock immediately so the next
+        task in the chain can be run.
+
+        Returns:
+            BaseAsyncTask: The instance of the task.
         """
-        pass
+
+        try:
+            try:
+                self.on_start()
+
+                from threading import Thread
+                self.thread = Thread(target=self.method, args=args, kwargs=kwargs)
+                self.thread.start()
+
+            except Exception as ex:
+                self.on_error(ex)
+
+        except Exception as ex:
+            raise BaseTaskException(f'Top level error while running task {self.name}: {ex}')
+
+        return self
 
     def terminate(self) -> 'BaseAsyncTask':
         super().terminate()
@@ -299,15 +352,6 @@ class BaseAuthenticationTask(BaseTask):
         super().__init__(*args, **kwargs)
 
         self.auth = None
-
-    def run(self, *args, **kwargs) -> 'BaseAuthenticationTask':
-        """
-        Override this method with code to run a task asynchronously.
-        """
-
-        self.on_start()
-
-        return self
 
 
 class BaseTaskChain(List[BaseTask]):

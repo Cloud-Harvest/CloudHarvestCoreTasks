@@ -1,6 +1,7 @@
 CloudHarvestCorePluginManager @ git+https://github.com/Cloud-Harvest/CloudHarvestCorePluginManager.git@main
 Jinja2
 PyYAML
+psutil
 pytest
 python-dateutil
 setuptools

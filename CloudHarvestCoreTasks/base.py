@@ -600,15 +600,14 @@ class BaseTaskChain(List[BaseTask]):
         cpu_metrics = [
             {'Name': 'CPU Cores', 'Value': cpu_cores},
             {'Name': 'CPU Threads', 'Value': cpu_threads},
-            {'Name': 'CPU Architecture', 'Value': platform.processor()},
-            {'Name': 'CPU Clock Speed', 'Value': f'{cpu_info.current:.2f} Mhz'}
+            {'Name': 'CPU Clock Speed', 'Value': f'{cpu_info.current:.2f} Mhz'},
+            {'Name': 'CPU Architecture', 'Value': platform.processor()}
         ]
 
         # OS information
         os_metrics = [
             {'Name': 'OS Architecture', 'Value': platform.architecture()[0]},
             {'Name': 'OS Version', 'Value': platform.platform()},
-            {'Name': 'OS 64/32 bit', 'Value': platform.architecture()[0]},
             {'Name': 'OS Runtime', 'Value': platform.system()}
         ]
 

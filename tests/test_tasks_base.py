@@ -1,8 +1,7 @@
 import unittest
 from unittest.mock import patch
-from ..CloudHarvestCoreTasks.base import TaskConfiguration
-from ..CloudHarvestCoreTasks.tasks import TaskStatusCodes, BaseTask, BaseAsyncTask, BaseTaskChain
-from CloudHarvestCorePluginManager import PluginRegistry
+from ..CloudHarvestCoreTasks.tasks import TaskStatusCodes, BaseTask, BaseTaskChain, BaseAsyncTask
+from ..CloudHarvestCoreTasks.__register__ import *
 
 
 class TestTaskStatusCodes(unittest.TestCase):
@@ -17,33 +16,44 @@ class TestTaskStatusCodes(unittest.TestCase):
 class TestTaskConfiguration(unittest.TestCase):
     def setUp(self):
         # Create a dummy task and add it to the registry
-        class DummyTask(BaseTask):
-            pass
-
-        self.dummy_task = DummyTask(name='dummy')
-
-        PluginRegistry.classes['TestPackage'] = {'DummyTask': DummyTask}
-
         self.task_configuration = {
-            'dummy': {
-                'name': 'dummy_task',
-                'description': 'This is a dummy task'
-            }
-        }
+                'name': 'test_chain',
+                'description': 'This is a task_chain.',
+                'tasks': [
 
-        self.task_config_instance = TaskConfiguration(task_configuration=self.task_configuration)
+                    {
+                        'dummy': {
+                            'name': 'dummy_task',
+                            'description': 'This is a dummy task'
+                        }
+                    },
+                    {
+                        'delay': {
+                            'name': 'delay_task',
+                            'description': 'This is a delay task',
+                            'delay_seconds': 1
+                        }
+                    }
+                ]
+            }
+
+        from ..CloudHarvestCoreTasks.factories import task_chain_from_dict
+        self.base_task_chain = task_chain_from_dict(task_chain_name='report', task_chain=self.task_configuration)
 
     def test_instantiate(self):
         # Test the instantiate method
-        instantiated_task = self.task_config_instance.instantiate()
-        self.assertIsInstance(instantiated_task, BaseTask)
-        self.assertEqual(instantiated_task.name, 'dummy_task')
-        self.assertEqual(instantiated_task.description, 'This is a dummy task')
+        self.base_task_chain.run()
+        self.assertIsNone(self.base_task_chain.result.get('error'))
+        self.assertIsInstance(self.base_task_chain[0], DummyTask)
+        self.assertIsInstance(self.base_task_chain[1], DelayTask)
+        self.assertEqual(self.base_task_chain.status, TaskStatusCodes.complete)
 
 
 class TestBaseTask(unittest.TestCase):
     def setUp(self):
-        self.base_task = BaseTask(name='test', description='test task')
+        from CloudHarvestCorePluginManager.registry import Registry
+        task = Registry.find_definition(class_name='DelayTask', is_subclass_of=BaseTask)[0]
+        self.base_task = task(name='test', description='test task', delay_seconds=10)
 
     def test_init(self):
         # Test the __init__ method
@@ -112,24 +122,26 @@ class TestBaseTaskChain(unittest.TestCase):
         Set up the test environment for each test case.
         """
         # Create a dummy task and add it to the task chain
-        class DummyTask(BaseTask):
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-
-        self.dummy_task = DummyTask(name='dummy')
         self.task_configuration = {
-            'name': 'test_chain',
-            'description': 'This is a dummy task_chain.',
-            'tasks': [
-                {
-                    'delay': {
-                        'name': 'test delay task',
-                        'delay_seconds': 10
+                'name': 'test_chain',
+                'description': 'This is a task_chain.',
+                'tasks': [
+                    {
+                        'dummy': {
+                            'name': 'dummy_task',
+                            'description': 'This is a dummy task'
+                        },
+                        'delay': {
+                            'name': 'delay_task',
+                            'description': 'This is a delay task',
+                            'delay_seconds': 10
+                        }
                     }
-                }
-            ]
-        }
-        self.base_task_chain = BaseTaskChain(name='test_chain', template=self.task_configuration)
+                ]
+            }
+
+        from ..CloudHarvestCoreTasks.factories import task_chain_from_dict
+        self.base_task_chain = task_chain_from_dict(task_chain_name='report', task_chain=self.task_configuration)
 
     def test_init(self):
         """
@@ -137,7 +149,7 @@ class TestBaseTaskChain(unittest.TestCase):
         """
         # Assert that the initial values of the task chain attributes are as expected
         self.assertEqual(self.base_task_chain.name, 'test_chain')
-        self.assertEqual(self.base_task_chain.description, 'This is a dummy task_chain.')
+        self.assertEqual(self.base_task_chain.description, 'This is a task_chain.')
         self.assertEqual(self.base_task_chain.variables, {})
         self.assertEqual(self.base_task_chain.status, TaskStatusCodes.initialized)
         self.assertEqual(self.base_task_chain.position, 0)

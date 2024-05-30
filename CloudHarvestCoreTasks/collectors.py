@@ -1,3 +1,4 @@
+from CloudHarvestCorePluginManager.decorators import register_definition
 from logging import getLogger
 from .exceptions import BaseDataCollectionException
 from .base import BaseTask, TaskStatusCodes
@@ -5,6 +6,7 @@ from .base import BaseTask, TaskStatusCodes
 logger = getLogger('harvest')
 
 
+@register_definition
 class CacheDataCollector(BaseTask):
     def __init__(self, name: str, **kwargs):
         super().__init__(name, **kwargs)

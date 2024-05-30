@@ -64,7 +64,7 @@ class TaskConfiguration:
         self.kwargs = kwargs
 
         # Retrieve the class of the task to instantiate
-        from CloudHarvestCorePluginManager import PluginRegistry
+        from CloudHarvestCorePluginManager import Registry
         if '.' in self.provided_name:
             package_name, class_name = self.provided_name.split('.')
 
@@ -74,10 +74,11 @@ class TaskConfiguration:
 
         planned_class_name = class_name.title().replace('_', '') + 'Task'
 
-        self.task_class = PluginRegistry.find_classes(class_name=planned_class_name,
-                                                      package_name=package_name,
-                                                      is_subclass_of=BaseTask,
-                                                      return_type='classes')
+        try:
+            self.task_class = Registry.find_definition(class_name=planned_class_name, is_subclass_of=BaseTask)[0]
+
+        except IndexError:
+            raise BaseTaskException(f'Could not find a task class named {planned_class_name}.')
 
     def instantiate(self) -> 'BaseTask':
         """
@@ -153,7 +154,7 @@ class BaseTask:
         """
         Returns the duration of the task in seconds.
         """
-        return (self.end or datetime.now(tz=timezone.utc) - self.start).total_seconds() if self.start else 0
+        return ((self.end or datetime.now(tz=timezone.utc)) - self.start).total_seconds() if self.start else -1
 
     def method(self):
         """
@@ -586,7 +587,7 @@ class BaseTaskChain(List[BaseTask]):
                 'AverageDuration': mean(durations) if durations else 0,
                 'MaxDuration': max(durations) if durations else 0,
                 'MinDuration': min(durations) if durations else 0,
-                'DurationStdev': stdev(durations) if durations else 0
+                'DurationStdev': stdev(durations) if len(durations) > 1 else 'N/A'
             }
         ]
 
@@ -659,17 +660,29 @@ class BaseTaskChain(List[BaseTask]):
         Returns the result of the task chain. This can be interpreted either as the 'result' variable in the task
         chain's variables or the data and meta of the last task in the chain.
         """
+        result = {}
+
         try:
-            return {
-                'data': self._data or self.data or self[-1].data,
-                'meta': self._meta or self[-1].meta
-            }
+            if self.status == TaskStatusCodes.initialized:
+                result = {
+                    'info': 'The task chain has not been run yet.'
+                }
+
+            else:
+                result = {
+                    'data': self._data or self.data or self[-1].data,
+                    'meta': self._meta or self[-1].meta
+                }
+
         except IndexError:
-            return {
+            result = {
                 'error': ' '.join([f'None of the {len(self.task_templates)} tasks in the task chain `{self.name}` were'
                                    f' successfully instantiated. You may have a configuration error.',
                                    str(self._meta) or 'No error message provided.'])
             }
+
+        finally:
+            return result
 
     @property
     def total(self) -> int:
@@ -843,7 +856,7 @@ class BaseTaskChain(List[BaseTask]):
             self.on_error(ex)
 
         finally:
-            self.end = datetime.now(tz=timezone.utc)
+            self.on_complete()
             return self
 
     def terminate(self) -> 'BaseTaskChain':

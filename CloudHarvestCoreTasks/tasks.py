@@ -1,5 +1,5 @@
 from typing import List
-
+from CloudHarvestCorePluginManager.decorators import register_definition
 from .base import BaseAsyncTask, BaseTask, BaseTaskChain, TaskStatusCodes
 
 
@@ -18,6 +18,7 @@ from .base import BaseAsyncTask, BaseTask, BaseTaskChain, TaskStatusCodes
 #         self.status = TaskStatusCodes.complete
 
 
+@register_definition
 class DelayTask(BaseTask):
     """
     The DelayTask class is a subclass of the BaseTask class. It represents a task that introduces a delay in the task
@@ -34,7 +35,7 @@ class DelayTask(BaseTask):
         delay_task.run()        # This will introduce a delay of 5 seconds.
     """
 
-    def __init__(self, delay_seconds: float, **kwargs):
+    def __init__(self, delay_seconds: float = None, **kwargs):
         """
         Initializes a new instance of the DelayTask class.
 
@@ -62,10 +63,10 @@ class DelayTask(BaseTask):
             delay_task = DelayTask(delay_seconds=5)
             delay_task.run()  # This will introduce a delay of 5 seconds or less if the task is terminated earlier.
         """
-        from datetime import datetime
+        from datetime import datetime, timezone
         from time import sleep
 
-        while (datetime.now() - self.start).total_seconds() < self.delay_seconds:
+        while (datetime.now(tz=timezone.utc) - self.start).total_seconds() < self.delay_seconds:
             sleep(1)
 
             if self.status == TaskStatusCodes.terminating:
@@ -74,6 +75,7 @@ class DelayTask(BaseTask):
         return self
 
 
+@register_definition
 class DummyTask(BaseTask):
     """
     The DummyTask class is a subclass of the Base
@@ -93,9 +95,13 @@ class DummyTask(BaseTask):
         Returns:
             DummyTask: The current instance of the DummyTask class.
         """
+        self.data = [{'dummy': 'data'}]
+        self.meta = {'info': 'this is dummy metadata'}
+
         return self
 
 
+@register_definition
 class PruneTask(BaseTask):
     def __init__(self, previous_task_data: bool = False, stored_variables: bool = False, *args, **kwargs):
         """
@@ -130,6 +136,7 @@ class PruneTask(BaseTask):
         return self
 
 
+@register_definition
 class TemplateTask(BaseTask):
     def __init__(self, template: dict,
                  records: (List[dict] or str) = None,
@@ -170,6 +177,7 @@ class TemplateTask(BaseTask):
         return self
 
 
+@register_definition
 class WaitTask(BaseTask):
     """
     The WaitTask class is a subclass of the BaseTask class. It represents a task that waits for certain conditions to be met before it can be run.

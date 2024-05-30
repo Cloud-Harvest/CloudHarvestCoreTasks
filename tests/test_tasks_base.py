@@ -1,10 +1,18 @@
 import unittest
 from unittest.mock import patch
-from ..CloudHarvestCoreTasks.tasks import TaskStatusCodes, BaseTask, BaseTaskChain, BaseAsyncTask
+from ..CloudHarvestCoreTasks.tasks import *
 from ..CloudHarvestCoreTasks.__register__ import *
+from CloudHarvestCorePluginManager.registry import Registry
 
 
-class TestTaskStatusCodes(unittest.TestCase):
+class BaseTestCase(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        Registry.register_objects()
+        super(BaseTestCase, cls).setUpClass()
+
+
+class TestTaskStatusCodes(BaseTestCase):
     def test_enum_values(self):
         self.assertEqual(TaskStatusCodes.complete.value, 'complete')
         self.assertEqual(TaskStatusCodes.error.value, 'error')
@@ -13,7 +21,7 @@ class TestTaskStatusCodes(unittest.TestCase):
         self.assertEqual(TaskStatusCodes.terminating.value, 'terminating')
 
 
-class TestTaskConfiguration(unittest.TestCase):
+class TestTaskConfiguration(BaseTestCase):
     def setUp(self):
         # Create a dummy task and add it to the registry
         self.task_configuration = {
@@ -49,7 +57,7 @@ class TestTaskConfiguration(unittest.TestCase):
         self.assertEqual(self.base_task_chain.status, TaskStatusCodes.complete)
 
 
-class TestBaseTask(unittest.TestCase):
+class TestBaseTask(BaseTestCase):
     def setUp(self):
         from CloudHarvestCorePluginManager.registry import Registry
         task = Registry.find_definition(class_name='DelayTask', is_subclass_of=BaseTask)[0]
@@ -85,7 +93,7 @@ class TestBaseTask(unittest.TestCase):
         self.assertEqual(self.base_task.status, TaskStatusCodes.terminating)
 
 
-class TestBaseAsyncTask(unittest.TestCase):
+class TestBaseAsyncTask(BaseTestCase):
     def setUp(self):
         self.base_async_task = BaseAsyncTask(name='test', description='test task')
 
@@ -112,7 +120,7 @@ class TestBaseAsyncTask(unittest.TestCase):
         mock_thread.return_value.join.assert_called_once()
 
 
-class TestBaseTaskChain(unittest.TestCase):
+class TestBaseTaskChain(BaseTestCase):
     """
     Unit tests for the BaseTaskChain class.
     """
@@ -130,11 +138,13 @@ class TestBaseTaskChain(unittest.TestCase):
                         'dummy': {
                             'name': 'dummy_task',
                             'description': 'This is a dummy task'
-                        },
+                        }
+                    },
+                    {
                         'delay': {
                             'name': 'delay_task',
                             'description': 'This is a delay task',
-                            'delay_seconds': 10
+                            'delay_seconds': 1
                         }
                     }
                 ]

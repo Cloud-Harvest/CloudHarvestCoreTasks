@@ -1,4 +1,4 @@
-from .exceptions import BaseTaskException
+from exceptions import BaseTaskException
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, List
@@ -65,20 +65,14 @@ class TaskConfiguration:
 
         # Retrieve the class of the task to instantiate
         from CloudHarvestCorePluginManager import Registry
-        if '.' in self.provided_name:
-            package_name, class_name = self.provided_name.split('.')
 
-        else:
-            class_name = self.provided_name
-            package_name = None
-
-        planned_class_name = class_name.title().replace('_', '') + 'Task'
+        formal_class_name = self.provided_name.title().replace('_', '') + 'Task'
 
         try:
-            self.task_class = Registry.find_definition(class_name=planned_class_name, is_subclass_of=BaseTask)[0]
+            self.task_class = Registry.find_definition(class_name=formal_class_name, is_subclass_of=BaseTask)[0]
 
         except IndexError:
-            raise BaseTaskException(f'Could not find a task class named {planned_class_name}.')
+            raise BaseTaskException(f'Could not find a task class named {formal_class_name}.')
 
     def instantiate(self) -> 'BaseTask':
         """

@@ -123,15 +123,24 @@ class PruneTask(BaseTask):
         self.stored_variables = stored_variables
 
     def method(self) -> 'PruneTask':
+        from sys import getsizeof
+        total_bytes_pruned = 0
+
         # If previous_task_data is True, clear the data of all previous tasks
         if self.previous_task_data:
             for i in range(self.task_chain.position):
                 if hasattr(self.task_chain[i], 'data'):
+                    total_bytes_pruned += getsizeof(self.task_chain[i].data)
                     setattr(self.task_chain[i], 'data', None)
 
         # If stored_variables is True, clear all variables stored in the task chain
         if self.stored_variables:
+            total_bytes_pruned += getsizeof(self.task_chain.variables)
             self.task_chain.variables.clear()
+
+        self.data = {
+            'total_bytes_pruned': total_bytes_pruned
+        }
 
         return self
 

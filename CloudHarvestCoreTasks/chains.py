@@ -1,6 +1,5 @@
 from CloudHarvestCorePluginManager.decorators import register_definition
 from .base import BaseTaskChain
-from typing import List
 
 
 @register_definition

@@ -9,7 +9,7 @@ with open('meta.json') as meta_file_stream:
 with open('requirements.txt') as f:
     required = f.read().splitlines()
 
-config = dict(packages=find_packages(include=['CloudHarvestCoreTasks']),
+config = dict(packages=find_packages(include=['CloudHarvestCoreTasks/*']),
               install_requires=required)
 
 config = config | meta

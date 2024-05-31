@@ -216,12 +216,14 @@ class TestBaseTaskChain(BaseTestCase):
         Test the performance_metric method of the BaseTaskChain class.
         """
         self.base_task_chain.run()
-        report = self.base_task_chain.performance_metrics()
+        report = self.base_task_chain.performance_metrics
 
         # Assert that the report is a dictionary
-        self.assertIsInstance(report, dict)
+        self.assertIsInstance(report, list)
         # Assert that the report contains the expected keys
-        self.assertTrue(all([key in report.keys() for key in ['TaskMetrics', 'Timings', 'SystemMetrics']]))
+        self.assertEqual(report[0]['meta']['title'], 'Task Metrics')
+        self.assertEqual(report[1]['meta']['title'], 'Timings')
+        self.assertEqual(report[2]['meta']['title'], 'System Metrics')
 
 
 if __name__ == '__main__':

@@ -1,10 +1,14 @@
-# 2024-05-29
-## 0.2.2
+# 0.2.3
+- Changed the return type of `BaseTaskChain.performance_report` to `List[dict]`
+- Added the hostname to the `BaseTaskChain.performance_report` output
+- Updated tests
+
+# 0.2.2
 - New tests
 - PruneTask now returns the `total_bytes_pruned` value
 - Removed some unused imports
 
-## 0.2.1
+# 0.2.1
 - Updated to conform with CloudHarvestCorePluginManager 0.2.0
   - Implemented `@register_definition` and `@register_instance` decorators
   - Replaced `PluginRegistry` with `Registry`

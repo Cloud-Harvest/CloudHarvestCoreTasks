@@ -488,7 +488,8 @@ class BaseTaskChain(List[BaseTask]):
         """
         return self.position / self.total if self.total > 0 else -1
 
-    def performance_metrics(self) -> dict:
+    @property
+    def performance_metrics(self) -> List[dict]:
         """
         This method calculates and returns the performance metrics of the task chain.
 
@@ -535,7 +536,7 @@ class BaseTaskChain(List[BaseTask]):
             - Free Disk Space: The free disk space.
 
         Returns:
-            dict: A dictionary representing the performance metrics of the task chain.
+            List[dict]: A dictionary representing the performance metrics of the task chain.
         """
         from sys import getsizeof
         from statistics import mean, stdev
@@ -587,12 +588,14 @@ class BaseTaskChain(List[BaseTask]):
 
         import psutil
         import platform
+        import socket
 
         # CPU information
         cpu_info = psutil.cpu_freq()
         cpu_cores = psutil.cpu_count(logical=False)
         cpu_threads = psutil.cpu_count(logical=True)
         cpu_metrics = [
+            {'Name': 'Host', 'Value': socket.gethostname()},
             {'Name': 'CPU Cores', 'Value': cpu_cores},
             {'Name': 'CPU Threads', 'Value': cpu_threads},
             {'Name': 'CPU Clock Speed', 'Value': f'{cpu_info.current:.2f} Mhz'},
@@ -627,26 +630,29 @@ class BaseTaskChain(List[BaseTask]):
         # Combine all metrics into a single list
         system_metrics = cpu_metrics + os_metrics + memory_metrics + disk_metrics
 
-        return {
-            'TaskMetrics': {
+        return [
+            {
                 'data': task_metrics,
                 'meta': {
-                    'headers': [k for k in task_metrics[0].keys()]
+                    'headers': [k for k in task_metrics[0].keys()],
+                    'title': 'Task Metrics'
                 }
             },
-            'Timings': {
+            {
                 'data': timings,
                 'meta': {
-                    'headers': [k for k in timings[0].keys()]
+                    'headers': [k for k in timings[0].keys()],
+                    'title': 'Timings'
                 }
             },
-            'SystemMetrics': {
+            {
                 'data': system_metrics,
                 'meta': {
-                    'headers': [k for k in system_metrics[0].keys()]
+                    'headers': [k for k in system_metrics[0].keys()],
+                    'title': 'System Metrics'
                 }
             }
-        }
+        ]
 
     @property
     def result(self) -> dict:

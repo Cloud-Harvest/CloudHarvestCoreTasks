@@ -1,3 +1,6 @@
+# 0.2.5
+- Added `.__str__()` to TaskStatusCode calls in the `BaseTaskChain.performance_report` output because the class is not JSON serializable
+
 # 0.2.4
 - Added missing `end` timestamp in `BaseTaskChain.on_complete()`
 

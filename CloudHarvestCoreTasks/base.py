@@ -546,7 +546,7 @@ class BaseTaskChain(List[BaseTask]):
             {
                 'Position': self.position,
                 'Name': task.name,
-                'Status': task.status,
+                'Status': task.status.__str__(),
                 'DataBytes': getsizeof(task.data),
                 'Records': len(task.data) if hasattr(task.data, '__len__') else 'N/A',
                 'Duration': task.duration,
@@ -563,7 +563,7 @@ class BaseTaskChain(List[BaseTask]):
         task_metrics.append({
             'Position': 'Total',
             'Name': self.name,
-            'Status': self.status,
+            'Status': self.status.__str__(),
             'Records': total_records,
             'DataBytes': f'{getsizeof(self.data)} / {total_result_size}',
             'Duration': (self.end - self.start).total_seconds() if self.start and self.end else -1,

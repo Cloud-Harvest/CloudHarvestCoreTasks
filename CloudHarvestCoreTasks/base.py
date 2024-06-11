@@ -556,100 +556,48 @@ class BaseTaskChain(List[BaseTask]):
             for task in self
         ]
 
+        # Gather metrics for the entire task chain
+        # We generate multiple lists through one loop to perform the necessary calculations without having to loop
+        # multiple times through the TaskChain's tasks.
+        total_records = []
+        total_result_size = []
+        starts = []
+        ends = []
+        for task in self:
+            if hasattr(task.data, '__len__'):
+                total_records.append(len(task.data))
+
+            total_result_size.append(getsizeof(task.data))
+            starts.append(task.start)
+            ends.append(task.end)
+
         # Add a total row to the task metrics
-        total_records = sum([len(task.data) for task in self if hasattr(task.data, '__len__')])
-        total_result_size = sum([getsizeof(task.data) for task in self])
+        total_records = sum(total_records)
+        total_result_size = sum(total_result_size)
+        starts = min(starts)
+        ends = max(ends)
 
         task_metrics.append({
             'Position': 'Total',
-            'Name': self.name,
+            'Name': '',
             'Status': self.status.__str__(),
             'Records': total_records,
-            'DataBytes': f'{getsizeof(self.data)} / {total_result_size}',
-            'Duration': (self.end - self.start).total_seconds() if self.start and self.end else -1,
-            'Start': self.start,
-            'End': self.end,
+            'DataBytes': total_result_size,
+            'Duration': (ends - starts).total_seconds() if starts and ends else 0,
+            'Start': starts,
+            'End': ends,
         })
 
-        # The timings report returns the average, maximum, minimum, and standard deviation of the task durations.
-        durations = [task.duration for task in self]
-
-        timings = [
-            {
-                'Start': self.start,
-                'End': self.end,
-                'Duration': (self.end - self.start).total_seconds() if self.start and self.end else -1,
-                'AverageDuration': mean(durations) if durations else 0,
-                'MaxDuration': max(durations) if durations else 0,
-                'MinDuration': min(durations) if durations else 0,
-                'DurationStdev': stdev(durations) if len(durations) > 1 else 'N/A'
-            }
-        ]
-
-        import psutil
-        import platform
-        import socket
-
-        # CPU information
-        cpu_info = psutil.cpu_freq()
-        cpu_cores = psutil.cpu_count(logical=False)
-        cpu_threads = psutil.cpu_count(logical=True)
-        cpu_metrics = [
-            {'Name': 'Host', 'Value': socket.gethostname()},
-            {'Name': 'CPU Cores', 'Value': cpu_cores},
-            {'Name': 'CPU Threads', 'Value': cpu_threads},
-            {'Name': 'CPU Clock Speed', 'Value': f'{cpu_info.current:.2f} Mhz'},
-            {'Name': 'CPU Architecture', 'Value': platform.processor()}
-        ]
-
-        # OS information
-        os_metrics = [
-            {'Name': 'OS Architecture', 'Value': platform.architecture()[0]},
-            {'Name': 'OS Version', 'Value': platform.platform()},
-            {'Name': 'OS Runtime', 'Value': platform.system()}
-        ]
-
-        # Memory information
-        memory_info = psutil.virtual_memory()
-        swap_info = psutil.swap_memory()
-        memory_metrics = [
-            {'Name': 'Total Memory', 'Value': memory_info.total},
-            {'Name': 'Available Memory', 'Value': memory_info.available},
-            {'Name': 'Swap Size', 'Value': swap_info.total},
-            {'Name': 'Swap Usage', 'Value': swap_info.used}
-        ]
-
-        # Disk information
-        disk_info = psutil.disk_usage('/')
-        disk_metrics = [
-            {'Name': 'Total Disk Space', 'Value': disk_info.total},
-            {'Name': 'Used Disk Space', 'Value': disk_info.used},
-            {'Name': 'Free Disk Space', 'Value': disk_info.free}
-        ]
-
-        # Combine all metrics into a single list
-        system_metrics = cpu_metrics + os_metrics + memory_metrics + disk_metrics
+        # Add a buffer run between the task list and the Total
+        # We add it at this stage just in case there are no Tasks in the TaskChain
+        # which means the only row in the task_metrics list is the Total row
+        task_metrics.insert(-1, {k: '' for k in task_metrics[-1].keys()})
 
         return [
             {
                 'data': task_metrics,
                 'meta': {
-                    'headers': [k for k in task_metrics[0].keys()],
-                    'title': 'Task Metrics'
-                }
-            },
-            {
-                'data': timings,
-                'meta': {
-                    'headers': [k for k in timings[0].keys()],
-                    'title': 'Timings'
-                }
-            },
-            {
-                'data': system_metrics,
-                'meta': {
-                    'headers': [k for k in system_metrics[0].keys()],
-                    'title': 'System Metrics'
+                    'headers': [k for k in task_metrics[0].keys()]
                 }
             }
         ]

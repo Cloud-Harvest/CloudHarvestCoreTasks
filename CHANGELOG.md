@@ -1,3 +1,9 @@
+# 0.2.6
+- `BaseTaskChain.performance_report`
+  - Removed several unnecessary metrics
+  - Improved metrics and reduced the number of list comprehensions
+  - Added a buffer line between the task list and the total row
+
 # 0.2.5
 - Added `.__str__()` to TaskStatusCode calls in the `BaseTaskChain.performance_report` output because the class is not JSON serializable
 

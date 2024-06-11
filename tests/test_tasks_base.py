@@ -221,9 +221,8 @@ class TestBaseTaskChain(BaseTestCase):
         # Assert that the report is a dictionary
         self.assertIsInstance(report, list)
         # Assert that the report contains the expected keys
-        self.assertEqual(report[0]['meta']['title'], 'Task Metrics')
-        self.assertEqual(report[1]['meta']['title'], 'Timings')
-        self.assertEqual(report[2]['meta']['title'], 'System Metrics')
+        self.assertEqual(report[0]['data'][-2]['Position'], '')
+        self.assertEqual(report[0]['data'][-1]['Position'], 'Total')
 
 
 if __name__ == '__main__':

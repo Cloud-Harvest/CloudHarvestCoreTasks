@@ -791,6 +791,7 @@ class BaseTaskChain(List[BaseTask]):
         """
 
         self.status = TaskStatusCodes.complete
+        self.end = datetime.now(tz=timezone.utc)
 
         return self
 

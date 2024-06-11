@@ -1,3 +1,6 @@
+# 0.2.4
+- Added missing `end` timestamp in `BaseTaskChain.on_complete()`
+
 # 0.2.3
 - Changed the return type of `BaseTaskChain.performance_report` to `List[dict]`
 - Added the hostname to the `BaseTaskChain.performance_report` output

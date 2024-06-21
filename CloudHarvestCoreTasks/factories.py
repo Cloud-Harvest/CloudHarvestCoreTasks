@@ -36,12 +36,12 @@ def task_chain_from_file(file_path: str) -> BaseTaskChain:
     else:
         raise ValueError('Unsupported file type. Supported types are .json, .yaml, and .yml.')
 
-    task_chain = task_chain_from_dict(task_chain_name=file_path, task_chain=task_chain)
+    task_chain = task_chain_from_dict(task_chain_registered_class_name=file_path, task_chain=task_chain)
 
     return task_chain
 
 
-def task_chain_from_dict(task_chain_name: str,
+def task_chain_from_dict(task_chain_registered_class_name: str,
                          task_chain: dict,
                          extra_vars: dict = None,
                          **kwargs) -> BaseTaskChain:
@@ -52,7 +52,7 @@ def task_chain_from_dict(task_chain_name: str,
     returns an instance of that class.
 
     Parameters:
-    task_chain_name (str): The name of the task chain.
+    task_chain_registered_class_name (str): The name of the task chain.
     task_chain (dict): The dictionary representation of the task chain. This should include all the necessary
                        information to create the task chain, such as the tasks to be executed and their order.
     extra_vars (dict): A dictionary of extra variables to be passed to the task chain.
@@ -64,19 +64,17 @@ def task_chain_from_dict(task_chain_name: str,
 
     from CloudHarvestCorePluginManager.registry import Registry
 
-    # Lookup the class for the provided task chain name by scanning the PluginRegistry.
-    formal_chain_class_name = task_chain_name.title().replace('_', '') + 'TaskChain'
     try:
-        chain_class = Registry.find_definition(class_name=formal_chain_class_name,
+        chain_class = Registry.find_definition(class_name=task_chain_registered_class_name,
                                                is_subclass_of=BaseTaskChain)[0]
 
     except IndexError:
         from .exceptions import BaseTaskException
-        raise BaseTaskException(f'No task chain class found for {task_chain_name} / {formal_chain_class_name}.')
+        raise BaseTaskException(f'No task chain class found for {task_chain_registered_class_name}.')
 
     # Set the name of the task chain if it is not already set.
     if 'name' not in task_chain.keys():
-        task_chain['name'] = task_chain_name
+        task_chain['name'] = task_chain_registered_class_name
 
     # Instantiate the task chain class.
     result = chain_class(template=task_chain, extra_vars=extra_vars, **kwargs)

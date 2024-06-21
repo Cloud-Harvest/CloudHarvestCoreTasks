@@ -1,3 +1,6 @@
+# 0.2.7
+- Updated to conform with CloudHarvestCorePluginManager 0.2.4
+
 # 0.2.6
 - `BaseTaskChain.performance_report`
   - Removed several unnecessary metrics

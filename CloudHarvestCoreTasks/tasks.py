@@ -18,7 +18,7 @@ from .base import BaseAsyncTask, BaseTask, BaseTaskChain, TaskStatusCodes
 #         self.status = TaskStatusCodes.complete
 
 
-@register_definition
+@register_definition(name='delay')
 class DelayTask(BaseTask):
     """
     The DelayTask class is a subclass of the BaseTask class. It represents a task that introduces a delay in the task
@@ -75,7 +75,7 @@ class DelayTask(BaseTask):
         return self
 
 
-@register_definition
+@register_definition(name='dummy')
 class DummyTask(BaseTask):
     """
     The DummyTask class is a subclass of the Base
@@ -101,7 +101,7 @@ class DummyTask(BaseTask):
         return self
 
 
-@register_definition
+@register_definition(name='prune')
 class PruneTask(BaseTask):
     def __init__(self, previous_task_data: bool = False, stored_variables: bool = False, *args, **kwargs):
         """
@@ -145,7 +145,7 @@ class PruneTask(BaseTask):
         return self
 
 
-@register_definition
+@register_definition(name='template')
 class TemplateTask(BaseTask):
     def __init__(self, template: dict,
                  records: (List[dict] or str) = None,
@@ -186,7 +186,7 @@ class TemplateTask(BaseTask):
         return self
 
 
-@register_definition
+@register_definition(name='wait')
 class WaitTask(BaseTask):
     """
     The WaitTask class is a subclass of the BaseTask class. It represents a task that waits for certain conditions to be met before it can be run.

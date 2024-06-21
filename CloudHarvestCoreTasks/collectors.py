@@ -6,7 +6,7 @@ from .base import BaseTask, TaskStatusCodes
 logger = getLogger('harvest')
 
 
-@register_definition
+@register_definition('cache_data_collector')
 class CacheDataCollector(BaseTask):
     def __init__(self, name: str, **kwargs):
         super().__init__(name, **kwargs)

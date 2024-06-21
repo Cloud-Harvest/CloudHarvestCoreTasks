@@ -2,7 +2,7 @@ from CloudHarvestCorePluginManager.decorators import register_definition
 from .base import BaseTaskChain
 
 
-@register_definition
+@register_definition(name='report')
 class ReportTaskChain(BaseTaskChain):
     """
     A class used to represent a Report Task Chain.

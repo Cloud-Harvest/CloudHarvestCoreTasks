@@ -72,7 +72,8 @@ class TestPruneTask(unittest.TestCase):
 
     def test_run_prune_all_at_end(self):
         from ..CloudHarvestCoreTasks.factories import task_chain_from_dict
-        self.task_chain = task_chain_from_dict(task_chain_name='report', task_chain=self.task_configuration)
+        self.task_chain = task_chain_from_dict(task_chain_registered_class_name='report',
+                                               task_chain=self.task_configuration)
 
         # run the task chain
         self.task_chain.run()
@@ -94,7 +95,8 @@ class TestPruneTask(unittest.TestCase):
         })
 
         from ..CloudHarvestCoreTasks.factories import task_chain_from_dict
-        self.task_chain = task_chain_from_dict(task_chain_name='report', task_chain=self.task_configuration)
+        self.task_chain = task_chain_from_dict(task_chain_registered_class_name='report',
+                                               task_chain=self.task_configuration)
 
         # run the task chain
         self.task_chain.run()

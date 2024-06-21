@@ -30,7 +30,7 @@ class TaskConfiguration:
     If a task chain is provided, it retrieves the variables from the task chain and uses them to template the task configuration.
 
     Attributes:
-        provided_name (str): The name of the task class to instantiate.
+        class_name (str): The name of the task class to instantiate.
         task_configuration (dict): The configuration for the task.
         name (str): The name of the task.
         description (str): A brief description of what the task does.
@@ -52,8 +52,8 @@ class TaskConfiguration:
             extra_vars (dict, optional): Extra variables that can be used to template the task configuration. Defaults to None.
         """
 
-        self.provided_name = list(task_configuration.keys())[0]
-        self.task_configuration = task_configuration[self.provided_name].copy()
+        self.class_name = list(task_configuration.keys())[0]
+        self.task_configuration = task_configuration[self.class_name].copy()
 
         self.name = self.task_configuration['name']
         self.description = self.task_configuration.get('description')
@@ -66,13 +66,11 @@ class TaskConfiguration:
         # Retrieve the class of the task to instantiate
         from CloudHarvestCorePluginManager import Registry
 
-        formal_class_name = self.provided_name.title().replace('_', '') + 'Task'
-
         try:
-            self.task_class = Registry.find_definition(class_name=formal_class_name, is_subclass_of=BaseTask)[0]
+            self.task_class = Registry.find_definition(class_name=self.class_name, is_subclass_of=BaseTask)[0]
 
         except IndexError:
-            raise BaseTaskException(f'Could not find a task class named {formal_class_name}.')
+            raise BaseTaskException(f'Could not find a task class named {self.class_name}.')
 
     def instantiate(self) -> 'BaseTask':
         """

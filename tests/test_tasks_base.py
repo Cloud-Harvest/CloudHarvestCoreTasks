@@ -46,7 +46,7 @@ class TestTaskConfiguration(BaseTestCase):
             }
 
         from ..CloudHarvestCoreTasks.factories import task_chain_from_dict
-        self.base_task_chain = task_chain_from_dict(task_chain_name='report', task_chain=self.task_configuration)
+        self.base_task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=self.task_configuration)
 
     def test_instantiate(self):
         # Test the instantiate method
@@ -60,7 +60,7 @@ class TestTaskConfiguration(BaseTestCase):
 class TestBaseTask(BaseTestCase):
     def setUp(self):
         from CloudHarvestCorePluginManager.registry import Registry
-        task = Registry.find_definition(class_name='DelayTask', is_subclass_of=BaseTask)[0]
+        task = Registry.find_definition(class_name='delay', is_subclass_of=BaseTask)[0]
         self.base_task = task(name='test', description='test task', delay_seconds=10)
 
     def test_init(self):
@@ -151,7 +151,7 @@ class TestBaseTaskChain(BaseTestCase):
             }
 
         from ..CloudHarvestCoreTasks.factories import task_chain_from_dict
-        self.base_task_chain = task_chain_from_dict(task_chain_name='report', task_chain=self.task_configuration)
+        self.base_task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=self.task_configuration)
 
     def test_init(self):
         """

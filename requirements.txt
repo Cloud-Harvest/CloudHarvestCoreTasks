@@ -1,7 +1,12 @@
 CloudHarvestCorePluginManager @ git+https://github.com/Cloud-Harvest/CloudHarvestCorePluginManager.git@main
+Flask
+flatten-json
 Jinja2
-PyYAML
-psutil
+pandas
+pymongo
 pytest
 python-dateutil
+PyYAML
+rich-argparse
 setuptools
+wheel

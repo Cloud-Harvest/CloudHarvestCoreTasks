@@ -1,5 +1,6 @@
-from typing import List
 from CloudHarvestCorePluginManager.decorators import register_definition
+from typing import List, Literal
+from .data_model.recordset import HarvestRecordSet
 from .base import BaseAsyncTask, BaseTask, BaseTaskChain, TaskStatusCodes
 
 
@@ -101,6 +102,297 @@ class DummyTask(BaseTask):
         return self
 
 
+@register_definition(name='file')
+class FileTask(BaseTask):
+    """
+    The FileTask class is a subclass of the BaseTask class. It represents a task that performs file operations such as
+    reading from or writing to a file. Read operations take the content of a file and places them in the TaskChain's
+    variables. Write operations take the data from the TaskChain's variables and write them to a file.
+
+    Methods:
+        determine_format(): Determines the format of the file based on its extension.
+        method(): Performs the file operation specified by the mode and format attributes.
+    """
+
+    def __init__(self,
+                 path: str,
+                 result_as: str,
+                 mode: Literal['append', 'read', 'write'],
+                 desired_keys: List[str] = None,
+                 format: Literal['config', 'csv', 'json', 'raw', 'yaml'] = None,
+                 template: str = None,
+                 *args, **kwargs):
+
+        """
+        Initializes a new instance of the FileTask class.
+
+        Args:
+            path (str): The path to the file.
+            result_as (str): The name under which the result will be stored.
+            mode (Literal['append', 'read', 'write']): The mode in which the file will be opened.
+            desired_keys (List[str], optional): A list of keys to filter the data by. Defaults to None.
+            format (Literal['config', 'csv', 'json', 'raw', 'yaml'], optional): The format of the file. Defaults to None.
+            template (str, optional): A template to use for the output. Defaults to None.
+            *args: Variable length argument list.
+            **kwargs: Arbitrary keyword arguments.
+        """
+
+        super().__init__(*args, **kwargs)
+        from pathlib import Path
+
+        # Class-specific
+        self.path = path
+        self.abs_path = Path(self.path).expanduser().absolute()
+        self.mode = mode.lower()
+        self.format = format.lower() or self.determine_format()
+        self.desired_keys = desired_keys
+        self.template = template
+
+        # Overrides from BaseTask
+        self.result_as = result_as
+
+    def determine_format(self):
+        """
+        Determines the format of the file based on its extension.
+
+        Returns:
+            str: The format of the file.
+        """
+
+        supported_extensions_and_formats = {
+            'cfg': 'config',
+            'conf': 'config',
+            'config': 'config',
+            'csv': 'csv',
+            'ini': 'config',
+            'json': 'json',
+            'yaml': 'yaml',
+            'yml': 'yaml'
+        }
+
+        path_file_extensions = str(self.path.split('.')[-1]).lower()
+
+        return supported_extensions_and_formats.get(path_file_extensions) or 'raw'
+
+    def method(self):
+        """
+        Performs the file operation specified by the mode and format attributes.
+
+        This method handles both reading from and writing to files in various formats such as config, csv, json, raw, and yaml.
+
+        Raises:
+            BaseTaskException: If the data format is not supported for the specified operation.
+
+        Returns:
+            self: Returns the instance of the FileTask.
+        """
+
+        from .exceptions import BaseTaskException
+
+        from configparser import ConfigParser
+        from csv import DictReader, DictWriter
+        import json
+        import yaml
+
+        modes = {
+            'append': 'a',
+            'read': 'r',
+            'write': 'w'
+        }
+
+        # Open the file in the specified mode
+        with open(self.abs_path, modes[self.mode]) as file:
+            
+            # Read operations
+            if self.mode == 'read':
+                if self.format == 'config':
+                    config = ConfigParser()
+                    config.read_file(file)
+                    result = {section: dict(config[section]) for section in config.sections()}
+
+                elif self.format == 'csv':
+                    result = list(DictReader(file))
+
+                elif self.format == 'json':
+                    result = json.load(file)
+
+                elif self.format == 'yaml':
+                    result = yaml.load(file, Loader=yaml.FullLoader)
+
+                else:
+                    result = file.read()
+
+                # If desired_keys is specified, filter the result to just those keys
+                if self.desired_keys:
+                    if isinstance(result, dict):
+                        self.data = {k: v for k, v in result.items() if k in self.desired_keys}
+                    
+                    elif isinstance(result, list):
+                        self.data = [{k: v for k, v in record.items() if k in self.desired_keys} for record in result]
+                
+                # Return the entire result
+                else:
+                    self.data = result
+
+            # Write operations
+            else:
+                # Retrieve the data to write to the file
+                _data = self.task_chain.get_variables_by_names(*self.with_vars) or {}
+
+                # If with_vars is a single variable, use that as the data
+                _data = _data.get(self.with_vars[0]) if len(self.with_vars) == 1 else _data
+
+                # If the user has provided a template for the output, apply it
+                if self.template:
+                    from templating.functions import template_object
+                    _data = template_object(template=self.template, variables=_data)
+
+                # If no template is provided, use _data as provided
+                else:
+                    # If the user has specified desired_keys, filter the data to just those keys, if applicable
+                    if self.desired_keys:
+                        from flatten_json import flatten, unflatten
+                        separator = '.'
+
+                        # If the data is a dictionary, flatten it, filter the keys, and unflatten it
+                        if isinstance(_data, dict):
+                            _data = unflatten({
+                                k: v for k, v in flatten(_data.items, separator=separator)()
+                                if k in self.desired_keys
+                            }, separator=separator)
+
+                        # If the data is a list, flatten each record, filter the keys, and unflatten each record
+                        elif isinstance(_data, list):
+                            _data = [
+                                unflatten({
+                                    k: v for k, v in flatten(record, separator=separator).items()
+                                    if k in self.desired_keys
+                                })
+                                for record in _data
+                            ]
+
+                if self.format == 'config':
+                    config = ConfigParser()
+                    if isinstance(_data, dict):
+                        config.read_dict(_data)
+
+                        config.write(file)
+
+                    else:
+                        raise BaseTaskException(f'{self.name}: `FileTask` only supports dictionaries for writes to config files.')
+
+                elif self.format == 'csv':
+                    if isinstance(_data, list):
+                        if all([isinstance(record, dict) for record in _data]):
+                            consolidated_keys = set([key for record in _data for key in record.keys()])
+                            use_keys = self.desired_keys or consolidated_keys
+
+                            writer = DictWriter(file, fieldnames=use_keys)
+                            writer.writeheader()
+
+                            writer.writerows(_data)
+
+                            return self
+
+                    raise BaseTaskException(f'{self.name}: `FileTask` only supports lists of dictionaries for writes to CSV files.')
+
+                elif self.format == 'json':
+                    json.dump(_data, file, default=str, indent=4)
+
+                elif self.format == 'yaml':
+                    yaml.dump(_data, file)
+
+                else:
+                    file.write(str(_data))
+
+        return self
+
+
+@register_definition(name='recordset')
+class HarvestRecordSetTask(BaseTask):
+    """
+    The HarvestRecordSetTask class is a subclass of the BaseTask class. It represents a task that operates on a record set.
+
+    Attributes:
+        recordset_name (HarvestRecordSet): The name of the record set this task operates on.
+        stages: A list of dictionaries containing the function name and arguments to be applied to the recordset.
+        >>> stages = [
+        >>>     {
+        >>>         'function_name': {
+        >>>             'argument1': 'value1',
+        >>>             'argument2': 'value2'
+        >>>         }
+        >>>     }
+        >>> ]
+
+    Methods:
+        method(): Executes the function on the record set with the provided arguments and stores the result in the data attribute.
+    """
+
+    def __init__(self, recordset_name: HarvestRecordSet, stages: List[dict], *args, **kwargs):
+        """
+        Constructs a new HarvestRecordSetTask instance.
+
+        Args:
+            recordset_name (HarvestRecordSet): The name of the record set this task operates on.
+            stages (List[dict]): A list of dictionaries containing the function name and arguments to be applied to the recordset.
+            *args: Variable length argument list.
+            **kwargs: Arbitrary keyword arguments.
+        """
+        super().__init__(*args, **kwargs)
+
+        self.recordset_name = recordset_name
+        self.stages = stages
+        self.position = 0
+
+    def method(self):
+        """
+        Executes functions on the recordset with the provided function and arguments, then stores the result in the data attribute.
+
+        This method iterates over the `stages` defined for this task. For each stage, it retrieves the function and its arguments.
+        It then checks if the function is a method of the HarvestRecordSet or HarvestRecord class. If it is, it applies the function to the record set or each record in the record set, respectively.
+        If the function is not a method of either class, it raises an AttributeError.
+
+        The result of applying the function is stored in the data attribute of the HarvestRecordSetTask instance.
+
+        Returns:
+            self: Returns the instance of the HarvestRecordSetTask.
+        """
+
+        from .data_model.record import HarvestRecord
+        from .data_model.recordset import HarvestRecordSet
+
+        # Get the recordset from the task chain variables
+        recordset = self.task_chain.get_variables_by_names(self.recordset_name).get(self.recordset_name)
+
+        for stage in self.stages:
+            # Record the position of stages completed
+            self.position += 1
+
+            # Each dictionary should only contain one key-value pair
+            for function, arguments in stage.items():
+
+                # This is a HarvestRecordSet command
+                if hasattr(HarvestRecordSet, function):
+                    getattr(recordset, function)(**arguments or {})
+
+                # This is a HarvestRecord command
+                elif hasattr(HarvestRecord, function):
+                    [
+                        getattr(record, function)(**arguments or {})
+                        for record in recordset
+                    ]
+
+                else:
+                    raise AttributeError(f"Neither HarvestRecordSet nor HarvestRecord has a method named '{function}'")
+
+                break
+
+        self.data = recordset
+
+        return self
+
+
 @register_definition(name='prune')
 class PruneTask(BaseTask):
     def __init__(self, previous_task_data: bool = False, stored_variables: bool = False, *args, **kwargs):
@@ -188,19 +480,6 @@ class TemplateTask(BaseTask):
 
 @register_definition(name='wait')
 class WaitTask(BaseTask):
-    """
-    The WaitTask class is a subclass of the BaseTask class. It represents a task that waits for certain conditions to be met before it can be run.
-
-    Attributes:
-        chain (BaseTaskChain): The task chain that this task belongs to.
-        position (int): The position of this task in the task chain.
-        check_time_seconds (float): The time interval in seconds at which this task checks if its conditions are met.
-        _when_all_previous_async_tasks_complete (bool): A flag indicating whether this task should wait for all previous async tasks to complete.
-        _when_all_previous_tasks_complete (bool): A flag indicating whether this task should wait for all previous tasks to complete.
-        _when_all_tasks_by_name_complete (List[str]): A list of task names. This task will wait until all tasks with these names are complete.
-        _when_any_tasks_by_name_complete (List[str]): A list of task names. This task will wait until any task with these names is complete.
-    """
-
     def __init__(self,
                  chain: BaseTaskChain,
                  position: int,
@@ -212,6 +491,9 @@ class WaitTask(BaseTask):
                  **kwargs):
 
         """
+        The WaitTask class is a subclass of the BaseTask class. It represents a task that waits for certain conditions
+        to be met before proceeding. It is most useful in task chains where asynchronous tasks are used.
+
         Initializes a new instance of the WaitTask class.
 
         Args:

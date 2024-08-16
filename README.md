@@ -60,6 +60,11 @@ tasks will function adequately with only this method defined.
 | `terminate()`   | A method which is called if the Task is terminated before it completes.                                |
 
 
+# Data Model
+Cloud Harvest uses a `List[dict]` data model which is designed to be flexible, extensible, and renderable in many different output formats.
+
+Find more information on the Cloud Harvest Data Model and its methods in the [Data Model README](CloudHarvestCoreTasks/data_model/README.md).
+
 # License
 Shield: [![CC BY-NC-SA 4.0][cc-by-nc-sa-shield]][cc-by-nc-sa]
 

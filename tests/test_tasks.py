@@ -1,3 +1,5 @@
+import os
+import tempfile
 import unittest
 from ..CloudHarvestCoreTasks.__register__ import *
 from ..CloudHarvestCoreTasks.base import TaskStatusCodes
@@ -29,6 +31,120 @@ class TestDummyTask(unittest.TestCase):
         # Check that the data and meta attributes are set correctly
         self.assertEqual(self.dummy_task.data, [{'dummy': 'data'}])
         self.assertEqual(self.dummy_task.meta, {'info': 'this is dummy metadata'})
+
+
+class TestFileTask(unittest.TestCase):
+    def setUp(self):
+        from ..CloudHarvestCoreTasks.base import BaseTaskChain
+        self.temp_files = []
+        self.test_task_chain = BaseTaskChain(name='test_task_chain', description='This is a test task chain', template={'name': 'test', 'tasks': []})
+        
+        self.test_data = {
+            'config': {'section': {'key': 'value'}},
+            'csv': [{'key1': 'value1', 'key2': 'value2'}, {'key1': 'value3', 'key2': 'value4'}],
+            'json': {'key1': 'value1', 'key2': 'value2'},
+            'yaml': {'key1': 'value1', 'key2': 'value2'},
+            'raw': 'This is raw data'
+        }
+
+    def tearDown(self):
+        for file in self.temp_files:
+            os.remove(file)
+
+    def create_temp_file(self, content=''):
+        temp_file = tempfile.NamedTemporaryFile(delete=False)
+        temp_file.write(content.encode())
+        temp_file.close()
+        self.temp_files.append(temp_file.name)
+        return temp_file.name
+
+    def test_write_config(self):
+        path = self.create_temp_file()
+        task = FileTask(task_chain=self.test_task_chain,
+                        name="test",
+                        path=path,
+                        result_as='result',
+                        with_vars=['data'],
+                        mode='write',
+                        format='config')
+        self.test_task_chain.variables = {'data': self.test_data['config']}
+        task.method()
+        with open(path, 'r') as file:
+            content = file.read()
+        self.assertIn('[section]', content)
+        self.assertIn('key = value', content)
+
+    def test_read_config(self):
+        path = self.create_temp_file('[section]\nkey = value\n')
+        task = FileTask(name="test", path=path, result_as='result', with_vars=['data'], mode='read', format='config')
+        task.method()
+        self.assertEqual(task.data, {'section': {'key': 'value'}})
+
+    def test_write_csv(self):
+        path = self.create_temp_file()
+        task = FileTask(task_chain=self.test_task_chain, name="test", path=path, result_as='result', with_vars=['data'], mode='write', format='csv')
+        self.test_task_chain.variables = {'data': self.test_data['csv']}
+        task.method()
+        with open(path, 'r') as file:
+            content = file.readlines()
+
+        self.assertEqual(len(content), 3)
+        self.assertEqual(content[0].strip(), 'key1,key2')
+        self.assertEqual(content[1].strip(), 'value1,value2')
+        self.assertEqual(content[2].strip(), 'value3,value4')
+
+    def test_read_csv(self):
+        path = self.create_temp_file('key1,key2\nvalue1,value2\nvalue3,value4\n')
+        task = FileTask(name="test", path=path, result_as='result', with_vars=['data'], mode='read', format='csv')
+        task.method()
+        self.assertEqual(task.data, self.test_data['csv'])
+
+    def test_write_json(self):
+        path = self.create_temp_file()
+        task = FileTask(task_chain=self.test_task_chain, name="test", path=path, result_as='result', with_vars=['data'], mode='write', format='json')
+        self.test_task_chain.variables = {'data': self.test_data['json']}
+        task.method()
+        with open(path, 'r') as file:
+            content = file.read()
+        self.assertIn('"key1": "value1"', content)
+        self.assertIn('"key2": "value2"', content)
+
+    def test_read_json(self):
+        path = self.create_temp_file('{"key1": "value1", "key2": "value2"}')
+        task = FileTask(name="test", path=path, result_as='result', with_vars=['data'], mode='read', format='json')
+        task.method()
+        self.assertEqual(task.data, self.test_data['json'])
+
+    def test_write_yaml(self):
+        path = self.create_temp_file()
+        task = FileTask(task_chain=self.test_task_chain, name="test", path=path, result_as='result', with_vars=['data'], mode='write', format='yaml')
+        self.test_task_chain.variables = {'data': self.test_data['yaml']}
+        task.method()
+        with open(path, 'r') as file:
+            content = file.read()
+        self.assertIn('key1: value1', content)
+        self.assertIn('key2: value2', content)
+
+    def test_read_yaml(self):
+        path = self.create_temp_file('key1: value1\nkey2: value2\n')
+        task = FileTask(name="test", path=path, result_as='result', with_vars=['data'], mode='read', format='yaml')
+        task.method()
+        self.assertEqual(task.data, self.test_data['yaml'])
+
+    def test_write_raw(self):
+        path = self.create_temp_file()
+        task = FileTask(task_chain=self.test_task_chain, name="test", path=path, result_as='result', with_vars=['data'], mode='write', format='raw')
+        self.test_task_chain.variables = {'data': self.test_data['raw']}
+        task.method()
+        with open(path, 'r') as file:
+            content = file.read()
+        self.assertEqual(content, self.test_data['raw'])
+
+    def test_read_raw(self):
+        path = self.create_temp_file('This is raw data')
+        task = FileTask(name="test", path=path, result_as='result', with_vars=['data'], mode='read', format='raw')
+        task.method()
+        self.assertEqual(task.data, 'This is raw data')
 
 
 class TestPruneTask(unittest.TestCase):

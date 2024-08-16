@@ -1,3 +1,7 @@
+# 0.3.0
+- Merged CloudHarvestCoreDataModel into this repository
+- Added `FileTask`
+
 # 0.2.7
 - Updated to conform with CloudHarvestCorePluginManager 0.2.4
 

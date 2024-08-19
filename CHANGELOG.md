@@ -1,6 +1,8 @@
-# 0.3.0
-- Merged CloudHarvestCoreDataModel into this repository
-- Added `FileTask`
+# 0.3.1
+- [#3](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/3) Added `when` conditional operator to `BaseTask` and `BaseTaskChain`
+- [#5](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/5) Added `FileTask`
+- [#6](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/6) Merged CloudHarvestCoreDataModel into this repository
+- [#7](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/7) Added `on_` state directives to the `BaseTask`
 
 # 0.2.7
 - Updated to conform with CloudHarvestCorePluginManager 0.2.4

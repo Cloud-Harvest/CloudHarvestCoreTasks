@@ -19,6 +19,7 @@ class TaskStatusCodes(Enum):
     error = 'error'                 # the thread has stopped in an error state
     initialized = 'initialized'     # the thread has been created
     running = 'running'             # the thread is currently processing data
+    skipped = 'skipped'             # the thread was skipped and did not run because a `when` condition was not mets
     terminating = 'terminating'     # the thread was ordered to stop and is currently attempting to shut down
 
 
@@ -104,8 +105,10 @@ class BaseTask:
     def __init__(self,
                  name: str,
                  description: str = None,
+                 on: dict = None,
                  task_chain: 'BaseTaskChain' = None,
                  result_as: str = None,
+                 when: str = None,
                  with_vars: list[str] = None,
                  **kwargs):
 
@@ -119,6 +122,7 @@ class BaseTask:
         Attributes:
             name (str): The name of the task.
             description (str): A brief description of what the task does.
+            on (dict): A dictionary of task configurations for the task to run when it completes, errors, is skipped, or starts.
             task_chain (BaseTaskChain): The task chain that this task belongs to, if applicable.
             with_vars (list[str]): A list of variables that this task uses. These variables are retrieved from the task chain
                 and used in TaskConfiguration which templates this task's class.
@@ -126,11 +130,14 @@ class BaseTask:
             data (Any): The data that this task produces, if applicable.
             meta (Any): Any metadata associated with this task.
             result_as (str): The name of the variable to store the result of this task in the task chain's variables.
+            when (str): A string representing a conditional argument using Jinja2 templating. If provided, the task
+                will only run if the condition evaluates to True.
         """
 
         self.name = name
         self.description = description
         self.task_chain = task_chain
+        self.on = on or {}
 
         self.with_vars = with_vars
         self.status = TaskStatusCodes.initialized
@@ -140,6 +147,7 @@ class BaseTask:
         self.start = None
         self.end = None
         self.result_as = result_as
+        self.when = when
 
     @property
     def duration(self) -> float:
@@ -173,25 +181,63 @@ class BaseTask:
         Runs the task. This method will block until it completes, errors, or is terminated.
 
         Returns:
-            BaseTask: The instance of the task.
+        BaseTask: The instance of the task.
         """
 
         try:
             try:
                 self.on_start()
 
-                self.method()
+                when_result = True
+
+                # Check of the `when` condition is met
+                if self.when and self.task_chain:
+                    from .templating.functions import template_object
+                    when_result = True if template_object(template={'result': '{{ ' + self.when + ' }}'}, variables=self.task_chain.variables).get('result') == 'True' else False
+
+                # If `self.when` condition is met or is None, run the method
+                if when_result:
+                    self.method()
+
+                # Skip the task
+                else:
+                    self.on_skipped()
 
             except Exception as ex:
                 self.on_error(ex)
 
             else:
-                self.on_complete()
+                # If the task was not skipped, call the on_complete() method
+                if self.status != TaskStatusCodes.skipped:
+                    self.on_complete()
 
         except Exception as ex:
             raise BaseTaskException(f'Top level error while running task {self.name}: {ex}')
 
         return self
+
+    def _run_on_directive(self, directive: str):
+        """
+        Runs the task directive specified by the caller.
+
+        Args:
+            directive (str): The name of the method that called this method.
+
+        Returns:
+            BaseTask: The instance of the task.
+        """
+        i = 1
+
+        for d in (self.on.get(directive) or []):
+            # Inserts a new TaskConfiguration into the task chain's task_templates list
+            self.task_chain.task_templates.insert(self.task_chain.position + i,
+                                                  TaskConfiguration(task_configuration=d,
+                                                                    task_chain=self.task_chain))
+
+            i += 1
+
+        return self
+
 
     def on_complete(self) -> 'BaseTask':
         """
@@ -205,6 +251,8 @@ class BaseTask:
         # Store the result in the task chain's variables if a result_as variable is provided
         if self.result_as and self.task_chain:
             self.task_chain.variables[self.result_as] = self.data
+
+        self._run_on_directive('complete')
 
         self.status = TaskStatusCodes.complete
 
@@ -231,6 +279,25 @@ class BaseTask:
 
         logger.error(f'Error running task {self.name}: {ex}')
 
+        self._run_on_directive('error')
+
+
+        return self
+
+    def on_skipped(self) -> 'BaseTask':
+        """
+        Method to run when a task is skipped.
+        This method may be overridden in subclasses to provide specific skip logic.
+
+        Returns:
+            BaseTask: The instance of the task.
+        """
+
+        self.status = TaskStatusCodes.skipped
+
+        self._run_on_directive('skipped')
+
+
         return self
 
     def on_start(self) -> 'BaseTask':
@@ -244,6 +311,8 @@ class BaseTask:
 
         self.status = TaskStatusCodes.running
         self.start = datetime.now(tz=timezone.utc)
+
+        self._run_on_directive('start')
 
         return self
 

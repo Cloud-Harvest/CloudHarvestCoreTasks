@@ -101,6 +101,18 @@ class DummyTask(BaseTask):
 
         return self
 
+@register_definition(name='error')
+class ErrorTask(BaseTask):
+    """
+    The ErrorTask class is a subclass of the BaseTask class. It represents a task that raises an exception when run.
+    This task is used for testing error handling in task chains and should not be used in production code. For example,
+    this task is used for testing the `on: error` directive in task chain configurations.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def method(self):
+        raise Exception('This is an error task')
 
 @register_definition(name='file')
 class FileTask(BaseTask):

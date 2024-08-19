@@ -1,4 +1,7 @@
 from typing import Any
+from logging import getLogger
+
+logger = getLogger('harvest')
 
 
 def template_object(template: Any, variables: dict = None) -> dict:
@@ -20,6 +23,7 @@ def template_object(template: Any, variables: dict = None) -> dict:
     >>> template_object(template='{{ variable }}', variables={'variable': 'value'})
     'value'
     """
+    result = {}
 
     from jinja2 import Environment, DictLoader
 
@@ -39,8 +43,13 @@ def template_object(template: Any, variables: dict = None) -> dict:
     from .filters import list_filters
     environment.filters.update(list_filters())
 
-    # Render the template with the provided variables (or an empty dictionary if no variables were provided)
-    from json import loads
-    result = loads(environment.get_template('template').render(**variables or {}))
+    try:
+        # Render the template with the provided variables (or an empty dictionary if no variables were provided)
+        from json import loads
+        result = loads(environment.get_template('template').render(**variables or {}))
 
-    return result
+    except Exception as e:
+        logger.warning(f'Error rendering template: {e}')
+
+    finally:
+        return result

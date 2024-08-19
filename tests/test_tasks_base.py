@@ -14,11 +14,8 @@ class BaseTestCase(unittest.TestCase):
 
 class TestTaskStatusCodes(BaseTestCase):
     def test_enum_values(self):
-        self.assertEqual(TaskStatusCodes.complete.value, 'complete')
-        self.assertEqual(TaskStatusCodes.error.value, 'error')
-        self.assertEqual(TaskStatusCodes.initialized.value, 'initialized')
-        self.assertEqual(TaskStatusCodes.running.value, 'running')
-        self.assertEqual(TaskStatusCodes.terminating.value, 'terminating')
+        task_codes = TaskStatusCodes.__members__
+        [self.assertTrue(code == TaskStatusCodes[code].value) for code in task_codes]
 
 
 class TestTaskConfiguration(BaseTestCase):
@@ -38,8 +35,17 @@ class TestTaskConfiguration(BaseTestCase):
                     {
                         'delay': {
                             'name': 'delay_task',
-                            'description': 'This is a delay task',
-                            'delay_seconds': 1
+                            'description': 'This is a delay task which tests a False when condition',
+                            'delay_seconds': 1,
+                            'when': 'skip_var != \'run me\''
+                        }
+                    },
+                    {
+                        'delay': {
+                            'name': 'delay_task',
+                            'description': 'This is a delay task which tests a True when condition',
+                            'delay_seconds': 1,
+                            'when': 'skip_var == \'run me\''
                         }
                     }
                 ]
@@ -50,10 +56,15 @@ class TestTaskConfiguration(BaseTestCase):
 
     def test_instantiate(self):
         # Test the instantiate method
+        self.base_task_chain.variables = {'skip_var': 'run me'}
+
         self.base_task_chain.run()
         self.assertIsNone(self.base_task_chain.result.get('error'))
         self.assertIsInstance(self.base_task_chain[0], DummyTask)
         self.assertIsInstance(self.base_task_chain[1], DelayTask)
+        self.assertEqual(self.base_task_chain[0].status, TaskStatusCodes.complete)
+        self.assertEqual(self.base_task_chain[1].status, TaskStatusCodes.skipped)
+        self.assertEqual(self.base_task_chain[2].status, TaskStatusCodes.complete)
         self.assertEqual(self.base_task_chain.status, TaskStatusCodes.complete)
 
 
@@ -86,6 +97,10 @@ class TestBaseTask(BaseTestCase):
         except Exception as e:
             self.base_task.on_error(e)
         self.assertEqual(self.base_task.status, TaskStatusCodes.error)
+
+    def test_on_skipped(self):
+        self.base_task.on_skipped()
+        self.assertEqual(self.base_task.status, TaskStatusCodes.skipped)
 
     def test_terminate(self):
         # Test the terminate method
@@ -223,6 +238,106 @@ class TestBaseTaskChain(BaseTestCase):
         # Assert that the report contains the expected keys
         self.assertEqual(report[0]['data'][-2]['Position'], '')
         self.assertEqual(report[0]['data'][-1]['Position'], 'Total')
+
+
+class TestBaseTaskChainOnDirective(BaseTestCase):
+    def setUp(self):
+        """
+        Set up the test environment for each test case.
+        """
+        # Create a dummy task and add it to the task chain
+        self.task_configuration = {
+                'name': 'test_chain',
+                'description': 'This is a task_chain.',
+                'tasks': [
+                    {
+                        'dummy': {
+                            'name': 'dummy_task',
+                            'description': 'This is a dummy task which should always succeed.'
+                        }
+                    },
+                    {
+                        'dummy': {
+                            'name': 'dummy_task',
+                            'description': 'This is a dummy task which should succeed then run the on_complete directive.',
+                            'on': {
+                                'complete': [
+                                    {
+                                        'dummy': {
+                                            'name': 'dummy_task',
+                                                'description': 'This is a dummy task which runs when the previous task completes.'
+                                            }
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        'error': {
+                            'name': 'error_task',
+                            'description': 'This task should always end in the error state and is used to test the on_error directive.',
+                            'on':
+                                {
+                                    'error': [
+                                            {
+                                            'dummy': {
+                                                'name': 'dummy_task',
+                                                'description': 'This is a dummy task which runs when the previous task errors.'
+                                            }
+                                        }
+                                    ]
+                                }
+                        }
+                    },
+                    {
+                        'dummy': {
+                            'name': 'dummy_skipped_task',
+                            'description': 'This is a dummy task which runs when the previous task is skipped.',
+                            'when': 'undefined_var = \'some value we will not supplys\'',
+                            'on': {
+                                'skipped': [
+                                    {
+                                        'dummy': {
+                                            'name': 'dummy_task',
+                                            'description': 'This is a dummy task which runs when the previous task is skipped.'
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                ]
+        }
+
+        from ..CloudHarvestCoreTasks.factories import task_chain_from_dict
+        self.base_task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=self.task_configuration)
+
+    def test_on_directives(self):
+        self.base_task_chain.run()
+
+        # This is the control task which always succeeds
+        self.assertEqual(self.base_task_chain[0].status, TaskStatusCodes.complete)
+
+        # This task will succeed then run the on_complete directive
+        self.assertEqual(self.base_task_chain[1].status, TaskStatusCodes.complete)
+
+        # This next task was created by the previous task's on_complete directive
+        self.assertEqual(self.base_task_chain[2].status, TaskStatusCodes.complete)
+
+        # This task will always end in the error state
+        self.assertEqual(self.base_task_chain[3].status, TaskStatusCodes.error)
+
+        # This next task was created by the previous task's on_error directive
+        self.assertEqual(self.base_task_chain[4].status, TaskStatusCodes.complete)
+
+        # This task will always be skipped
+        self.assertEqual(self.base_task_chain[5].status, TaskStatusCodes.skipped)
+
+        # This next task was created by the previous task's on_skipped directive
+        self.assertEqual(self.base_task_chain[6].status, TaskStatusCodes.complete)
+
+        # Verify that the task chain completed successfully
+        self.assertEqual(self.base_task_chain.status, TaskStatusCodes.complete)
 
 
 if __name__ == '__main__':

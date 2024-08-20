@@ -1,3 +1,9 @@
+# 0.3.2
+- Removed `BaseAsyncTask` and associated tests because it is now redundant
+- Added `blocking` parameter to `BaseTask` so now any arbitrary task can be run asynchronously
+- Create the `BaseTaskPool` class to manage asynchronous tasks
+- Fixed some inconsistent tests with `FileTask`
+
 # 0.3.1
 - [#3](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/3) Added `when` conditional operator to `BaseTask` and `BaseTaskChain`
 - [#5](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/5) Added `FileTask`

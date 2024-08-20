@@ -1,22 +1,7 @@
 from CloudHarvestCorePluginManager.decorators import register_definition
 from typing import List, Literal
 from .data_model.recordset import HarvestRecordSet
-from .base import BaseAsyncTask, BaseTask, BaseTaskChain, TaskStatusCodes
-
-
-# class ForEachTask(BaseTask):
-#     def __init__(self, **kwargs):
-#         super().__init__(**kwargs)
-#
-#     def run(self, function: Any, *args, **kwargs):
-#         for task in self.chain[self.position:]:
-#             if task.status == TaskStatusCodes.complete:
-#                 continue
-#
-#             function(task, *args, **kwargs)
-#
-#     def on_complete(self):
-#         self.status = TaskStatusCodes.complete
+from .base import BaseTask, BaseTaskChain, TaskStatusCodes
 
 
 @register_definition(name='delay')
@@ -101,6 +86,7 @@ class DummyTask(BaseTask):
 
         return self
 
+
 @register_definition(name='error')
 class ErrorTask(BaseTask):
     """
@@ -113,6 +99,7 @@ class ErrorTask(BaseTask):
 
     def method(self):
         raise Exception('This is an error task')
+
 
 @register_definition(name='file')
 class FileTask(BaseTask):
@@ -561,7 +548,7 @@ class WaitTask(BaseTask):
                     TaskStatusCodes.complete, TaskStatusCodes.error
                 ]
                 for task in self.chain[0:self.position]
-                if isinstance(task, BaseAsyncTask)
+                if task.blocking is False
             ])
 
     @property

@@ -38,7 +38,8 @@ class TestFileTask(unittest.TestCase):
         from ..CloudHarvestCoreTasks.base import BaseTaskChain
         self.temp_files = []
         self.test_task_chain = BaseTaskChain(name='test_task_chain', description='This is a test task chain', template={'name': 'test', 'tasks': []})
-        
+
+        from collections import OrderedDict
         self.test_data = {
             'config': {'section': {'key': 'value'}},
             'csv': [{'key1': 'value1', 'key2': 'value2'}, {'key1': 'value3', 'key2': 'value4'}],
@@ -82,7 +83,14 @@ class TestFileTask(unittest.TestCase):
 
     def test_write_csv(self):
         path = self.create_temp_file()
-        task = FileTask(task_chain=self.test_task_chain, name="test", path=path, result_as='result', with_vars=['data'], mode='write', format='csv')
+        task = FileTask(task_chain=self.test_task_chain,
+                        name="test",
+                        path=path,
+                        desired_keys=['key1', 'key2'],
+                        result_as='result',
+                        with_vars=['data'],
+                        mode='write',
+                        format='csv')
         self.test_task_chain.variables = {'data': self.test_data['csv']}
         task.method()
         with open(path, 'r') as file:
@@ -120,16 +128,29 @@ class TestFileTask(unittest.TestCase):
         task = FileTask(task_chain=self.test_task_chain, name="test", path=path, result_as='result', with_vars=['data'], mode='write', format='yaml')
         self.test_task_chain.variables = {'data': self.test_data['yaml']}
         task.method()
+
+        from yaml import load, FullLoader
         with open(path, 'r') as file:
-            content = file.read()
-        self.assertIn('key1: value1', content)
-        self.assertIn('key2: value2', content)
+            content = load(file, Loader=FullLoader)
+
+        [
+            self.assertTrue(content[key] == self.test_data['yaml'][key])
+            for key in self.test_data['yaml'].keys()
+        ]
 
     def test_read_yaml(self):
         path = self.create_temp_file('key1: value1\nkey2: value2\n')
-        task = FileTask(name="test", path=path, result_as='result', with_vars=['data'], mode='read', format='yaml')
+        task = FileTask(name="test",
+                        path=path,
+                        result_as='result',
+                        with_vars=['data'],
+                        mode='read',
+                        format='yaml')
         task.method()
-        self.assertEqual(task.data, self.test_data['yaml'])
+        [
+            self.assertEqual(task.data[key], self.test_data['yaml'][key])
+            for key in self.test_data['yaml'].keys()
+        ]
 
     def test_write_raw(self):
         path = self.create_temp_file()

@@ -1,3 +1,4 @@
+from CloudHarvestCorePluginManager.decorators import register_definition
 from .exceptions import BaseTaskException
 from datetime import datetime, timezone
 from enum import Enum
@@ -17,6 +18,7 @@ class TaskStatusCodes(Enum):
     """
     complete = 'complete'           # the thread has stopped and there are no more tasks to complete
     error = 'error'                 # the thread has stopped in an error state
+    idle = 'idle'                   # the thread is running but has no outstanding tasks
     initialized = 'initialized'     # the thread has been created
     running = 'running'             # the thread is currently processing data
     skipped = 'skipped'             # the thread was skipped and did not run because a `when` condition was not mets
@@ -104,6 +106,7 @@ class TaskConfiguration:
 class BaseTask:
     def __init__(self,
                  name: str,
+                 blocking: bool = True,
                  description: str = None,
                  on: dict = None,
                  task_chain: 'BaseTaskChain' = None,
@@ -121,6 +124,7 @@ class BaseTask:
 
         Attributes:
             name (str): The name of the task.
+            blocking (bool): A boolean indicating whether the task is blocking or not. If True, the task will block until it completes.
             description (str): A brief description of what the task does.
             on (dict): A dictionary of task configurations for the task to run when it completes, errors, is skipped, or starts.
             task_chain (BaseTaskChain): The task chain that this task belongs to, if applicable.
@@ -135,6 +139,7 @@ class BaseTask:
         """
 
         self.name = name
+        self.blocking = blocking
         self.description = description
         self.task_chain = task_chain
         self.on = on or {}
@@ -229,10 +234,17 @@ class BaseTask:
         i = 1
 
         for d in (self.on.get(directive) or []):
-            # Inserts a new TaskConfiguration into the task chain's task_templates list
-            self.task_chain.task_templates.insert(self.task_chain.position + i,
-                                                  TaskConfiguration(task_configuration=d,
-                                                                    task_chain=self.task_chain))
+            # If the task is blocking, insert the new task before the next task in the chain
+            if self.blocking:
+                self.task_chain.task_templates.insert(self.task_chain.position + i,
+                                                      TaskConfiguration(task_configuration=d,
+                                                                        task_chain=self.task_chain))
+
+            # If the task is not blocking, append the new task to the end of the chain since the position of the current
+            # task is not known.
+            else:
+                self.task_chain.task_templates.append(TaskConfiguration(task_configuration=d,
+                                                                        task_chain=self.task_chain))
 
             i += 1
 
@@ -340,75 +352,6 @@ class BaseTask:
         }
 
 
-class BaseAsyncTask(BaseTask):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        from threading import Thread
-        self.thread: (Thread or None) = None
-
-    def method(self) -> 'BaseAsyncTask':
-        """
-        This method should be overwritten in subclasses to provide specific functionality. However, to be fully functional,
-        it must include the on_error() and on_complete() methods.
-        """
-        try:
-            # Example code to simulate a long-running task.
-            for i in range(10):
-
-                # Make sure to include a block which handles termination.
-                if self.status == TaskStatusCodes.terminating:
-                    from exceptions import TaskTerminationException
-                    raise TaskTerminationException('Task was instructed to terminate.')
-
-                from time import sleep
-                sleep(1)
-
-            # Set the data attribute to the result of the task, otherwise `as_result` will not populate.
-            self.data = {'Test': 'Result'}
-
-        # Handle exceptions and errors by calling the on_error() method.
-        except Exception as ex:
-            self.on_error(ex)
-
-        # Otherwise call the on_complete() method at the end of the task.
-        else:
-            self.on_complete()
-
-        return self
-
-    def run(self, *args, **kwargs) -> 'BaseAsyncTask':
-        """
-        Runs the task. This method will create a Thread() which calls self.method() then unblock immediately so the next
-        task in the chain can be run.
-
-        Returns:
-            BaseAsyncTask: The instance of the task.
-        """
-
-        try:
-            try:
-                self.on_start()
-
-                from threading import Thread
-                self.thread = Thread(target=self.method, args=args, kwargs=kwargs)
-                self.thread.start()
-
-            except Exception as ex:
-                self.on_error(ex)
-
-        except Exception as ex:
-            raise BaseTaskException(f'Top level error while running task {self.name}: {ex}')
-
-        return self
-
-    def terminate(self) -> 'BaseAsyncTask':
-        super().terminate()
-        self.thread.join()
-
-        return self
-
-
 class BaseAuthenticationTask(BaseTask):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -416,6 +359,7 @@ class BaseAuthenticationTask(BaseTask):
         self.auth = None
 
 
+@register_definition(name='chain')
 class BaseTaskChain(List[BaseTask]):
     """
     The BaseTaskChain class is responsible for managing a chain of tasks.
@@ -452,7 +396,10 @@ class BaseTaskChain(List[BaseTask]):
         terminate() -> 'BaseTaskChain': Terminates the task chain.
     """
 
-    def __init__(self, template: dict, extra_vars: dict = None, *args, **kwargs):
+    def __init__(self,
+                 template: dict,
+                 extra_vars: dict = None,
+                 *args, **kwargs):
         """
         Initializes a new instance of the BaseTaskChain class.
 
@@ -461,9 +408,8 @@ class BaseTaskChain(List[BaseTask]):
                 name(str): The name of the task chain.
                 tasks(list[dict]): A list of task configurations for the tasks in the chain.
                 description(str, optional): A brief description of what the task chain does. Defaults to None.
+                max_workers(int, optional): The maximum number of concurrent workers that are permitted.
         """
-
-        # TODO: Check that any AsyncTask (except PruneTask) have a WaitTask at some point after it.
         super().__init__()
 
         self.name = template['name']
@@ -479,6 +425,10 @@ class BaseTaskChain(List[BaseTask]):
         ]
 
         self.status = TaskStatusCodes.initialized
+        self.pool = BaseTaskPool(chain=self,
+                                 max_workers=template.get('max_workers', 4),
+                                 idle_refresh_rate=template.get('idle_refresh_rate', 3),
+                                 worker_refresh_rate=template.get('worker_refresh_rate', .5)).start()
 
         self.position = 0
 
@@ -706,6 +656,21 @@ class BaseTaskChain(List[BaseTask]):
         """
         return len(self.task_templates)
 
+    def find_task_by_name(self, task_name: str) -> 'BaseTask':
+        """
+        This method finds a task in the task chain by its name.
+
+        Args:
+            task_name (str): The name of the task to find.
+
+        Returns:
+            BaseTask: The task with the given name.
+        """
+
+        for task in self:
+            if task.name == task_name:
+                return task
+
     def find_task_position_by_name(self, task_name: str) -> int:
         """
         This method finds the position of a task in the task chain by its name.
@@ -821,6 +786,10 @@ class BaseTaskChain(List[BaseTask]):
 
         self.status = TaskStatusCodes.error
         self._meta = ex.args
+
+        if self.pool.queue_size:
+            self.pool.terminate()
+
         logger.error(f'Error running task chain {self.name}: {ex}')
 
         return self
@@ -855,18 +824,33 @@ class BaseTaskChain(List[BaseTask]):
                 self.append(task)
 
                 # Execute the task
-                task.run()
+                if task.blocking:
+                    task.run()
 
-                # Increment the position
-                self.position += 1
+                else:
+                    self.pool.add(task)
 
                 # Escape after completing the last task
                 if self.position == self.total:
                     break
 
+                # Check for termination
                 if self.status == TaskStatusCodes.terminating:
                     from .exceptions import TaskTerminationException
                     raise TaskTerminationException('Task chain was instructed to terminate.')
+
+                # Hold within the loop if there are outstanding pool tasks because the async task might have an
+                # on_* directive which needs to be added and processed. By waiting here, we ensure that the task chain
+                # will not complete until all tasks have been processed.
+                if self.pool.queue_size > 0 and len(self.task_templates) == len(self):
+                    self.pool.wait_until_complete()
+
+                # Increment the position
+                self.position += 1
+
+
+            if self.pool.queue_size > 0:
+                self.pool.wait_until_complete()
 
         except Exception as ex:
             self.on_error(ex)
@@ -887,3 +871,177 @@ class BaseTaskChain(List[BaseTask]):
         self.status = TaskStatusCodes.terminating
 
         return self
+
+
+class BaseTaskPool:
+    """
+    The BaseTaskPool class is responsible for managing a pool of tasks that can be executed concurrently. Unlike the
+    ThreadPoolExecutor provided by concurrent.futures, the BaseTaskPool class is designed to continue working even if
+    the Pool's queue is empty. This allows for the addition of new tasks to the pool while it is running.
+
+    TaskChains should call terminate() on the TaskPool to stop the pool from running once all the Chain's Tasks
+    have completed. This will prevent the pool from running indefinitely.
+
+    Attributes:
+        max_workers (int): The maximum number of concurrent workers.
+        worker_refresh_rate (float): The rate at which the pool checks for task completion and starts new tasks.
+        idle_refresh_rate (float): The rate at which the pool checks for new tasks when idle.
+        _pool (list): The list of tasks waiting to be executed.
+        _active (list): The list of tasks currently being executed.
+        _complete (list): The list of tasks that have completed execution.
+        _minder_thread (Thread): The thread responsible for managing the task pool.
+        status (TaskStatusCodes): The current status of the task pool.
+    """
+
+    def __init__(self, chain: BaseTaskChain, max_workers: int, idle_refresh_rate: float = 3, worker_refresh_rate: float = .5):
+        """
+        Initializes a new instance of the BaseTaskPool class.
+
+        Args:
+            max_workers (int): The maximum number of concurrent workers.
+            idle_refresh_rate (float, optional): The rate at which the pool checks for new tasks when idle. Defaults to 3 seconds.
+            worker_refresh_rate (float, optional): The rate at which the pool checks for task completion and starts new tasks. Defaults to 0.5 seconds.
+        """
+
+        self.chain = chain
+        self.max_workers = max_workers
+        self.worker_refresh_rate = worker_refresh_rate
+        self.idle_refresh_rate = idle_refresh_rate
+
+        self._pool = []         # List of tasks waiting to be executed
+        self._active = []       # List of tasks currently being executed
+        self._complete = []     # List of tasks that have completed execution
+
+        from threading import Thread
+        self._minder_thread = Thread(target=self._worker, daemon=True)  # Thread to manage the task pool
+
+        self.status = TaskStatusCodes.initialized  # Initial status of the task pool
+
+    @property
+    def queue_size(self) -> int:
+        """
+        Returns the number of pending and running tasks in the pool.
+        """
+
+        return len(self._active) + len(self._pool)
+
+    def add(self, task: BaseTask) -> 'BaseTaskPool':
+        """
+        Adds a task to the pool.
+
+        Args:
+            task (BaseTask): The task to be added to the pool.
+        """
+
+        self._pool.append(task)
+        return self
+
+    def wait_until_complete(self, timeout: float = 0) -> 'BaseTaskPool':
+        """
+        Waits until all tasks in the pool have completed.
+
+        Args:
+            timeout (float, optional): The maximum number of seconds to wait for the tasks to complete.
+                                       If 0, the method will wait indefinitely. Defaults to 0.
+        """
+
+        from time import sleep
+        from datetime import datetime
+
+        wait_start = datetime.now()
+
+        while self.queue_size > 0:
+            if timeout != 0:
+                if (datetime.now() - wait_start).total_seconds() > timeout:
+                    break
+
+            sleep(1)
+
+        return self
+
+    def remove(self, task: BaseTask) -> 'BaseTaskPool':
+        """
+        Removes a task from the pool.
+
+        Args:
+            task (BaseTask): The task to be removed from the pool.
+        """
+
+        pool = self._find_task(task)
+        try:
+            pool.remove(task)
+
+        except ValueError:
+            pass  # Task not found in the pool
+
+        return self
+
+    def start(self) -> 'BaseTaskPool':
+        """
+        Starts the minder thread to manage the task pool.
+        """
+
+        self._minder_thread.start()
+        return self
+
+    def terminate(self) -> 'BaseTaskPool':
+        """
+        Terminates the task pool.
+        """
+
+        self.status = TaskStatusCodes.terminating
+
+        # Terminate all tasks in the pool
+        for task in self._pool + self._active:
+            task.terminate()
+
+        # Wait for the minder thread to finish
+        self._minder_thread.join()
+        return self
+
+    def _worker(self) -> None:
+        """
+        The method run by the minder thread to manage task execution.
+        """
+        from time import sleep
+        from threading import Thread
+
+        self.status = TaskStatusCodes.running
+
+        while True:
+            if len(self._active) < self.max_workers and self._pool:
+                next_task = self._pool.pop(0)  # Get the next task from the pool
+                self._active.append(next_task)  # Add the task to the active list
+
+                Thread(target=next_task.run).start()  # Start the task in a new thread
+
+            for task in self._active:
+                if task.status in (TaskStatusCodes.complete, TaskStatusCodes.error, TaskStatusCodes.skipped):
+                    self._active.remove(task)
+                    self._complete.append(task)
+
+            # Wait before checking the task statuses again
+            if self.queue_size:
+                sleep(self.worker_refresh_rate)
+            else:
+                if self.status == TaskStatusCodes.terminating:
+                    break
+                else:
+                    sleep(self.idle_refresh_rate)
+
+    def _find_task(self, task: BaseTask) -> list:
+        """
+        Finds the pool (waiting, active, or complete) that contains the given task.
+
+        Args:
+            task (BaseTask): The task to find.
+
+        Returns:
+            list: The pool that contains the task.
+        """
+
+        for pool in [self._pool, self._active, self._complete]:
+            if task in pool:
+                return pool
+
+        return []

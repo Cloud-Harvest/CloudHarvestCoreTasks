@@ -108,33 +108,6 @@ class TestBaseTask(BaseTestCase):
         self.assertEqual(self.base_task.status, TaskStatusCodes.terminating)
 
 
-class TestBaseAsyncTask(BaseTestCase):
-    def setUp(self):
-        self.base_async_task = BaseAsyncTask(name='test', description='test task')
-
-    def test_init(self):
-        # Test the __init__ method
-        self.assertEqual(self.base_async_task.name, 'test')
-        self.assertEqual(self.base_async_task.description, 'test task')
-        self.assertEqual(self.base_async_task.status, TaskStatusCodes.initialized)
-        self.assertIsNone(self.base_async_task.thread)
-
-    @patch('threading.Thread')
-    def test_run(self, mock_thread):
-        # Test the run method
-        self.base_async_task.run()
-        self.assertEqual(self.base_async_task.status, TaskStatusCodes.running)
-        mock_thread.assert_called_once()
-
-    @patch('threading.Thread')
-    def test_terminate(self, mock_thread):
-        # Test the terminate method
-        self.base_async_task.run()
-        self.base_async_task.terminate()
-        self.assertEqual(self.base_async_task.status, TaskStatusCodes.terminating)
-        mock_thread.return_value.join.assert_called_once()
-
-
 class TestBaseTaskChain(BaseTestCase):
     """
     Unit tests for the BaseTaskChain class.
@@ -310,7 +283,7 @@ class TestBaseTaskChainOnDirective(BaseTestCase):
         }
 
         from ..CloudHarvestCoreTasks.factories import task_chain_from_dict
-        self.base_task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=self.task_configuration)
+        self.base_task_chain = task_chain_from_dict(task_chain_registered_class_name='chain', task_chain=self.task_configuration)
 
     def test_on_directives(self):
         self.base_task_chain.run()
@@ -338,6 +311,109 @@ class TestBaseTaskChainOnDirective(BaseTestCase):
 
         # Verify that the task chain completed successfully
         self.assertEqual(self.base_task_chain.status, TaskStatusCodes.complete)
+
+
+class TestBaseTaskPool(BaseTestCase):
+    def setUp(self):
+        template = {
+            'name': 'test_chain',
+            'description': 'This is a TaskChain used to test the BaseTaskPool.',
+            'tasks': [
+                {
+                    'dummy': {
+                        'name': 'Control Task 1',
+                        'blocking': True,
+                        'description': 'This is a standard Task which should always succeed.',
+                    }
+                },
+                {
+                    'delay': {
+                        'name': 'Delay Task 1',
+                        'blocking': False,
+                        'description': 'This is a delay task',
+                        'delay_seconds': 5
+                    }
+                },
+                {
+                    'delay': {
+                        'name': 'Delay Task 2',
+                        'blocking': False,
+                        'description': 'This is a delay task',
+                        'delay_seconds': 5
+                    }
+                },
+                {
+                    'delay': {
+                        'name': 'Delay Task 3',
+                        'blocking': False,
+                        'description': 'This is a delay task',
+                        'delay_seconds': 5,
+                        'on': {
+                            'complete': [
+                                {
+                                    'dummy': {
+                                        'name': 'Async Child Dummy Task',
+                                        'description': 'This is a dummy task which should always succeed AFTER its parent task completes.',
+                                    }
+                                }
+                            ]
+                        }
+
+                    }
+                },
+                {
+                    'dummy': {
+                        'name': 'Control Task 2',
+                        'blocking': False,
+                        'description': 'This is a dummy task which should always succeed BEFORE any of the Delay Tasks complete.',
+                    }
+                }
+            ]
+        }
+        from ..CloudHarvestCoreTasks.base import BaseTaskChain
+        self.base_task_chain = BaseTaskChain(template=template)
+
+    def test_pooling(self):
+        # Send the task chain to the background so we can monitor state changes
+        from threading import Thread
+        test_thread = Thread(target=self.base_task_chain.run)
+        test_thread.start()
+
+        # Make sure all tasks have been instantiated
+        from time import sleep
+        while len(self.base_task_chain) < 5:
+            sleep(.1)
+
+        # Make sure all tasks have started or completed
+        while not all([task.status in [TaskStatusCodes.complete, TaskStatusCodes.running] for task in self.base_task_chain]):
+            sleep(.1)
+
+        # Make sure the task chain is still running
+        self.assertEqual(self.base_task_chain.status, TaskStatusCodes.running)
+
+        # Make sure the control blocking task is complete
+        self.assertEqual(self.base_task_chain.find_task_by_name('Control Task 1').status, TaskStatusCodes.complete)
+
+        # Make sure the non-blocking tasks are still running
+        self.assertEqual(self.base_task_chain.find_task_by_name('Delay Task 1').status, TaskStatusCodes.running)
+        self.assertEqual(self.base_task_chain.find_task_by_name('Delay Task 2').status, TaskStatusCodes.running)
+        self.assertEqual(self.base_task_chain.find_task_by_name('Delay Task 3').status, TaskStatusCodes.running)
+
+        # Make sure the final control task is complete
+        self.assertEqual(self.base_task_chain.find_task_by_name('Control Task 2').status, TaskStatusCodes.complete)
+
+        # Wait until the task chain is complete
+        while self.base_task_chain.status != TaskStatusCodes.complete:
+            sleep(.5)
+
+        # Verify that Delay Task 2's child on_complete task succeeded
+        self.assertEqual(self.base_task_chain.find_task_by_name('Async Child Dummy Task').status, TaskStatusCodes.complete)
+
+        # Assert that all tasks in the pool have completed
+        self.assertEqual(self.base_task_chain.status, TaskStatusCodes.complete)
+        [
+            self.assertEqual(task.status, TaskStatusCodes.complete) for task in self.base_task_chain
+        ]
 
 
 if __name__ == '__main__':

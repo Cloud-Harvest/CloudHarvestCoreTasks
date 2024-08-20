@@ -1,3 +1,6 @@
+# 0.3.3
+- Implemented `ForEachTask` which replaces `TemplateTask` and tests
+
 # 0.3.2
 - Removed `BaseAsyncTask` and associated tests because it is now redundant
 - Added `blocking` parameter to `BaseTask` so now any arbitrary task can be run asynchronously

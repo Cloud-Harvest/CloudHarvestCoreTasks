@@ -6,6 +6,6 @@ from .tasks import (
     FileTask,
     HarvestRecordSetTask,
     PruneTask,
-    TemplateTask,
+    ForEachTask,
     WaitTask
 )

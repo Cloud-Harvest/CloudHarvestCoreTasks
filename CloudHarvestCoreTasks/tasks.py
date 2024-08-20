@@ -436,9 +436,10 @@ class PruneTask(BaseTask):
         return self
 
 
-@register_definition(name='template')
-class TemplateTask(BaseTask):
-    def __init__(self, template: dict,
+@register_definition(name='for_each')
+class ForEachTask(BaseTask):
+    def __init__(self,
+                 template: dict,
                  records: (List[dict] or str) = None,
                  insert_tasks_at_position: int = None,
                  insert_tasks_before_name: str = None,
@@ -455,12 +456,27 @@ class TemplateTask(BaseTask):
         self.insert_tasks_before_name = insert_tasks_before_name
         self.insert_tasks_after_name = insert_tasks_after_name
 
-    def method(self, *args, **kwargs) -> 'TemplateTask':
-        for record in self.records:
-            from .base import TaskConfiguration
-            task_configuration = TaskConfiguration(task_configuration=self.template.copy(),
-                                                   task_chain=self.task_chain,
-                                                   extra_vars=record)
+    def method(self, *args, **kwargs) -> 'ForEachTask':
+        from .base import TaskConfiguration
+
+        # Here we use a copy of the original template to prevent mangling caused by repeated or reused variables from
+        # the top-level templating of the task's configuration. This is important because the template is rendered
+        # multiple times with different variables. Although ChainableUndefined could be used to prevent writing missing
+        # variables as empty string, it still would not prevent the mangling of the original template by reused
+        # variable names.
+
+        task_configurations = [
+            TaskConfiguration(task_configuration=self.original_template['template'].copy(),
+                              task_chain=self.task_chain,
+                              template_vars=record)
+            for record in self.records
+        ]
+
+        # Reverse the task configurations so they are inserted in the correct order
+        if any([self.insert_tasks_at_position, self.insert_tasks_before_name, self.insert_tasks_after_name]):
+            task_configurations.reverse()
+
+        for task_configuration in task_configurations:
 
             if self.insert_tasks_at_position:
                 self.task_chain.task_templates.insert(self.insert_tasks_at_position, task_configuration)

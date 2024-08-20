@@ -249,7 +249,56 @@ class TestPruneTask(unittest.TestCase):
         self.assertEqual(self.task_chain.status, TaskStatusCodes.complete)
 
 
-# TODO: Add tests for the TemplateTask
+# TODO: Add tests for the ForEachTask
+
+class TestForEachTask(unittest.TestCase):
+    def setUp(self):
+        task_chain_configuration = {
+            'name': 'test_chain',
+            'description': 'This is a task_chain.',
+            'tasks': [
+                {
+                    'dummy': {
+                        'name': 'Control Task',
+                        'description': 'This is a control task which should always succeed',
+                    }
+                },
+                {
+                    'for_each': {
+                        'name': 'For Each Task',
+                        'description': 'This task will create many new tasks based on the content of a variable.',
+                        'insert_tasks_at_position': 2,
+                        'template': {
+                            'dummy': {
+                                'name': 'Dummy Task {{ name }}',
+                                'description': 'This is a dummy task',
+                            }
+                        },
+                        'records': 'i'
+                    }
+                }
+            ]
+        }
+
+        from ..CloudHarvestCoreTasks.factories import task_chain_from_dict
+        self.task_chain = task_chain_from_dict(task_chain_registered_class_name='chain',
+                                               task_chain=task_chain_configuration)
+
+        self.task_chain.variables = {'i': [{'name': 1}, {'name': 2}, {'name': 3}]}
+
+    def test_for_each_task_generation(self):
+        self.task_chain.run()
+
+        # Check that the task chain has the correct number of tasks: Control, ForEach, and 3 generated Dummy tasks
+        self.assertEqual(len(self.task_chain), 5)
+
+        # Check that all Dummy tasks have been created
+        self.assertTrue(all([
+            self.task_chain.find_task_by_name(f'Dummy Task {i["name"]}')
+            for i in self.task_chain.variables.get('i')
+        ]))
+
+
 # TODO: Add tests for the WaitTask
 
 if __name__ == '__main__':

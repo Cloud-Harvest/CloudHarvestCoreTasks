@@ -2,13 +2,13 @@ from CloudHarvestCorePluginManager.decorators import register_definition
 from .exceptions import BaseTaskException
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, List
+from typing import Any, List
 from logging import getLogger
 
 
 logger = getLogger('harvest')
 
-# TODO: (Async)TemplateTask (a task that generates more tasks from a template) with parameters to insert the new tasks
+# TODO: (Async)ForEachTask (a task that generates more tasks from a template) with parameters to insert the new tasks
 #       into a specific task chain position (or immediately following itself)
 
 
@@ -45,18 +45,23 @@ class TaskConfiguration:
         instantiate() -> BaseTask: Instantiates a task based on the task configuration.
     """
 
-    def __init__(self, task_configuration: dict, task_chain: 'BaseTaskChain' = None, **kwargs):
+    def __init__(self, task_configuration: dict,
+                 task_chain: 'BaseTaskChain' = None,
+                 template_vars: Any = None,
+                 **kwargs):
         """
         Initializes a new instance of the TaskConfiguration class.
 
         Args:
             task_configuration (dict): The configuration for the task.
             task_chain (BaseTaskChain, optional): The task chain that the task belongs to. Defaults to None.
-            extra_vars (dict, optional): Extra variables that can be used to template the task configuration. Defaults to None.
+            template_vars (dict, optional): A dictionary of variables to use for templating the task configuration. Defaults to None.
+            with_vars (list[str], optional): A list of variables from the parent task chain that templated tasks will use. Defaults to None.
         """
 
         self.class_name = list(task_configuration.keys())[0]
         self.task_configuration = task_configuration[self.class_name].copy()
+        self.template_vars = template_vars or {}
 
         self.name = self.task_configuration['name']
         self.description = self.task_configuration.get('description')
@@ -64,7 +69,6 @@ class TaskConfiguration:
         self.task_chain = task_chain
 
         self.instantiated_class = None
-        self.kwargs = kwargs
 
         # Retrieve the class of the task to instantiate
         from CloudHarvestCorePluginManager import Registry
@@ -87,18 +91,28 @@ class TaskConfiguration:
             BaseTask: The instantiated task.
         """
 
+        if isinstance(self.template_vars, dict):
+            template_vars = self.template_vars
+
+        elif isinstance(self.template_vars, (list, tuple)):
+            template_vars = [{'i': value} for value in self.template_vars]
+
+        else:
+            logger.warning(f'Unsupported template_vars type: {type(self.template_vars)}. Must be a dict, list, or tuple.')
+
+            template_vars = {}
+
         from .templating.functions import template_object
 
-        # If a task chain is provided, get its variables. Otherwise, use an empty dictionary.
-        task_chain_vars = self.task_chain.get_variables_by_names(self.task_configuration.get('with_vars')) \
-            if self.task_chain and self.task_configuration.get('with_vars') else {}
-
         # Template the task configuration with the variables from the task chain
-        templated_class_kwargs = template_object(template=self.task_configuration,
-                                                 variables=task_chain_vars)
+        templated_task_configuration = template_object(template=self.task_configuration,
+                                                       variables=template_vars)
 
         # Instantiate the task with the templated configuration and return it
-        self.instantiated_class = self.task_class(task_chain=self.task_chain, **templated_class_kwargs | self.kwargs)
+        self.instantiated_class = self.task_class(task_chain=self.task_chain,
+                                                  **templated_task_configuration)
+
+        self.instantiated_class.original_template = self.task_configuration
 
         return self.instantiated_class
 
@@ -141,8 +155,10 @@ class BaseTask:
         self.name = name
         self.blocking = blocking
         self.description = description
-        self.task_chain = task_chain
         self.on = on or {}
+        self.result_as = result_as
+        self.task_chain = task_chain
+        self.when = when
 
         self.with_vars = with_vars
         self.status = TaskStatusCodes.initialized
@@ -151,8 +167,8 @@ class BaseTask:
         self.meta = None
         self.start = None
         self.end = None
-        self.result_as = result_as
-        self.when = when
+
+        self.original_template = None
 
     @property
     def duration(self) -> float:
@@ -342,15 +358,6 @@ class BaseTask:
 
         return self
 
-    def __dict__(self) -> dict:
-        return {
-            'name': self.name,
-            'description': self.description,
-            'status': self.status,
-            'data': self.data,
-            'meta': self.meta
-        }
-
 
 class BaseAuthenticationTask(BaseTask):
     def __init__(self, *args, **kwargs):
@@ -398,7 +405,6 @@ class BaseTaskChain(List[BaseTask]):
 
     def __init__(self,
                  template: dict,
-                 extra_vars: dict = None,
                  *args, **kwargs):
         """
         Initializes a new instance of the BaseTaskChain class.
@@ -419,7 +425,6 @@ class BaseTaskChain(List[BaseTask]):
         self.task_templates: List[TaskConfiguration] = [
             TaskConfiguration(task_configuration=t,
                               task_chain=self,
-                              extra_vars=extra_vars,
                               **kwargs)
             for t in template.get('tasks', [])
         ]

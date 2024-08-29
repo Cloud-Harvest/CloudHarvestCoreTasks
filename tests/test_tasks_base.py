@@ -33,18 +33,18 @@ class TestTaskConfiguration(BaseTestCase):
                         }
                     },
                     {
-                        'delay': {
-                            'name': 'delay_task',
-                            'description': 'This is a delay task which tests a False when condition',
-                            'delay_seconds': 1,
+                        'wait': {
+                            'name': 'wait_task',
+                            'description': 'This is a wait task which tests a False when condition',
+                            'when_after_seconds': 1,
                             'when': 'skip_var != \'run me\''
                         }
                     },
                     {
-                        'delay': {
-                            'name': 'delay_task',
-                            'description': 'This is a delay task which tests a True when condition',
-                            'delay_seconds': 1,
+                        'wait': {
+                            'name': 'wait_task',
+                            'description': 'This is a wait task which tests a True when condition',
+                            'when_after_seconds': 1,
                             'when': 'skip_var == \'run me\''
                         }
                     }
@@ -61,7 +61,7 @@ class TestTaskConfiguration(BaseTestCase):
         self.base_task_chain.run()
         self.assertIsNone(self.base_task_chain.result.get('error'))
         self.assertIsInstance(self.base_task_chain[0], DummyTask)
-        self.assertIsInstance(self.base_task_chain[1], DelayTask)
+        self.assertIsInstance(self.base_task_chain[1], WaitTask)
         self.assertEqual(self.base_task_chain[0].status, TaskStatusCodes.complete)
         self.assertEqual(self.base_task_chain[1].status, TaskStatusCodes.skipped)
         self.assertEqual(self.base_task_chain[2].status, TaskStatusCodes.complete)
@@ -71,8 +71,8 @@ class TestTaskConfiguration(BaseTestCase):
 class TestBaseTask(BaseTestCase):
     def setUp(self):
         from CloudHarvestCorePluginManager.registry import Registry
-        task = Registry.find_definition(class_name='delay', is_subclass_of=BaseTask)[0]
-        self.base_task = task(name='test', description='test task', delay_seconds=10)
+        task = Registry.find_definition(class_name='wait', is_subclass_of=BaseTask)[0]
+        self.base_task = task(name='test', description='test task', when_after_seconds=10)
 
     def test_init(self):
         # Test the __init__ method
@@ -129,10 +129,10 @@ class TestBaseTaskChain(BaseTestCase):
                         }
                     },
                     {
-                        'delay': {
-                            'name': 'delay_task',
-                            'description': 'This is a delay task',
-                            'delay_seconds': 1
+                        'wait': {
+                            'name': 'wait_task',
+                            'description': 'This is a wait task',
+                            'when_after_seconds': 1
                         }
                     }
                 ]
@@ -327,27 +327,27 @@ class TestBaseTaskPool(BaseTestCase):
                     }
                 },
                 {
-                    'delay': {
-                        'name': 'Delay Task 1',
+                    'wait': {
+                        'name': 'wait task 1',
                         'blocking': False,
-                        'description': 'This is a delay task',
-                        'delay_seconds': 5
+                        'description': 'This is a wait task',
+                        'when_after_seconds': 5
                     }
                 },
                 {
-                    'delay': {
-                        'name': 'Delay Task 2',
+                    'wait': {
+                        'name': 'wait task 2',
                         'blocking': False,
-                        'description': 'This is a delay task',
-                        'delay_seconds': 5
+                        'description': 'This is a wait task',
+                        'when_after_seconds': 5
                     }
                 },
                 {
-                    'delay': {
-                        'name': 'Delay Task 3',
+                    'wait': {
+                        'name': 'wait task 3',
                         'blocking': False,
-                        'description': 'This is a delay task',
-                        'delay_seconds': 5,
+                        'description': 'This is a wait task',
+                        'when_after_seconds': 5,
                         'on': {
                             'complete': [
                                 {
@@ -365,7 +365,7 @@ class TestBaseTaskPool(BaseTestCase):
                     'dummy': {
                         'name': 'Control Task 2',
                         'blocking': False,
-                        'description': 'This is a dummy task which should always succeed BEFORE any of the Delay Tasks complete.',
+                        'description': 'This is a dummy task which should always succeed BEFORE any of the wait tasks complete.',
                     }
                 }
             ]
@@ -395,9 +395,9 @@ class TestBaseTaskPool(BaseTestCase):
         self.assertEqual(self.base_task_chain.find_task_by_name('Control Task 1').status, TaskStatusCodes.complete)
 
         # Make sure the non-blocking tasks are still running
-        self.assertEqual(self.base_task_chain.find_task_by_name('Delay Task 1').status, TaskStatusCodes.running)
-        self.assertEqual(self.base_task_chain.find_task_by_name('Delay Task 2').status, TaskStatusCodes.running)
-        self.assertEqual(self.base_task_chain.find_task_by_name('Delay Task 3').status, TaskStatusCodes.running)
+        self.assertEqual(self.base_task_chain.find_task_by_name('wait task 1').status, TaskStatusCodes.running)
+        self.assertEqual(self.base_task_chain.find_task_by_name('wait task 2').status, TaskStatusCodes.running)
+        self.assertEqual(self.base_task_chain.find_task_by_name('wait task 3').status, TaskStatusCodes.running)
 
         # Make sure the final control task is complete
         self.assertEqual(self.base_task_chain.find_task_by_name('Control Task 2').status, TaskStatusCodes.complete)
@@ -406,7 +406,7 @@ class TestBaseTaskPool(BaseTestCase):
         while self.base_task_chain.status != TaskStatusCodes.complete:
             sleep(.5)
 
-        # Verify that Delay Task 2's child on_complete task succeeded
+        # Verify that wait task 2's child on_complete task succeeded
         self.assertEqual(self.base_task_chain.find_task_by_name('Async Child Dummy Task').status, TaskStatusCodes.complete)
 
         # Assert that all tasks in the pool have completed

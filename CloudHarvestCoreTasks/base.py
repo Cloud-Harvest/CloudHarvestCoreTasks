@@ -124,6 +124,12 @@ class TaskConfiguration:
 
 
 class BaseTask:
+    """
+    The BaseTask class is responsible for managing a single task in a task chain. It provides the basic structure and
+    methods that all tasks should have. BaseTask should not be instantiated directly, but should be inherited by
+    subclasses that provide specific functionality.
+    """
+
     def __init__(self,
                  name: str,
                  blocking: bool = True,
@@ -146,7 +152,7 @@ class BaseTask:
 
         Attributes:
             name (str): The name of the task.
-            blocking (bool): A boolean indicating whether the task is blocking or not. If True, the task will block until it completes.
+            blocking (bool): A boolean indicating whether the task is blocking or not. If True, the task will block the task chain until it completes.
             description (str): A brief description of what the task does.
             in_data (Any): The input data that the task uses.
             on (dict): A dictionary of task configurations for the task to run when it completes, errors, is skipped, or starts.
@@ -480,7 +486,7 @@ class BaseTaskChain(List[BaseTask]):
         Args:
             template(dict): The configuration for the task chain.
                 name(str): The name of the task chain.
-                tasks(list[dict]): A list of task configurations for the tasks in the chain.
+                tasks(List[dict]): A list of task configurations for the tasks in the chain.
                 description(str, optional): A brief description of what the task chain does. Defaults to None.
                 max_workers(int, optional): The maximum number of concurrent workers that are permitted.
         """

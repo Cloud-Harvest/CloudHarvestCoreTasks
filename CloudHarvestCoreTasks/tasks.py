@@ -286,21 +286,19 @@ class HarvestRecordSetTask(BaseTask):
         method(): Executes the function on the record set with the provided arguments and stores the result in the data attribute.
     """
 
-    def __init__(self, recordset_name: HarvestRecordSet, stages: List[dict], *args, **kwargs):
+    def __init__(self, stages: List[dict], *args, **kwargs):
         """
         Constructs a new HarvestRecordSetTask instance.
 
         Args:
-            recordset_name (HarvestRecordSet): The name of the record set this task operates on.
             stages (List[dict]): A list of dictionaries containing the function name and arguments to be applied to the recordset.
             *args: Variable length argument list.
             **kwargs: Arbitrary keyword arguments.
         """
         super().__init__(*args, **kwargs)
 
-        self.recordset_name = recordset_name
         self.stages = stages
-        self.record_position = 0
+        self.stage_position = 0
 
     def method(self):
         """
@@ -319,12 +317,20 @@ class HarvestRecordSetTask(BaseTask):
         from .data_model.record import HarvestRecord
         from .data_model.recordset import HarvestRecordSet
 
+        recordset = None
+
         # Get the recordset from the task chain variables
-        recordset = self.task_chain.get_variables_by_names(self.recordset_name).get(self.recordset_name)
+        if isinstance(self.in_data, str):
+            recordset = self.task_chain.get_variables_by_names(self.in_data).get(self.in_data)
+
+        # If the data is not already a HarvestRecordSet, convert it to a new one.
+        if not isinstance(recordset, HarvestRecordSet):
+            from .data_model.recordset import HarvestRecordSet
+            recordset = HarvestRecordSet(name=self.name, data=self.in_data)
 
         for stage in self.stages:
-            # Record the record_position of stages completed
-            self.record_position += 1
+            # Record the stage_position of stages completed
+            self.stage_position += 1
 
             # Each dictionary should only contain one key-value pair
             for function, arguments in stage.items():
@@ -378,8 +384,9 @@ class PruneTask(BaseTask):
         # If previous_task_data is True, clear the data of all previous tasks
         if self.previous_task_data:
             for i in range(self.task_chain.position):
-                total_bytes_pruned += getsizeof(self.task_chain[i].out_data)
-                self.task_chain[i].out_data = None
+                if self.task_chain[i].status in [TaskStatusCodes.complete, TaskStatusCodes.error, TaskStatusCodes.skipped]:
+                    total_bytes_pruned += getsizeof(self.task_chain[i].out_data)
+                    self.task_chain[i].out_data = None
 
         # If stored_variables is True, clear all variables stored in the task chain
         if self.stored_variables:
@@ -395,6 +402,21 @@ class PruneTask(BaseTask):
 
 @register_definition(name='for_each')
 class ForEachTask(BaseTask):
+    """
+    The ForEachTask class is a subclass of the BaseTask class. It represents a task that creates a new task for each item
+    in a list. The task is created by rendering a template with the item as the context.
+
+    Attributes:
+        template (dict): The template for the tasks to be created.
+        in_data (List[dict] or str): The data to iterate over. If a string is provided, the data will be retrieved from the task chain variables.
+        insert_tasks_at_position (int): The position at which to insert the tasks.
+        insert_tasks_before_name (str): The name of the task before which to insert the tasks.
+        insert_tasks_after_name (str): The name of the task after which to insert the tasks.
+
+    Methods:
+        method(): Creates a new task for each item in the in_data list.
+    """
+
     def __init__(self,
                  template: dict,
                  in_data: (List[dict] or str) = None,
@@ -403,15 +425,31 @@ class ForEachTask(BaseTask):
                  insert_tasks_after_name: str = None,
                  **kwargs):
 
+        """
+        The ForEachTask class is a subclass of the BaseTask class. It represents a task that creates a new task for each
+        item in a list. The task is created by rendering a template with the item as the context.
+
+        Args:
+            template (dict): The template for the tasks to be created.
+            in_data (List[dict] or str, optional): The data to iterate over. If a string is provided, the data will
+                                                   be retrieved from the task chain variables. Defaults to None.
+            insert_tasks_at_position (int, optional): The position at which to insert the tasks. Defaults to None.
+            insert_tasks_before_name (str, optional): The name of the task before which to insert the tasks. Defaults to None.
+            insert_tasks_after_name (str, optional): The name of the task after which to insert the tasks. Defaults to None
+        """
+
         super().__init__(**kwargs)
 
         self.template = template
         self.in_data = in_data if isinstance(in_data, list) else self.task_chain.variables.get(in_data)
 
-        if not self.in_data:
-            raise ValueError(f'The ForEachTask requires a list of dictionaries or a variable name that contains a list of dictionaries. Got: {str(type(in_data))}')
+        if not isinstance(self.in_data, (dict, list, str)):
+            raise ValueError(f'The ForEachTask requires data in order to function. Got: {str(type(in_data))}')
 
-        # Insert record_position for tasks
+        # convert list of non-dictionaries to list of dictionaries
+        elif not isinstance(self.in_data[0], dict):
+            self.in_data = [{'item': item} for item in self.in_data]
+
         self.insert_tasks_at_position = insert_tasks_at_position
         self.insert_tasks_before_name = insert_tasks_before_name
         self.insert_tasks_after_name = insert_tasks_after_name

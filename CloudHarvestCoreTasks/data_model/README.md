@@ -44,7 +44,6 @@ It is a subclass of the `BaseTask` class and can be used in a `TaskChain`.
 ### Parameters
 | Parameter      | Description                                                        |
 |----------------|--------------------------------------------------------------------|
-| recordset_name | The name of the record set to manipulate                           |
 | stages         | A list of methods and their arguments to perform on the record set |
 
 ### Example
@@ -53,7 +52,7 @@ tasks:
   - recordset:
       name: Update Tags
       description: Update the tags to use a dict format
-      recordset_name: clusters
+      in_data: clusters
       results_as: results
       stages:
         - key_value_list_to_dict:

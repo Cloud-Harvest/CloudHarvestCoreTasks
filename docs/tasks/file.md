@@ -1,7 +1,5 @@
 # FileTask
-The `FileTask` class is a subclass of the `BaseTask` class.
-
-It represents a task that performs file operations such as reading from or writing to a file.
+The `FileTask` class is a subclass of the `BaseTask` class. It represents a task that performs file operations such as reading from or writing to a file.
 
 # Table of Contents
 

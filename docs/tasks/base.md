@@ -22,22 +22,22 @@ provide custom behavior. The BaseTask is not meant to be used directly, but rath
 
 | Attribute           | Description                                                                                                                                                 |
 |---------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `name`              | The name of the task. It can be anything that helps the user identify what the Task does.                                                                   |
 | `blocking`          | When `True`, Tasks in the TaskChain wait until this Task completes before continuing. When `False`, the Task will run asynchronously.                       |
 | `description`       | A brief description of what the task does.                                                                                                                  |
+| `end`               | The end time of the task.                                                                                                                                   |
 | `in_data`           | The input data for the task. Commonly used with the `recordset` and `file` Tasks.                                                                           |
+| `meta`              | Metadata associated with the task.                                                                                                                          |
+| `name`              | The name of the task. It can be anything that helps the user identify what the Task does.                                                                   |
 | `on`                | A dictionary of directives to run on specific events (e.g., `error`).                                                                                       |
+| `original_template` | The original template of the task configuration. This is used in scenarios where the Task must be templated multiple times, such as with the `ForEachTask`. |
+| `out_data`          | The output data of the task.                                                                                                                                |
 | `result_as`         | The name under which the result will be stored in the task chain's variables. This makes the output of a Task available to other Tasks in the TaskChain.    |
 | `retry`             | A dictionary containing retry configuration.                                                                                                                |
+| `start`             | The start time of the task.                                                                                                                                 |
+| `status`            | The current status of the task.                                                                                                                             |
 | `task_chain`        | The task chain that the task belongs to. Added automatically if the Task is created as part of a chain of Tasks.                                            |
 | `when`              | A condition that determines if the task should run.                                                                                                         |
 | `with_vars`         | A list of variables from the parent task chain that templated tasks will use.                                                                               |
-| `status`            | The current status of the task.                                                                                                                             |
-| `out_data`          | The output data of the task.                                                                                                                                |
-| `meta`              | Metadata associated with the task.                                                                                                                          |
-| `start`             | The start time of the task.                                                                                                                                 |
-| `end`               | The end time of the task.                                                                                                                                   |
-| `original_template` | The original template of the task configuration. This is used in scenarios where the Task must be templated multiple times, such as with the `ForEachTask`. |
 
 ### On
 A dictionary of directives to run on specific events. The key is the event directive and the value is a Task configuration.
@@ -117,7 +117,6 @@ The standard arguments for all tasks which inherit BaseTask are as follows:
 | `retry`             | Yes      | `{}`        | A dictionary containing retry configuration.                                                                                                                |
 | `when`              | Yes      | `""`        | A condition that determines if the task should run.                                                                                                         |
 | `with_vars`         | Yes      | `[]`        | A list of variables from the parent task chain that templated tasks will use.                                                                               |
-| `status`            | No       | `"pending"` | The current status of the task.                                                                                                                             |
 
 ## Example
 ```yaml

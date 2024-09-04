@@ -33,9 +33,9 @@ print(recordset_task.out_data)  # Output: Modified recordset
 The `HarvestRecordSetTask` class has the following arguments beyond those defined in [BaseTask](./base.md). Furthermore,
 information on the available functions and their arguments can be found in the [Harvest Recordset documentation](../../CloudHarvestCoreTasks/data_model/README.md).
 
-| Key            | Required | Default | Description                                                                                       |
-|----------------|----------|---------|---------------------------------------------------------------------------------------------------|
-| stages         | Yes      | None    | A list of dictionaries containing the function name and arguments to be applied to the recordset. |
+| Key            | Required | Default | Description                                                                                                    |
+|----------------|----------|---------|----------------------------------------------------------------------------------------------------------------|
+| stages         | Yes      | None    | A list of dictionaries containing the function name and arguments to be applied to the recordset sequentially. |
 
 ## Example
 

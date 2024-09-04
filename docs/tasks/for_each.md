@@ -46,10 +46,14 @@ types, the `ForEachTask` will handle each type differently.
 ```python
 from CloudHarvestCoreTasks.tasks import ForEachTask
 
-template = {'task': 'dummy_task'}
-records = [{'record1': 'value1'}, {'record2': 'value2'}]
+template = {'task': 'dummy_task {{name}}'}
+records = [{'name': 'value1'}, {'name': 'value2'}]
 for_each_task = ForEachTask(template=template, records=records)
 for_each_task.run()
+
+# Creates and executes two tasks with the following names:
+# - dummy_task value1
+# - dummy_task value2
 ```
 
 # Configuration
@@ -73,8 +77,12 @@ for_each:
     - {key1: value1b, key2: value2b}
   template:
     file:
-      name: My Templated FileTask
+      name: My Templated FileTask {{key2}}
       description: This is a templated FileTask
       path: '/path/to/{{key1}}-file.log'
       mode: write
+
+# Creates two tasks with the following names and paths:
+# - "My Templated FileTask value2a", path: /path/to/value1a-file.log
+# - "My Templated FileTask value2b", path: /path/to/value1b-file.log
 ```

@@ -903,7 +903,13 @@ class BaseTaskChain(List[BaseTask]):
 
             while True:
                 # Instantiate the task from the task configuration
-                task = self.task_templates[self.position].instantiate()
+                try:
+                    task = self.task_templates[self.position].instantiate()
+
+                # Break when there are no more tasks to run
+                except IndexError:
+                    break
+
                 self.append(task)
 
                 # Execute the task
@@ -913,10 +919,6 @@ class BaseTaskChain(List[BaseTask]):
                 # Add it to the pool to be run asynchronously
                 else:
                     self.pool.add(task)
-
-                # Escape after completing the last task
-                if self.position == self.total:
-                    break
 
                 # Check for termination
                 if self.status == TaskStatusCodes.terminating:
@@ -931,7 +933,6 @@ class BaseTaskChain(List[BaseTask]):
 
                 # Increment the position
                 self.position += 1
-
 
             if self.pool.queue_size > 0:
                 self.pool.wait_until_complete()

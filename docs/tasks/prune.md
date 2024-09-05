@@ -1,18 +1,18 @@
 # PruneTask
 The `PruneTask` class is a subclass of the `BaseTask` class. It represents a task that prunes the task chain by clearing the data of previous tasks and/or the stored variables in the task chain.
 
-`PruneTask` is helpful when long-running Task Chains are executed, and the data of previous tasks is no longer needed. By pruning the task chain, the memory usage can be reduced.  
+`PruneTask` is helpful when long-running Task Chains are executed, and the data of previous tasks is no longer needed. By pruning the task chain, the memory usage can be reduced.
 
 # Table of Contents
 
 - [PruneTask](#prunetask)
 - [Python](#python)
-  - [Attributes](#attributes)
-  - [Methods](#methods)
-  - [Code Example](#code-example)
+    - [Attributes](#attributes)
+    - [Methods](#methods)
+    - [Code Example](#code-example)
 - [Configuration](#configuration)
-  - [Arguments](#arguments)
-  - [Example](#example)
+    - [Arguments](#arguments)
+    - [Example](#example)
 
 # Python
 

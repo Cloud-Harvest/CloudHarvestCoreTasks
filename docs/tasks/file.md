@@ -5,14 +5,14 @@ The `FileTask` class is a subclass of the `BaseTask` class. It represents a task
 
 - [FileTask](#filetask)
 - [Python](#python)
-  - [Attributes](#attributes)
-  - [Methods](#methods)
-  - [Code Examples](#code-examples)
+    - [Attributes](#attributes)
+    - [Methods](#methods)
+    - [Code Examples](#code-examples)
 - [Configuration](#configuration)
-  - [Arguments](#arguments)
-  - [Examples](#examples)
-    - [Reading Files](#reading-files)
-    - [Writing Files](#writing-files)
+    - [Arguments](#arguments)
+    - [Examples](#examples)
+        - [Reading Files](#reading-files)
+        - [Writing Files](#writing-files)
 
 # Python
 
@@ -62,11 +62,11 @@ The `FileTask` class has the following arguments beyond those defined in [BaseTa
 
 ```yaml
 file:
-    name: My File Task
-    description: A task that reads from a file.
-    path: ./data.json
-    mode: read
-    result_as: result
+  name: My File Task
+  description: A task that reads from a file.
+  path: ./data.json
+  mode: read
+  result_as: result
 ```
 
 ### Writing Files
@@ -74,11 +74,11 @@ If `in_data` os a string, it will be treated as a variable name and the value of
 
 ```yaml
 file:
-    name: My File Task
-    description: A task that writes to a file.
-    path: ./data.json
-    mode: write
-    in_data: [{"name": "John Doe", "age": 30}, {"name": "Jane Doe", "age": 25}] 
+  name: My File Task
+  description: A task that writes to a file.
+  path: ./data.json
+  mode: write
+  in_data: [{"name": "John Doe", "age": 30}, {"name": "Jane Doe", "age": 25}] 
 ```
 
 # Python

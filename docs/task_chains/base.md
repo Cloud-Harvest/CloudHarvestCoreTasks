@@ -63,17 +63,17 @@ from CloudHarvestCoreTasks.base import BaseTaskChain
 template = {
     'name': 'My Task Chain',
     'tasks': [
-    {
-        'task': 'dummy_task',
-        'name': 'Dummy Task',
-        'description': 'A dummy task that does nothing.'
-    },
-    {
-        'task': 'dummy_task',
-        'name': 'Dummy Task 2',
-        'description': 'A dummy task that does nothing.'
-    }
-]
+        {
+            'task': 'dummy_task',
+            'name': 'Dummy Task',
+            'description': 'A dummy task that does nothing.'
+        },
+        {
+            'task': 'dummy_task',
+            'name': 'Dummy Task 2',
+            'description': 'A dummy task that does nothing.'
+        }
+    ]
 }
 
 

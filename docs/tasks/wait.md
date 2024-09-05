@@ -1,19 +1,19 @@
 # WaitTask
 The `WaitTask` is a task that waits for a specified amount of time or until one of several predefined conditions have been met.
 
-> `wait` with `when_all_previous_async_tasks_complete: True` is implied when a Task is run using `blocking: False` 
+> `wait` with `when_all_previous_async_tasks_complete: True` is implied when a Task is run using `blocking: False`
 > and the TaskChain runs out of new, sequential tasks are run.
 
 # Table of Contents
 
 - [WaitTask](#waittask)
 - [Python](#python)
-  - [Attributes](#attributes)
-  - [Methods](#methods)
-  - [Code Example](#code-example)
+    - [Attributes](#attributes)
+    - [Methods](#methods)
+    - [Code Example](#code-example)
 - [Configuration](#configuration)
-  - [Arguments](#arguments)
-  - [Example](#example)
+    - [Arguments](#arguments)
+    - [Example](#example)
 
 # Python
 
@@ -55,7 +55,7 @@ print('Waited for 5 seconds.')
 ## Arguments
 The following arguments can be used to configure a `WaitTask` beyond those defined in [BaseTask](./base.md).
 
-Note that it is not necessary to supply conditions beyond the one that is immediately required. For example, if the task 
+Note that it is not necessary to supply conditions beyond the one that is immediately required. For example, if the task
 only needs to wait for a specified amount of time, only `when_after_seconds` needs to be supplied.
 
 | Key                                      | Type        | Default | Description                                                                               |

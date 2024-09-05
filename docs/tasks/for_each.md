@@ -1,5 +1,5 @@
 # ForEachTask
-This task is used when you want to create new tasks based on the outcome of a previous task. 
+This task is used when you want to create new tasks based on the outcome of a previous task.
 
 For example, you may want to create a new task for each record in a list of records.
 
@@ -7,13 +7,13 @@ For example, you may want to create a new task for each record in a list of reco
 
 - [ForEachTask](#foreach-task)
 - [Python](#python)
-  - [Attributes](#attributes)
-    - [in\_data Formatting](#in_data-formatting)
-  - [Methods](#methods)
-  - [Code Example](#code-example)
+    - [Attributes](#attributes)
+        - [in\_data Formatting](#in_data-formatting)
+    - [Methods](#methods)
+    - [Code Example](#code-example)
 - [Configuration](#configuration)
-  - [Arguments](#arguments)
-  - [Example](#example)
+    - [Arguments](#arguments)
+    - [Example](#example)
 
 # Python
 ## Attributes

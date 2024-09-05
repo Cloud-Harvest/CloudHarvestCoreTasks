@@ -1,18 +1,18 @@
-# DummyTask 
-The DummyTask class is a subclass of the BaseTask class. It represents a task that does nothing when run. 
+# DummyTask
+The DummyTask class is a subclass of the BaseTask class. It represents a task that does nothing when run.
 
-> This class is primarily used for testing purposes.  
+> This class is primarily used for testing purposes.
 
 # Table of Contents
 
 - [DummyTask](#dummytask)
 - [Python](#python)
-  - [Attributes](#attributes)
-  - [Methods](#methods)
+    - [Attributes](#attributes)
+    - [Methods](#methods)
 - [Code Example](#code-example)
 - [Configuration](#configuration)
-  - [Arguments](#arguments)
-  - [Example](#example)
+    - [Arguments](#arguments)
+    - [Example](#example)
 
 # Python
 ## Attributes
@@ -23,7 +23,7 @@ The DummyTask class is a subclass of the BaseTask class. It represents a task th
 | meta      | A dictionary containing dummy metadata. |  
 
 
-## Methods 
+## Methods
 
 | Method   | Description                                                                          | 
 |----------|--------------------------------------------------------------------------------------| 
@@ -33,7 +33,7 @@ The DummyTask class is a subclass of the BaseTask class. It represents a task th
 ```python 
 from CloudHarvestCoreTasks.tasks import DummyTask
 
-dummy_task = DummyTask() 
+dummy_task = DummyTask()
 dummy_task.run()
 
 print(dummy_task.data) # Output: [{'dummy': 'data'}] 

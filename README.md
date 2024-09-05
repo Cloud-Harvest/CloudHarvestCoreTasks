@@ -4,45 +4,43 @@ This repository contains the base and common tasks found in CloudHarvest. Tasks 
 - [CloudHarvestCoreTasks](#cloudharvestcoretasks)
 - [Task Chains](#task-chains)
 - [Tasks](#tasks)
-  - [Tasks Declared in JSON/YAML](#tasks-declared-in-jsonyaml)
-  - [Tasks Declared in Python](#tasks-declared-in-python)
 - [License](#license)
 
 # Task Chains
-A [TaskChain](docs/task_chains/base.md) is a JSON or YAML file which describes the Tasks to be executed. Task Chains are used to define a workflow. 
+A [TaskChain](docs/task_chains/base.md) is a JSON or YAML file which describes the Tasks to be executed. Task Chains are used to define a workflow.
 
 Consider this annotated excerpt from the [CloudHarvestApi reports collection](https://github.com/Cloud-Harvest/CloudHarvestApi/blob/main/CloudHarvestApi/api/blueprints/reports/reports/harvest/nodes.yaml):
 ```yaml
-report:                                                         # This is the TaskChain's Chain identifier
-  name: 'Report'                                                # Arbitrary name of the TaskChain
-  description: |                                                # An arbitrary description of the TaskChain
+report:                                                       # This is the TaskChain's Chain identifier
+  name: 'Report'                                              # Arbitrary name of the TaskChain
+  description: |                                              # An arbitrary description of the TaskChain
     This TaskChain generates a 
     report of the API nodes
-  tasks:                                                        # This is the list of tasks to be executed
-    - cache_aggregate:                                          # This is the first task to be executed
-        name: query harvest.api_nodes                           # The first Task's name
-        description: 'Get information about the API nodes'      # ...and description                 
-        result_as: result                                       # This is the name of the result which will be available to other tasks within the same TaskChain if this Task completes successfully
-        on:                                                     # This is a list of tasks to be executed when the task reaches one of four states: complete, error, skipped, and start
-          complete:                 
-            - task: ...                                         # This is a task to be executed when the task completes
-          error:
-            - task: ...                                         # This is a task to be executed when the task errors
-        when: "{{ var }} == 'value'"                            # A jinja2 template which must evaluate to True in order for the task to run 
+  tasks:                                                      # This is the list of tasks to be executed
+    - cache_aggregate:                                        # This is the first task to be executed
+      name: query harvest.api_nodes                           # The first Task's name
+      description: 'Get information about the API nodes'      # ...and description                 
+      result_as: result                                       # This is the name of the result which will be available to other tasks within the same TaskChain if this Task completes successfully
+      on:                                                     # This is a list of tasks to be executed when the task reaches one of four states: complete, error, skipped, and start
+        complete:
+          - task: ...                                         # This is a task to be executed when the task completes
+      error:
+          - task: ...                                         # This is a task to be executed when the task errors
+      when: "{{ var }} == 'value'"                            # A jinja2 template which must evaluate to True in order for the task to run 
 ```
 
 # Tasks
-A Task is the basic unit of work in CloudHarvest. Tasks are designed to be modular and reusable, and are used to build more 
-complex workflows (ie `TaskChain`s). Tasks are designed to be as simple as possible, and are generally performed 
+A Task is the basic unit of work in CloudHarvest. Tasks are designed to be modular and reusable, and are used to build more
+complex workflows (ie `TaskChain`s). Tasks are designed to be as simple as possible, and are generally performed
 sequentially within their TaskChain, although there are specialized Tasks which run asynchronously.
 
 ## Available Tasks
-This module provides many common tasks which are used throughout the CloudHarvest application. 
+This module provides many common tasks which are used throughout the CloudHarvest application.
 These tasks are designed to be modular and reusable, and are used to build more complex workflows.
 
-| Task Name                              | Class Name             | Description                                                                                                                             |
+| Calling Name                           | Class Name             | Description                                                                                                                             |
 |----------------------------------------|------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|
-| [BaseTask](docs/tasks/dummy.md)        | `BaseTask`             | All other tasks inherit from the BaseClass.                                                                                             |
+| [BaseTask](docs/tasks/dummy.md)        | `BaseTask`             | All other tasks inherit from the BaseClass. The BaseTask cannot be called directly within a TaskChain's `tasks` list.                   |
 |                                        |                        |                                                                                                                                         |
 | [`dummy`](docs/tasks/dummy.md)         | `DummyTask`            | A Task which does nothing. This Task is useful for testing and debugging.                                                               |
 | [`error`](docs/tasks/error.md)         | `ErrorTask`            | A Task which raises an error. This Task is useful for testing and debugging.                                                            |

@@ -1,21 +1,21 @@
 # Base Task
-The BaseTask is the base class for all tasks in the pipeline. It provides the basic functionality for a task, such as 
+The BaseTask is the base class for all tasks in the pipeline. It provides the basic functionality for a task, such as
 logging, error handling, and task execution. Many methods in the BaseTask are meant to be overridden by subclasses to
 provide custom behavior. The BaseTask is not meant to be used directly, but rather to be subclassed by other tasks.
 
 # Table of Contents
 
 - [Base Task](#base-task)
-  - [Python](#python)
-    - [Attributes](#attributes)
-      - [On](#on)
-      - [Retry](#retry)
-      - [When](#when)
-    - [Methods](#methods)
-    - [Code Example](#code-example)
-  - [Configuration](#configuration)
-    - [Arguments](#arguments)
-    - [Example](#example)
+    - [Python](#python)
+        - [Attributes](#attributes)
+            - [On](#on)
+            - [Retry](#retry)
+            - [When](#when)
+        - [Methods](#methods)
+        - [Code Example](#code-example)
+    - [Configuration](#configuration)
+        - [Arguments](#arguments)
+        - [Example](#example)
 
 # Python
 ## Attributes
@@ -52,8 +52,8 @@ A dictionary of directives to run on specific events. The key is the event direc
 ### Retry
 A dictionary containing retry configuration.
 
-> Note: Tasks which retry will call `on_start()`, regardless if `on_start()` has already been called. However, 
-> `on_complete()`, `on_error()`, and `on_skipped()` will only be called once per task, even if the task is retried, 
+> Note: Tasks which retry will call `on_start()`, regardless if `on_start()` has already been called. However,
+> `on_complete()`, `on_error()`, and `on_skipped()` will only be called once per task, even if the task is retried,
 > when those method conditions are met.
 
 The retry configuration can contain the following keys:
@@ -101,7 +101,7 @@ print(custom_task.output)  # Output: Task completed
 ```
 
 # Configuration
-There is no configuration path for the BaseTask as it should not be called directly. 
+There is no configuration path for the BaseTask as it should not be called directly.
 
 ## Arguments
 The standard arguments for all tasks which inherit BaseTask are as follows:

@@ -46,7 +46,6 @@ recordset:
   in_data: previous_task_data
   stages:
     - function_name:
-        argument1: value1
-        argument2: value2
-  record_position: 0
+      argument1: value1
+      argument2: value2
 ```

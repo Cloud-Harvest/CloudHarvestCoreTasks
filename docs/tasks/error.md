@@ -1,7 +1,7 @@
 
 # ErrorTask
 
-The `ErrorTask` class is a subclass of the `BaseTask` class. It represents a task that always raises an exception when run. 
+The `ErrorTask` class is a subclass of the `BaseTask` class. It represents a task that always raises an exception when run.
 
 > This class is used for testing error handling in task chains.
 
@@ -9,12 +9,12 @@ The `ErrorTask` class is a subclass of the `BaseTask` class. It represents a tas
 
 - [ErrorTask](#errortask)
 - [Python](#python)
-  - [Methods](#methods)
+    - [Methods](#methods)
 - [Code Example](#code-example)
 - [Configuration](#configuration)
-  - [Arguments](#arguments)
-  - [Example](#example)
- 
+    - [Arguments](#arguments)
+    - [Example](#example)
+
 # Python
 
 ## Methods
@@ -47,6 +47,6 @@ The `ErrorTask` class has no arguments beyond those defined in [BaseTask](./base
 
 ```yaml
 error:
-    name: My Error Task
-    description: A task that always raises an exception when run.
+  name: My Error Task
+  description: A task that always raises an exception when run.
 ```

@@ -98,6 +98,92 @@ class TestBaseTask(BaseTestCase):
             self.base_task.on_error(e)
         self.assertEqual(self.base_task.status, TaskStatusCodes.error)
 
+    def test_retry(self):
+        # Test the retry method
+        from ..CloudHarvestCoreTasks.base import BaseTaskChain
+        task_chain = BaseTaskChain(template={
+            'name': 'test_chain',
+            'description': 'This is a task_chain.',
+            'tasks': [
+                {
+                    'error': {
+                        'name': 'error_task 0',
+                        'description': 'Testing max_attempts and delay',
+                        'retry': {
+                            'max_attempts': 3,
+                            'delay': .001
+                        }
+                    }
+                },
+                {
+                    'error': {
+                        'name': 'error_task 1',
+                        'description': 'Testing when_error_like (positive)',
+                        'retry': {
+                            'max_attempts': 3,
+                            'delay_seconds': .001,
+                            'when_error_like': 'This is an error task'
+                        }
+                    }
+                },
+                {
+                    'error': {
+                        'name': 'error_task 2',
+                        'description': 'Testing when_error_like (negative)',
+                        'retry': {
+                            'max_attempts': 3,
+                            'delay_seconds': .001,
+                            'when_error_like': 'derp'
+                        }
+                    }
+                },
+                {
+                    'error': {
+                        'name': 'error_task 3',
+                        'description': 'Testing when_error_not_like (positive)',
+                        'retry': {
+                            'max_attempts': 3,
+                            'delay_seconds': .001,
+                            'when_error_not_like': 'derp'
+                        }
+                    }
+                },
+                {
+                    'error': {
+                        'name': 'error_task 4',
+                        'description': 'Testing when_error_not_like (negative)',
+                        'retry': {
+                            'max_attempts': 3,
+                            'delay_seconds': .001,
+                            'when_error_not_like': 'This is an error task'
+                        }
+                    }
+                }
+            ]
+        })
+
+        task_chain.run()
+
+        # Testing max_attempts and delay
+        self.assertEqual(task_chain[0].status, TaskStatusCodes.error)
+        self.assertEqual(task_chain[0].attempts, 3)
+
+        # Testing when_error_like (positive)
+        self.assertEqual(task_chain[1].status, TaskStatusCodes.error)
+        self.assertEqual(task_chain[1].attempts, 3)
+
+        # Testing when_error_like (negative)
+        self.assertEqual(task_chain[2].status, TaskStatusCodes.error)
+        self.assertEqual(task_chain[2].attempts, 1)
+
+        # Testing when_error_not_like (positive)
+        self.assertEqual(task_chain[3].status, TaskStatusCodes.error)
+        self.assertEqual(task_chain[3].attempts, 3)
+
+        # Testing when_error_not_like (negative)
+        self.assertEqual(task_chain[4].status, TaskStatusCodes.error)
+        self.assertEqual(task_chain[4].attempts, 1)
+
     def test_on_skipped(self):
         self.base_task.on_skipped()
         self.assertEqual(self.base_task.status, TaskStatusCodes.skipped)

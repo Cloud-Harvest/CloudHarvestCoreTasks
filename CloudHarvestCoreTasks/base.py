@@ -182,6 +182,7 @@ class BaseTask:
         self.with_vars = with_vars
 
         # Programmatic attributes
+        self.attempts = 0
         self.status = TaskStatusCodes.initialized
         self.out_data = None
         self.meta = None
@@ -243,13 +244,12 @@ class BaseTask:
         """
 
         try:
-            attempts = 0
             max_attempts = self.retry.get('max_attempts') or 1
 
-            while attempts < max_attempts:
+            while self.attempts < max_attempts:
 
                 # Increment the number of attempts
-                attempts += 1
+                self.attempts += 1
 
                 try:
                     self.on_start()
@@ -272,22 +272,31 @@ class BaseTask:
                 except Exception as ex:
 
                     # If the `retry` directive is provided, check if the task should be retried
-                    if self.retry:
-                        from re import fullmatch
-                        retry = False
+                    if isinstance(self.retry, dict):
+                        from re import findall, IGNORECASE
 
-                        # Retry if error message matches the `when_error_like` or `when_error_not_like` directive
-                        if self.retry.get('when_error_like'):
-                            if fullmatch(str(ex.args), self.retry['when_error_like']):
-                                retry = True
+                        # Collect the retry conditions
+                        retry = (
+                            # Check if the error is in the retry directive
+                            findall(self.retry.get('when_error_like') or '.*', str(ex.args), flags=IGNORECASE)
+                            if self.retry.get('when_error_like') else True,
 
-                            if self.retry.get('when_error_not_like'):
-                                if not fullmatch(str(ex.args), self.retry['when_error_not_like']):
-                                    retry = True
+                            # Check if the error is not in the retry directive
+                            not findall(self.retry.get('when_error_not_like') or '.*', str(ex.args), flags=IGNORECASE)
+                            if self.retry.get('when_error_not_like') else True,
+
+                            # CHeck if the number of attempts is less than the maximum number of attempts
+                            self.attempts < max_attempts,
+
+                            # Check if the task is not terminating
+                            self.status != TaskStatusCodes.terminating
+                        )
+
+                        retry = all(retry)
 
                         # If any of the above conditions are met and the number of attempts is less than the maximum
                         # number of attempts, retry the task. Otherwise, call the on_error() method.
-                        if retry and attempts < max_attempts:
+                        if retry:
                             from time import sleep
                             sleep(self.retry.get('delay_seconds') or 1.0)
                             continue
@@ -295,15 +304,18 @@ class BaseTask:
                         # If the task should not be retried, call the on_error() method
                         else:
                             self.on_error(ex)
+                            break
 
                     # No retry directive was provided, call the on_error() method
                     else:
                         self.on_error(ex)
+                        break
 
                 else:
                     # If the task was not skipped, call the on_complete() method
                     if self.status != TaskStatusCodes.skipped:
                         self.on_complete()
+                        break
 
 
         except Exception as ex:
@@ -647,6 +659,7 @@ class BaseTaskChain(List[BaseTask]):
                 'Position': self.position,
                 'Name': task.name,
                 'Status': task.status.__str__(),
+                'Attempts': task.attempts,
                 'DataBytes': getsizeof(task.out_data),
                 'Records': len(task.out_data) if hasattr(task.out_data, '__len__') else 'N/A',
                 'Duration': task.duration,

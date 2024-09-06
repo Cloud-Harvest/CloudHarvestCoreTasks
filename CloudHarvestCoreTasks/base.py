@@ -46,6 +46,7 @@ class TaskConfiguration:
     """
 
     def __init__(self, task_configuration: dict,
+                 in_data: Any = None,
                  task_chain: 'BaseTaskChain' = None,
                  template_vars: Any = None,
                  **kwargs):
@@ -54,12 +55,14 @@ class TaskConfiguration:
 
         Args:
             task_configuration (dict): The configuration for the task.
+            in_data (Any, optional): Starting data that the newly instantiated task will use. Defaults to None.
             task_chain (BaseTaskChain, optional): The task chain that the task belongs to. Defaults to None.
             template_vars (dict, optional): A dictionary of variables to use for templating the task configuration. Defaults to None.
             with_vars (list[str], optional): A list of variables from the parent task chain that templated tasks will use. Defaults to None.
         """
 
         self.class_name = list(task_configuration.keys())[0]
+        self.in_data = in_data
         self.task_configuration = task_configuration[self.class_name].copy()
         self.template_vars = template_vars or {}
 
@@ -78,6 +81,9 @@ class TaskConfiguration:
 
         except IndexError:
             raise BaseTaskException(f'Could not find a task class named {self.class_name}.')
+
+        else:
+            pass
 
     def instantiate(self) -> 'BaseTask':
         """
@@ -118,13 +124,21 @@ class TaskConfiguration:
 
 
 class BaseTask:
+    """
+    The BaseTask class is responsible for managing a single task in a task chain. It provides the basic structure and
+    methods that all tasks should have. BaseTask should not be instantiated directly, but should be inherited by
+    subclasses that provide specific functionality.
+    """
+
     def __init__(self,
                  name: str,
                  blocking: bool = True,
                  description: str = None,
+                 in_data: Any = None,
                  on: dict = None,
                  task_chain: 'BaseTaskChain' = None,
                  result_as: str = None,
+                 retry: dict = None,
                  when: str = None,
                  with_vars: list[str] = None,
                  **kwargs):
@@ -138,32 +152,39 @@ class BaseTask:
 
         Attributes:
             name (str): The name of the task.
-            blocking (bool): A boolean indicating whether the task is blocking or not. If True, the task will block until it completes.
+            blocking (bool): A boolean indicating whether the task is blocking or not. If True, the task will block the task chain until it completes.
             description (str): A brief description of what the task does.
+            in_data (Any): The input data that the task uses.
             on (dict): A dictionary of task configurations for the task to run when it completes, errors, is skipped, or starts.
             task_chain (BaseTaskChain): The task chain that this task belongs to, if applicable.
             with_vars (list[str]): A list of variables that this task uses. These variables are retrieved from the task chain
                 and used in TaskConfiguration which templates this task's class.
             status (TaskStatusCodes): The current status of the task.
-            data (Any): The data that this task produces, if applicable.
+            out_data (Any): The data that this task produces, if applicable.
             meta (Any): Any metadata associated with this task.
+            retry (dict): A dictionary of retry configurations for the task.
             result_as (str): The name of the variable to store the result of this task in the task chain's variables.
             when (str): A string representing a conditional argument using Jinja2 templating. If provided, the task
                 will only run if the condition evaluates to True.
         """
 
+        # Assigned attributes
         self.name = name
         self.blocking = blocking
         self.description = description
+        self.in_data = in_data
         self.on = on or {}
+        self.output = None
         self.result_as = result_as
+        self.retry = retry or {}
         self.task_chain = task_chain
         self.when = when
-
         self.with_vars = with_vars
-        self.status = TaskStatusCodes.initialized
 
-        self.data = None
+        # Programmatic attributes
+        self.attempts = 0
+        self.status = TaskStatusCodes.initialized
+        self.out_data = None
         self.meta = None
         self.start = None
         self.end = None
@@ -177,6 +198,23 @@ class BaseTask:
         """
         return ((self.end or datetime.now(tz=timezone.utc)) - self.start).total_seconds() if self.start else -1
 
+    @property
+    def position(self) -> int:
+        """
+        Returns the position of the task in the task chain. Position is determined by the order in which the task was
+        instantiated and placed into the TaskChain's top-level List. It is possible for the position to change should a
+        task insert new tasks ahead of the task calling this method.
+
+        If the task is not part of a task chain, this method will return -1 as it is possible for a Task.position to be
+        0 when it is the first Task in the chain.
+        """
+
+        try:
+            return self.task_chain.index(self)
+
+        except ValueError:
+            return -1
+
     def method(self):
         """
         This method should be overwritten in subclasses to provide specific functionality.
@@ -186,14 +224,14 @@ class BaseTask:
 
             # Make sure to include a block which handles termination
             if self.status == TaskStatusCodes.terminating:
-                from exceptions import TaskTerminationException
+                from .exceptions import TaskTerminationException
                 raise TaskTerminationException('Task was instructed to terminate.')
 
             from time import sleep
             sleep(1)
 
         # Set the data attribute to the result of the task, otherwise `as_result` will not populate.
-        self.data = {'Test': 'Result'}
+        self.out_data = {'Test': 'Result'}
 
         return self
 
@@ -206,31 +244,79 @@ class BaseTask:
         """
 
         try:
-            try:
-                self.on_start()
+            max_attempts = self.retry.get('max_attempts') or 1
 
-                when_result = True
+            while self.attempts < max_attempts:
 
-                # Check of the `when` condition is met
-                if self.when and self.task_chain:
-                    from .templating.functions import template_object
-                    when_result = True if template_object(template={'result': '{{ ' + self.when + ' }}'}, variables=self.task_chain.variables).get('result') == 'True' else False
+                # Increment the number of attempts
+                self.attempts += 1
 
-                # If `self.when` condition is met or is None, run the method
-                if when_result:
-                    self.method()
+                try:
+                    self.on_start()
 
-                # Skip the task
+                    when_result = True
+
+                    # Check of the `when` condition is met
+                    if self.when and self.task_chain:
+                        from .templating.functions import template_object
+                        when_result = True if template_object(template={'result': '{{ ' + self.when + ' }}'}, variables=self.task_chain.variables).get('result') == 'True' else False
+
+                    # If `self.when` condition is met or is None, run the method
+                    if when_result:
+                        self.method()
+
+                    # Skip the task
+                    else:
+                        self.on_skipped()
+
+                except Exception as ex:
+
+                    # If the `retry` directive is provided, check if the task should be retried
+                    if isinstance(self.retry, dict):
+                        from re import findall, IGNORECASE
+
+                        # Collect the retry conditions
+                        retry = (
+                            # Check if the error is in the retry directive
+                            findall(self.retry.get('when_error_like') or '.*', str(ex.args), flags=IGNORECASE)
+                            if self.retry.get('when_error_like') else True,
+
+                            # Check if the error is not in the retry directive
+                            not findall(self.retry.get('when_error_not_like') or '.*', str(ex.args), flags=IGNORECASE)
+                            if self.retry.get('when_error_not_like') else True,
+
+                            # CHeck if the number of attempts is less than the maximum number of attempts
+                            self.attempts < max_attempts,
+
+                            # Check if the task is not terminating
+                            self.status != TaskStatusCodes.terminating
+                        )
+
+                        retry = all(retry)
+
+                        # If any of the above conditions are met and the number of attempts is less than the maximum
+                        # number of attempts, retry the task. Otherwise, call the on_error() method.
+                        if retry:
+                            from time import sleep
+                            sleep(self.retry.get('delay_seconds') or 1.0)
+                            continue
+
+                        # If the task should not be retried, call the on_error() method
+                        else:
+                            self.on_error(ex)
+                            break
+
+                    # No retry directive was provided, call the on_error() method
+                    else:
+                        self.on_error(ex)
+                        break
+
                 else:
-                    self.on_skipped()
+                    # If the task was not skipped, call the on_complete() method
+                    if self.status != TaskStatusCodes.skipped:
+                        self.on_complete()
+                        break
 
-            except Exception as ex:
-                self.on_error(ex)
-
-            else:
-                # If the task was not skipped, call the on_complete() method
-                if self.status != TaskStatusCodes.skipped:
-                    self.on_complete()
 
         except Exception as ex:
             raise BaseTaskException(f'Top level error while running task {self.name}: {ex}')
@@ -278,7 +364,7 @@ class BaseTask:
 
         # Store the result in the task chain's variables if a result_as variable is provided
         if self.result_as and self.task_chain:
-            self.task_chain.variables[self.result_as] = self.data
+            self.task_chain.variables[self.result_as] = self.out_data
 
         self._run_on_directive('complete')
 
@@ -412,7 +498,7 @@ class BaseTaskChain(List[BaseTask]):
         Args:
             template(dict): The configuration for the task chain.
                 name(str): The name of the task chain.
-                tasks(list[dict]): A list of task configurations for the tasks in the chain.
+                tasks(List[dict]): A list of task configurations for the tasks in the chain.
                 description(str, optional): A brief description of what the task chain does. Defaults to None.
                 max_workers(int, optional): The maximum number of concurrent workers that are permitted.
         """
@@ -468,6 +554,10 @@ class BaseTaskChain(List[BaseTask]):
 
     @property
     def data(self):
+        """
+        Returns the data produced by the last task in the task chain.
+        """
+
         return self.variables.get('result')
 
     @property
@@ -569,8 +659,9 @@ class BaseTaskChain(List[BaseTask]):
                 'Position': self.position,
                 'Name': task.name,
                 'Status': task.status.__str__(),
-                'DataBytes': getsizeof(task.data),
-                'Records': len(task.data) if hasattr(task.data, '__len__') else 'N/A',
+                'Attempts': task.attempts,
+                'DataBytes': getsizeof(task.out_data),
+                'Records': len(task.out_data) if hasattr(task.out_data, '__len__') else 'N/A',
                 'Duration': task.duration,
                 'Start': task.start,
                 'End': task.end,
@@ -586,10 +677,10 @@ class BaseTaskChain(List[BaseTask]):
         starts = []
         ends = []
         for task in self:
-            if hasattr(task.data, '__len__'):
-                total_records.append(len(task.data))
+            if hasattr(task.out_data, '__len__'):
+                total_records.append(len(task.out_data))
 
-            total_result_size.append(getsizeof(task.data))
+            total_result_size.append(getsizeof(task.out_data))
             starts.append(task.start)
             ends.append(task.end)
 
@@ -640,7 +731,7 @@ class BaseTaskChain(List[BaseTask]):
 
             else:
                 result = {
-                    'data': self._data or self.data or self[-1].data,
+                    'data': self._data or self.data or self[-1].out_data,
                     'meta': self._meta or self[-1].meta
                 }
 
@@ -825,19 +916,22 @@ class BaseTaskChain(List[BaseTask]):
 
             while True:
                 # Instantiate the task from the task configuration
-                task = self.task_templates[self.position].instantiate()
+                try:
+                    task = self.task_templates[self.position].instantiate()
+
+                # Break when there are no more tasks to run
+                except IndexError:
+                    break
+
                 self.append(task)
 
                 # Execute the task
                 if task.blocking:
                     task.run()
 
+                # Add it to the pool to be run asynchronously
                 else:
                     self.pool.add(task)
-
-                # Escape after completing the last task
-                if self.position == self.total:
-                    break
 
                 # Check for termination
                 if self.status == TaskStatusCodes.terminating:
@@ -852,7 +946,6 @@ class BaseTaskChain(List[BaseTask]):
 
                 # Increment the position
                 self.position += 1
-
 
             if self.pool.queue_size > 0:
                 self.pool.wait_until_complete()

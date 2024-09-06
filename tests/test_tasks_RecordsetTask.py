@@ -10,7 +10,7 @@ test_task_template = {
             "recordset": {
                 "name": "test recordset task",
                 "description": "This is a test record set",
-                "recordset_name": "test_recordset",
+                "in_data": "test_recordset",
                 "stages": [
                     {
                         "key_value_list_to_dict": {

@@ -98,8 +98,8 @@ class HarvestRecord(OrderedDict):
 
         :param source_key: the name of the source key
         :param target_key: the name of the target key
-        :param start: the index start position
-        :param end: the index end position
+        :param start: the index start stage_position
+        :param end: the index end stage_position
         :param delimiter: the delimiter to use when joining the elements, defaults to None
         """
 

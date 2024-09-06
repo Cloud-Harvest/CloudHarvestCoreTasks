@@ -1,3 +1,12 @@
+# 0.3.5
+- [#9](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/9) c
+- Updated `WaitTask` to accept `when_after_seconds`
+- Removed `DelayTask` because it is now redundant with the `when_after_seconds` directive in `WaitTask`
+- Updated tests
+- Expanded documentation which is now stored in `docs/`
+- Replaced `BaseTask.data` with `BaseTask.in_data` and `BaseTask.out_data`
+- Added a check in `BaseTaskChain` which cleanly exits the loop when there are no more tasks to instantiate
+
 # 0.3.3
 - Implemented `ForEachTask` which replaces `TemplateTask` and tests
 

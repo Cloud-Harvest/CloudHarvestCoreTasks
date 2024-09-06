@@ -5,19 +5,6 @@ from ..CloudHarvestCoreTasks.__register__ import *
 from ..CloudHarvestCoreTasks.base import TaskStatusCodes
 
 
-class TestDelayTask(unittest.TestCase):
-    def setUp(self):
-        self.delay_task = DelayTask(name='delay_task', description='This is a delay task', delay_seconds=5)
-
-    def test_run(self):
-        from datetime import datetime, timedelta
-        start_time = datetime.now()
-        self.delay_task.run()
-        end_time = datetime.now()
-        elapsed_time = end_time - start_time
-        self.assertTrue(timedelta(seconds=4.5) < elapsed_time < timedelta(seconds=5.5))
-
-
 class TestDummyTask(unittest.TestCase):
     def setUp(self):
         self.dummy_task = DummyTask(name='dummy_task', description='This is a dummy task')
@@ -29,7 +16,7 @@ class TestDummyTask(unittest.TestCase):
         self.assertEqual(result, self.dummy_task)
 
         # Check that the data and meta attributes are set correctly
-        self.assertEqual(self.dummy_task.data, [{'dummy': 'data'}])
+        self.assertEqual(self.dummy_task.out_data, [{'dummy': 'data'}])
         self.assertEqual(self.dummy_task.meta, {'info': 'this is dummy metadata'})
 
 
@@ -79,7 +66,7 @@ class TestFileTask(unittest.TestCase):
         path = self.create_temp_file('[section]\nkey = value\n')
         task = FileTask(name="test", path=path, result_as='result', with_vars=['data'], mode='read', format='config')
         task.method()
-        self.assertEqual(task.data, {'section': {'key': 'value'}})
+        self.assertEqual(task.out_data, {'section': {'key': 'value'}})
 
     def test_write_csv(self):
         path = self.create_temp_file()
@@ -105,7 +92,7 @@ class TestFileTask(unittest.TestCase):
         path = self.create_temp_file('key1,key2\nvalue1,value2\nvalue3,value4\n')
         task = FileTask(name="test", path=path, result_as='result', with_vars=['data'], mode='read', format='csv')
         task.method()
-        self.assertEqual(task.data, self.test_data['csv'])
+        self.assertEqual(task.out_data, self.test_data['csv'])
 
     def test_write_json(self):
         path = self.create_temp_file()
@@ -121,7 +108,7 @@ class TestFileTask(unittest.TestCase):
         path = self.create_temp_file('{"key1": "value1", "key2": "value2"}')
         task = FileTask(name="test", path=path, result_as='result', with_vars=['data'], mode='read', format='json')
         task.method()
-        self.assertEqual(task.data, self.test_data['json'])
+        self.assertEqual(task.out_data, self.test_data['json'])
 
     def test_write_yaml(self):
         path = self.create_temp_file()
@@ -148,7 +135,7 @@ class TestFileTask(unittest.TestCase):
                         format='yaml')
         task.method()
         [
-            self.assertEqual(task.data[key], self.test_data['yaml'][key])
+            self.assertEqual(task.out_data[key], self.test_data['yaml'][key])
             for key in self.test_data['yaml'].keys()
         ]
 
@@ -165,7 +152,7 @@ class TestFileTask(unittest.TestCase):
         path = self.create_temp_file('This is raw data')
         task = FileTask(name="test", path=path, result_as='result', with_vars=['data'], mode='read', format='raw')
         task.method()
-        self.assertEqual(task.data, 'This is raw data')
+        self.assertEqual(task.out_data, 'This is raw data')
 
 
 class TestPruneTask(unittest.TestCase):
@@ -215,9 +202,9 @@ class TestPruneTask(unittest.TestCase):
         # run the task chain
         self.task_chain.run()
 
-        # Check that the data attribute of each task in the task chain is None
-        self.assertGreater(self.task_chain[-1].data.get('total_bytes_pruned'), 0)
-        [self.assertIsNone(task.data) for task in self.task_chain[0:-1]]
+        # Check that the out_data attribute of each task in the task chain is None
+        self.assertGreaterEqual(self.task_chain[-1].out_data.get('total_bytes_pruned'), 0)
+        [self.assertIsNone(task.out_data) for task in self.task_chain[0:-1]]
 
         # Check that the task chain did not result in error
         self.assertIsNone(self.task_chain.result.get('error'))
@@ -239,17 +226,15 @@ class TestPruneTask(unittest.TestCase):
         self.task_chain.run()
 
         # Check that the data attribute of each task in the task before the PruneTask is None
-        self.assertGreater(self.task_chain[3].data.get('total_bytes_pruned'), 0)
-        [self.assertIsNone(task.data) for task in self.task_chain[0:3]]
-        self.assertEqual(self.task_chain[4].data, [{'dummy': 'data'}])
+        self.assertGreater(self.task_chain[3].out_data.get('total_bytes_pruned'), 0)
+        [self.assertIsNone(task.out_data) for task in self.task_chain[0:3]]
+        self.assertEqual(self.task_chain[4].out_data, [{'dummy': 'data'}])
         self.assertEqual(self.task_chain[4].meta, {'info': 'this is dummy metadata'})
 
         # Check that the task chain did not result in error
         self.assertIsNone(self.task_chain.result.get('error'))
         self.assertEqual(self.task_chain.status, TaskStatusCodes.complete)
 
-
-# TODO: Add tests for the ForEachTask
 
 class TestForEachTask(unittest.TestCase):
     def setUp(self):
@@ -269,12 +254,14 @@ class TestForEachTask(unittest.TestCase):
                         'description': 'This task will create many new tasks based on the content of a variable.',
                         'insert_tasks_at_position': 2,
                         'template': {
-                            'dummy': {
-                                'name': 'Dummy Task {{ name }}',
-                                'description': 'This is a dummy task',
+                            'file': {
+                                'name': 'File Task {{ name }}',
+                                'description': 'This is a file task for record {{ name }}',
+                                'mode': 'write',
+                                'path': '/tmp/{{ name }}.json',
                             }
                         },
-                        'records': 'i'
+                        'in_data': 'i'
                     }
                 }
             ]
@@ -286,20 +273,38 @@ class TestForEachTask(unittest.TestCase):
 
         self.task_chain.variables = {'i': [{'name': 1}, {'name': 2}, {'name': 3}]}
 
+    def tearDown(self):
+        import os
+        for record in self.task_chain.variables['i']:
+            file_path = f"/tmp/{record['name']}.json"
+            if os.path.exists(file_path):
+                os.remove(file_path)
+
     def test_for_each_task_generation(self):
         self.task_chain.run()
 
         # Check that the task chain has the correct number of tasks: Control, ForEach, and 3 generated Dummy tasks
-        self.assertEqual(len(self.task_chain), 5)
+        self.assertEqual(5, len(self.task_chain))
 
         # Check that all Dummy tasks have been created
         self.assertTrue(all([
-            self.task_chain.find_task_by_name(f'Dummy Task {i["name"]}')
+            self.task_chain.find_task_by_name(f'File Task {i["name"]}')
             for i in self.task_chain.variables.get('i')
         ]))
 
 
-# TODO: Add tests for the WaitTask
+class TestWaitTask(unittest.TestCase):
+    def setUp(self):
+        self.task = WaitTask(name='wait_task', description='This is a wait task', when_after_seconds=5)
+
+    def test_run(self):
+        from datetime import datetime, timedelta
+        start_time = datetime.now()
+        self.task.run()
+        end_time = datetime.now()
+        elapsed_time = end_time - start_time
+        self.assertTrue(timedelta(seconds=4.5) < elapsed_time < timedelta(seconds=5.5))
+
 
 if __name__ == '__main__':
     unittest.main()

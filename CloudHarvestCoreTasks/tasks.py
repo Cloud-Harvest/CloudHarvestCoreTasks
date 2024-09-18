@@ -1,7 +1,28 @@
+"""
+tasks.py - This module contains classes for various tasks that can be used in task chains.
+
+A Task must be registered with the CloudHarvestCorePluginManager in order to be used in a task chain. This is done by
+decorating the Task class with the @register_definition decorator. The name of the task is specified in the decorator
+and is used to reference the task in task chain configurations.
+
+Tasks are subclasses of the BaseTask class, which provides common functionality for all tasks. Each task must implement
+a method() function that performs the task's operation. The method() function should return the task instance.
+"""
+
 from CloudHarvestCorePluginManager.decorators import register_definition
-from typing import Any, List, Literal
+from typing import List, Literal
+
+from pymongo import MongoClient
+from redis import StrictRedis
+
 from .data_model.recordset import HarvestRecordSet
-from .base import BaseTask, BaseTaskChain, TaskStatusCodes
+from .base import (
+    BaseDataTask,
+    BaseTask,
+    BaseTaskChain,
+    BaseTaskException,
+    TaskStatusCodes
+)
 
 
 @register_definition(name='dummy')
@@ -128,8 +149,6 @@ class FileTask(BaseTask):
         Returns:
             self: Returns the instance of the FileTask.
         """
-
-        from .exceptions import BaseTaskException
 
         from configparser import ConfigParser
         from csv import DictReader, DictWriter
@@ -491,6 +510,186 @@ class ForEachTask(BaseTask):
 
         return self
 
+@register_definition(name='mongo')
+class MongoTask(BaseDataTask):
+    """
+    The MongoTask class is a subclass of the BaseDataTask class. It represents a task that interacts with a MongoDB database.
+    """
+
+    REQUIRED_CONFIGURATION_KEYS = ['host', 'port', 'database']
+    CONNECTION_POOLS = {}
+
+    def __init__(self, collection: str = None, result_attribute: str = None, *args, **kwargs):
+        """
+        Initializes a new instance of the MongoTask class.
+
+        Args:
+            collection (str, optional): The name of the collection to interact with. When not provided, database-level commands are exposed.
+            result_attribute (str, optional): The attribute to retrieve from the result.
+            *args: Variable length argument list passed to the parent class.
+            **kwargs: Arbitrary keyword arguments passed to the parent class.
+        """
+        super().__init__(*args, **kwargs)
+
+        self.collection = collection
+        self.result_attribute = result_attribute
+
+        if self._db.get('alias'):
+            if self._db['alias'] == 'persistent':
+                from caching.persistent import connect
+                self._connection = connect(database=self._db['database'])
+
+            else:
+                raise ValueError(f"Invalid alias '{self._db['alias']}' for MongoTask. Must be 'persistent'.")
+
+    @property
+    def is_connected(self) -> bool:
+        """
+        Checks if the connection to the MongoDB server is active.
+        """
+        try:
+            self._connection.server_info()
+            return True
+
+        except Exception:
+            return False
+
+    def connect(self) -> MongoClient:
+        """
+        Connects to the MongoDB server. If an existing pool is available, it will be used. Otherwise, a new connection
+        pool will be created and stored for future use.
+        """
+
+        # If already connected, return the existing connection
+        if self.is_connected:
+            return self._connection
+
+        # Create a connection pool key based on the database configuration
+        from hashlib import md5
+        connection_pool_key = md5(b'-'.join(self._db.values())).hexdigest()
+
+        # If a connection pool exists, use it
+        if self.CONNECTION_POOLS.get(connection_pool_key):
+            self._connection = self.CONNECTION_POOLS[connection_pool_key]
+
+        # Otherwise, create a new connection pool
+        else:
+            from pymongo import MongoClient
+            self._connection = MongoClient(**{'maxPoolSize': self.max_pool_size} | self._db)
+            self.CONNECTION_POOLS[connection_pool_key] = self._connection
+
+        return self._connection
+
+    def disconnect(self):
+        """
+        Disconnects from the MongoDB server.
+        """
+        try:
+            self._connection.close()
+
+        except Exception:
+            pass
+
+    def method(self, *args, **kwargs):
+        """
+        Runs the task. This method will execute the method defined in `self.command` on the database or collection and
+        store the result in the out_data attribute. `self.result_attribute` is used to extract the desired attribute
+        from the result, if applicable.
+        """
+
+        # If connected, return existing _connection otherwise connect
+        super().connect()
+        try:
+            if self.collection:
+                # Note that MongoDb does not return an error if a collection is not found. Instead, MongoDb will faithfully
+                # create the new collection name, even if it malformed or incorrect. This is an intentional feature of MongoDb.
+                database_object = self._connection[self._db['database']][self.collection]
+
+            else:
+                # Expose database-level commands
+                database_object = self._connection[self._db['database']]
+
+            # Execute the command on the database or collection
+            result = getattr(database_object, self.command)(**self.arguments)
+
+            # Extract the desired attribute from the result, if applicable
+            if self.result_attribute:
+                result = getattr(result, self.result_attribute)
+
+            # Record the result
+            self.out_data = result
+
+        except Exception as ex:
+            self.on_error(ex)
+
+        finally:
+            # Be a good citizen and disconnect from the database
+            self.disconnect()
+
+        return self
+
+@register_definition(name='redis')
+class RedisTask(BaseDataTask):
+    """
+    The RedisTask class is a subclass of the BaseDataTask class. It represents a task that interacts with a Redis database.
+    """
+
+    REQUIRED_CONFIGURATION_KEYS = ['host', 'port', 'db']
+    CONNECTION_POOLS = {}
+
+    def __init__(self, invalidate_after: int = 0, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.invalidate_after = invalidate_after
+
+        if self._db.get('alias'):
+            if self._db['alias'] == 'ephemeral':
+                from caching.ephemeral import connect
+                self._connection = connect(database=self._db['database'])
+
+            else:
+                raise ValueError(f"Invalid alias '{self._db['alias']}' for RedisTask. Must be 'ephemeral'.")
+
+    @property
+    def is_connected(self) -> bool:
+        self._connection.ping()
+        return True
+
+    def connect(self) -> StrictRedis:
+        """
+        Connects to a Redis server. If an existing pool is available, it will be used. Otherwise, a new connection
+        pool will be created and stored for future use.
+        """
+
+        # If already connected, return the existing connection
+        if self.is_connected:
+            return self._connection
+
+        # Create a connection pool key based on the database configuration
+        from hashlib import md5
+        connection_pool_key = md5(b'-'.join(self._db.values())).hexdigest()
+
+        # If a connection pool exists, use it
+        if self.CONNECTION_POOLS.get(connection_pool_key):
+            self._connection = self.CONNECTION_POOLS[connection_pool_key]
+
+        # Otherwise, create a new connection pool
+        else:
+            self._connection = self._connection = StrictRedis(**{'max_connections': self.max_pool_size} | self._db)
+            self.CONNECTION_POOLS[connection_pool_key] = self._connection
+
+    def disconnect(self):
+        self._connection.close()
+
+    def method(self, *args, **kwargs):
+        result = self._connection.execute_command(self.command, **self.arguments)
+
+        if self.invalidate_after:
+            self._connection.expire(self._db['key'], int(self.invalidate_after))
+
+        self.out_data = result
+
+        return self
 
 @register_definition(name='wait')
 class WaitTask(BaseTask):
@@ -573,7 +772,7 @@ class WaitTask(BaseTask):
                 task.status in [
                     TaskStatusCodes.complete, TaskStatusCodes.error
                 ]
-                for task in self.chain[0:self.position]
+                for task in self.task_chain[0:self.position]
                 if task.blocking is False
             ])
 
@@ -591,7 +790,7 @@ class WaitTask(BaseTask):
                 task.status in [
                     TaskStatusCodes.complete, TaskStatusCodes.error
                 ]
-                for task in self.chain[0:self.position]
+                for task in self.task_chain[0:self.position]
             ])
 
     @property
@@ -608,7 +807,7 @@ class WaitTask(BaseTask):
                 task.status in [
                     TaskStatusCodes.complete, TaskStatusCodes.error
                 ]
-                for task in self.chain[0:self.position]
+                for task in self.task_chain[0:self.position]
                 if task.name in self._when_all_tasks_by_name_complete
             ])
 
@@ -626,6 +825,6 @@ class WaitTask(BaseTask):
                 task.status in [
                     TaskStatusCodes.complete, TaskStatusCodes.error
                 ]
-                for task in self.chain[0:self.position]
+                for task in self.task_chain[0:self.position]
                 if task.name in self._when_all_tasks_by_name_complete
             ])

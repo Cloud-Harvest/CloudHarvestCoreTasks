@@ -1,3 +1,7 @@
+"""
+factories.py - This module contains functions for creating task chains from files or dictionaries.
+"""
+
 from .base import BaseTaskChain
 
 
@@ -69,7 +73,7 @@ def task_chain_from_dict(task_chain_registered_class_name: str,
                                                is_subclass_of=BaseTaskChain)[0]
 
     except IndexError:
-        from .exceptions import BaseTaskException
+        from base import BaseTaskException
         raise BaseTaskException(f'No task chain class found for {task_chain_registered_class_name}.')
 
     # Set the name of the task chain if it is not already set.

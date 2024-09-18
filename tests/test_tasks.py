@@ -1,8 +1,10 @@
+from datetime import datetime
 import os
 import tempfile
 import unittest
 from ..CloudHarvestCoreTasks.__register__ import *
 from ..CloudHarvestCoreTasks.base import TaskStatusCodes
+from ..CloudHarvestCoreTasks.data_model.recordset import HarvestRecordSet
 
 
 class TestDummyTask(unittest.TestCase):
@@ -19,6 +21,14 @@ class TestDummyTask(unittest.TestCase):
         self.assertEqual(self.dummy_task.out_data, [{'dummy': 'data'}])
         self.assertEqual(self.dummy_task.meta, {'info': 'this is dummy metadata'})
 
+
+class TestErrorTask(unittest.TestCase):
+    def setUp(self):
+        self.error_task = ErrorTask(name='error_task', description='This is an error task')
+
+    def test_run(self):
+        self.error_task.run()
+        self.assertEqual(self.error_task.status, TaskStatusCodes.error)
 
 class TestFileTask(unittest.TestCase):
     def setUp(self):
@@ -155,6 +165,197 @@ class TestFileTask(unittest.TestCase):
         self.assertEqual(task.out_data, 'This is raw data')
 
 
+class TestForEachTask(unittest.TestCase):
+    def setUp(self):
+        task_chain_configuration = {
+            'name': 'test_chain',
+            'description': 'This is a task_chain.',
+            'tasks': [
+                {
+                    'dummy': {
+                        'name': 'Control Task',
+                        'description': 'This is a control task which should always succeed',
+                    }
+                },
+                {
+                    'for_each': {
+                        'name': 'For Each Task',
+                        'description': 'This task will create many new tasks based on the content of a variable.',
+                        'insert_tasks_at_position': 2,
+                        'template': {
+                            'file': {
+                                'name': 'File Task {{ name }}',
+                                'description': 'This is a file task for record {{ name }}',
+                                'mode': 'write',
+                                'path': '/tmp/{{ name }}.json',
+                            }
+                        },
+                        'in_data': 'i'
+                    }
+                }
+            ]
+        }
+
+        from ..CloudHarvestCoreTasks.factories import task_chain_from_dict
+        self.task_chain = task_chain_from_dict(task_chain_registered_class_name='chain',
+                                               task_chain=task_chain_configuration)
+
+        self.task_chain.variables = {'i': [{'name': 1}, {'name': 2}, {'name': 3}]}
+
+    def tearDown(self):
+        import os
+        for record in self.task_chain.variables['i']:
+            file_path = f"/tmp/{record['name']}.json"
+            if os.path.exists(file_path):
+                os.remove(file_path)
+
+    def test_for_each_task_generation(self):
+        self.task_chain.run()
+
+        # Check that the task chain has the correct number of tasks: Control, ForEach, and 3 generated Dummy tasks
+        self.assertEqual(5, len(self.task_chain))
+
+        # Check that all Dummy tasks have been created
+        self.assertTrue(all([
+            self.task_chain.find_task_by_name(f'File Task {i["name"]}')
+            for i in self.task_chain.variables.get('i')
+        ]))
+
+
+class TestHarvestRecordSetTask(unittest.TestCase):
+    def setUp(self):
+        # import required to register class
+        from ..CloudHarvestCoreTasks.tasks import HarvestRecordSetTask
+
+        harvest_recordset_task_template = {
+            "name": "test_chain",
+            "description": "This is a test chain.",
+            "tasks": [
+                {
+                    "recordset": {
+                        "name": "test recordset task",
+                        "description": "This is a test record set",
+                        "in_data": "test_recordset",
+                        "stages": [
+                            {
+                                "key_value_list_to_dict": {
+                                    "source_key": "tags",
+                                    "target_key": "tags_dict",
+                                    "name_key": "Name"
+                                }
+                            },
+                            {
+                                "copy_key": {
+                                    "source_key": "age",
+                                    "target_key": "age_copy"
+                                }
+                            }
+
+                        ],
+                        "results_as": "result"
+                    }
+                }
+
+            ]
+
+        }
+
+        test_data = [
+            {
+                "name": "Test1",
+                "age": 30,
+                "date": datetime.now(),
+                "tags": [{"Name": "color", "Value": "blue"}, {"Name": "size", "Value": "large"}]
+            },
+            {
+                "name": "Test2",
+                "age": 25,
+                "date": datetime.now(),
+                "tags": [{"Name": "color", "Value": "red"}, {"Name": "size", "Value": "medium"}]
+            }
+        ]
+
+        self.recordset = HarvestRecordSet(data=test_data)
+
+        from ..CloudHarvestCoreTasks.base import BaseTaskChain
+        self.chain = BaseTaskChain(template=harvest_recordset_task_template)
+        self.chain.variables["test_recordset"] = self.recordset
+
+    def test_init(self):
+        self.assertEqual(self.chain.variables["test_recordset"], self.recordset)
+        self.assertEqual(self.chain.task_templates[0].name, "test recordset task")
+
+    def test_method(self):
+        self.chain.run()
+        result = self.chain.result
+        self.assertEqual(result["data"][0]["tags_dict"], {"color": "blue", "size": "large"})
+        self.assertEqual(result["data"][1]["tags_dict"], {"color": "red", "size": "medium"})
+        [
+            self.assertEqual(record["age"], record["age_copy"])
+            for record in result["data"]
+        ]
+
+
+class TestMongoTask(unittest.TestCase):
+    def setUp(self):
+        pass
+
+    def test_init(self):
+        from ..CloudHarvestCoreTasks.tasks import MongoTask
+        from ..CloudHarvestCoreTasks.base import  BaseTaskException
+
+        # Assert that the task is not created if the database parameters are missing
+        self.assertRaises(BaseTaskException,
+                          MongoTask,
+                          name='test',
+                          description='This is a test task',
+                          db={},  # missing database parameter
+                          command='find',
+                          collection='test')
+
+        # Assert that the task is created
+        mongo_task = MongoTask(name='test',
+                               description='This is a test task',
+                               collection='test',
+                               command='test',
+                               db={
+                                   'database': 'test',
+                                   'host': 'localhost',
+                                   'port': 27017
+                               })
+
+        self.assertTrue(mongo_task)
+
+
+class TestRedisTask(unittest.TestCase):
+    def setUp(self):
+        pass
+
+    def test_init(self):
+        from ..CloudHarvestCoreTasks.tasks import RedisTask
+        from ..CloudHarvestCoreTasks.base import  BaseTaskException
+
+        # Assert that the task is not created if the database parameters are missing
+        self.assertRaises(BaseTaskException,
+                          RedisTask,
+                          name='test',
+                          description='This is a test task',
+                          db={},  # missing database parameter
+                          command='find')
+
+        # Assert that the task is created
+        mongo_task = RedisTask(name='test',
+                               description='This is a test task',
+                               command='test',
+                               db={
+                                   'db': 'test',
+                                   'host': 'localhost',
+                                   'port': 27017
+                               })
+
+        self.assertTrue(mongo_task)
+
+
 class TestPruneTask(unittest.TestCase):
     def setUp(self):
         """
@@ -234,63 +435,6 @@ class TestPruneTask(unittest.TestCase):
         # Check that the task chain did not result in error
         self.assertIsNone(self.task_chain.result.get('error'))
         self.assertEqual(self.task_chain.status, TaskStatusCodes.complete)
-
-
-class TestForEachTask(unittest.TestCase):
-    def setUp(self):
-        task_chain_configuration = {
-            'name': 'test_chain',
-            'description': 'This is a task_chain.',
-            'tasks': [
-                {
-                    'dummy': {
-                        'name': 'Control Task',
-                        'description': 'This is a control task which should always succeed',
-                    }
-                },
-                {
-                    'for_each': {
-                        'name': 'For Each Task',
-                        'description': 'This task will create many new tasks based on the content of a variable.',
-                        'insert_tasks_at_position': 2,
-                        'template': {
-                            'file': {
-                                'name': 'File Task {{ name }}',
-                                'description': 'This is a file task for record {{ name }}',
-                                'mode': 'write',
-                                'path': '/tmp/{{ name }}.json',
-                            }
-                        },
-                        'in_data': 'i'
-                    }
-                }
-            ]
-        }
-
-        from ..CloudHarvestCoreTasks.factories import task_chain_from_dict
-        self.task_chain = task_chain_from_dict(task_chain_registered_class_name='chain',
-                                               task_chain=task_chain_configuration)
-
-        self.task_chain.variables = {'i': [{'name': 1}, {'name': 2}, {'name': 3}]}
-
-    def tearDown(self):
-        import os
-        for record in self.task_chain.variables['i']:
-            file_path = f"/tmp/{record['name']}.json"
-            if os.path.exists(file_path):
-                os.remove(file_path)
-
-    def test_for_each_task_generation(self):
-        self.task_chain.run()
-
-        # Check that the task chain has the correct number of tasks: Control, ForEach, and 3 generated Dummy tasks
-        self.assertEqual(5, len(self.task_chain))
-
-        # Check that all Dummy tasks have been created
-        self.assertTrue(all([
-            self.task_chain.find_task_by_name(f'File Task {i["name"]}')
-            for i in self.task_chain.variables.get('i')
-        ]))
 
 
 class TestWaitTask(unittest.TestCase):

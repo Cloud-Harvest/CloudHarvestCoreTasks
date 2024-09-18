@@ -1,28 +1,57 @@
+"""
+This module defines the core classes and functionality for managing tasks and task chains in the Harvest system.
+
+Classes:
+    TaskStatusCodes (Enum): Defines the basic status codes for any given data collection object.
+    TaskConfiguration: Manages the configuration of a task and provides methods to instantiate the task.
+    BaseTask: Manages a single task in a task chain, providing the basic structure and methods for all tasks.
+    BaseAuthenticationTask (BaseTask): Manages tasks related to authentication.
+    BaseDataTask (BaseTask): Manages tasks that retrieve data from a data connection-based data provider.
+    BaseTaskChain (List[BaseTask]): Manages a chain of tasks, providing methods to run, insert, and handle task states.
+    BaseTaskPool: Manages a pool of tasks that can be executed concurrently.
+
+Modules:
+    CloudHarvestCorePluginManager.decorators: Provides decorators for registering task definitions.
+    CloudHarvestCoreTasks.exceptions: Defines custom exceptions for the Harvest system.
+    datetime: Provides classes for manipulating dates and times.
+    enum: Provides support for enumerations.
+    threading: Provides support for creating and managing threads.
+    typing: Provides support for type hints.
+    logging: Provides support for logging messages.
+"""
+
 from CloudHarvestCorePluginManager.decorators import register_definition
-from .exceptions import BaseTaskException
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, List
+from threading import Thread
+from typing import Any, List, Literal
 from logging import getLogger
 
 
-logger = getLogger('harvest')
+_log_levels = Literal['debug', 'info', 'warning', 'error', 'critical']
 
-# TODO: (Async)ForEachTask (a task that generates more tasks from a template) with parameters to insert the new tasks
-#       into a specific task chain position (or immediately following itself)
+logger = getLogger('harvest')
 
 
 class TaskStatusCodes(Enum):
     """
-    These are the basic status codes for any given data collection object.
+    These are the basic status codes for any given Task object. Valid states are:
+    - complete: The task has stopped and there are no more tasks to complete.
+    - error: The task has stopped in an error state.
+    - idle: The task is running but has no outstanding tasks.
+    - initialized: The task has been created.
+    - running: The task is currently processing data.
+    - skipped: The task was skipped and did not run because a `when` condition was not met.
+    - terminating: The task was ordered to stop and is currently attempting to shut down.
     """
-    complete = 'complete'           # the thread has stopped and there are no more tasks to complete
-    error = 'error'                 # the thread has stopped in an error state
-    idle = 'idle'                   # the thread is running but has no outstanding tasks
-    initialized = 'initialized'     # the thread has been created
-    running = 'running'             # the thread is currently processing data
-    skipped = 'skipped'             # the thread was skipped and did not run because a `when` condition was not mets
-    terminating = 'terminating'     # the thread was ordered to stop and is currently attempting to shut down
+
+    complete = 'complete'
+    error = 'error'
+    idle = 'idle'
+    initialized = 'initialized'
+    running = 'running'
+    skipped = 'skipped'
+    terminating = 'terminating'
 
 
 class TaskConfiguration:
@@ -184,12 +213,11 @@ class BaseTask:
         # Programmatic attributes
         self.attempts = 0
         self.status = TaskStatusCodes.initialized
+        self.original_template = None
         self.out_data = None
         self.meta = None
         self.start = None
         self.end = None
-
-        self.original_template = None
 
     @property
     def duration(self) -> float:
@@ -224,7 +252,6 @@ class BaseTask:
 
             # Make sure to include a block which handles termination
             if self.status == TaskStatusCodes.terminating:
-                from .exceptions import TaskTerminationException
                 raise TaskTerminationException('Task was instructed to terminate.')
 
             from time import sleep
@@ -451,6 +478,89 @@ class BaseAuthenticationTask(BaseTask):
 
         self.auth = None
 
+class BaseDataTask(BaseTask):
+    """
+    The BaseDataTask class is responsible for managing a task that retrieves data from a data connection-based data
+    provider. A data provider could be a database, an API, or a cache. The BaseDataTask class provides the basic structure
+    and methods that all data tasks should have. BaseDataTask may be instantiated directly or inherited by subclasses that
+    provide specific functionality.
+    """
+
+    REQUIRED_CONFIGURATION_KEYS = []
+
+    def __init__(self, command: str, db: dict, arguments: dict = None, max_pool_size: int = 10, *args, **kwargs):
+        """
+        Initializes a new instance of the BaseDataTask class. In order to instantiate a BaseDataTask, a configuration
+        dictionary must be provided. This dictionary should contain the necessary information to connect to the data
+        provider. Specific keys are identified in the REQUIRED_CONFIGURATION_KEYS attribute which is overridden in
+        subclasses.
+
+        Args:
+            command (str): The command to run on the data provider.
+            db (dict): The configuration for the data provider. The connection configuration is driver-specific
+                       *except* when the 'alias' key is provided. In this case, the 'alias' key should be set to 'ephemeral'
+                       or 'persistent' to connect to the appropriate data provider. Connections made using the 'alias' key
+                       will leverage a Connection Pool if supported by the underlying data provider.
+            arguments (dict, optional): Arguments to pass to the command.
+            max_pool_size (int, optional): The maximum number of connections to allow in the connection pool. Defaults to 10.
+        """
+
+        super().__init__(*args, **kwargs)
+
+        self._connection = None
+        self._db = db or {}
+
+        self.command = command
+        self.arguments = arguments or {}
+        self.max_pool_size = max_pool_size
+
+        # Check if the configuration dictionary contains the required keys for the subclass data provider.
+        # If the configuration dictionary contains an 'alias' key, check that 'alias' is either 'ephemeral' or 'persistent'.
+        if db.get('alias'):
+            if db['alias'] not in ('ephemeral', 'persistent'):
+                raise BaseTaskException(f'Invalid alias value: {db["alias"]}. Must be "ephemeral" or "persistent".')
+
+        # Check if the configuration dictionary contains the required keys for the subclass data provider.
+        else:
+            missing_keys = [key for key in self.REQUIRED_CONFIGURATION_KEYS if key not in db.keys()]
+            if missing_keys:
+                raise BaseTaskException(f'Missing required configuration keys: {", ".join(missing_keys)}')
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        return None
+
+    @property
+    def is_connected(self) -> bool:
+        """
+        Returns a boolean indicating whether the task is connected to the data provider.
+
+        This method should be overwritten in subclasses to provide specific functionality.
+        """
+        return False
+
+    def connect(self):
+        """
+        Connect the Task to the data provider.
+
+        This method should be overwritten in subclasses to provide specific functionality. However, super().connect()
+        should be called in the subclass method to ensure that the connection is established.
+        """
+
+        # If the task is already connected, return the connection
+        if self.is_connected:
+            return self._connection
+
+    def disconnect(self):
+        """
+        Disconnect the task from the data provider.
+
+        This method should be overwritten in subclasses to provide specific functionality.
+        """
+        pass
+
 
 @register_definition(name='chain')
 class BaseTaskChain(List[BaseTask]):
@@ -491,6 +601,7 @@ class BaseTaskChain(List[BaseTask]):
 
     def __init__(self,
                  template: dict,
+                 cache_progress: bool = False,
                  *args, **kwargs):
         """
         Initializes a new instance of the BaseTaskChain class.
@@ -501,11 +612,17 @@ class BaseTaskChain(List[BaseTask]):
                 tasks(List[dict]): A list of task configurations for the tasks in the chain.
                 description(str, optional): A brief description of what the task chain does. Defaults to None.
                 max_workers(int, optional): The maximum number of concurrent workers that are permitted.
+            cache_progress(bool, optional): A boolean indicating whether the progress of the task chain should
+                                            be reported to the ephemeral cache. Defaults to False.
         """
         super().__init__()
 
+        from uuid import uuid4
+        self.id = str(uuid4())
+
         self.name = template['name']
         self.description = template.get('description')
+        self.cache_progress = cache_progress
 
         self.variables = {}
         self.task_templates: List[TaskConfiguration] = [
@@ -910,6 +1027,9 @@ class BaseTaskChain(List[BaseTask]):
             BaseTaskChain: The instance of the task chain.
         """
 
+        # Kick off the ephemeral cache thread if the cache_progress flag is set
+        ephemeral_cache_thread = self.update_task_chain_cache_thread() if self.cache_progress else None
+
         try:
             self.on_start()
             self.position = 0
@@ -935,7 +1055,6 @@ class BaseTaskChain(List[BaseTask]):
 
                 # Check for termination
                 if self.status == TaskStatusCodes.terminating:
-                    from .exceptions import TaskTerminationException
                     raise TaskTerminationException('Task chain was instructed to terminate.')
 
                 # Hold within the loop if there are outstanding pool tasks because the async task might have an
@@ -955,6 +1074,10 @@ class BaseTaskChain(List[BaseTask]):
 
         finally:
             self.on_complete()
+
+            if ephemeral_cache_thread:
+                ephemeral_cache_thread.join(timeout=5)
+
             return self
 
     def terminate(self) -> 'BaseTaskChain':
@@ -969,6 +1092,52 @@ class BaseTaskChain(List[BaseTask]):
         self.status = TaskStatusCodes.terminating
 
         return self
+
+    def update_task_chain_cache_thread(self) -> Thread:
+        """
+        This method is responsible for updating the job cache with the task chain's progress.
+        """
+
+        def update_task_chain_cache():
+            """
+            Updates the job cache with the task chain's progress.
+            """
+
+            from caching.ephemeral import connect
+
+            while True:
+                cache_entry = {
+                                  'id': self.id,
+                                  'status': self.status.__str__(),
+                                  'start': self.start,
+                                  'end': self.end,
+                              } | self.detailed_progress
+
+                try:
+                    client = connect(database='chains')
+
+                    client.hset(name=self.id, mapping=cache_entry)
+
+                    # A job which has not updated in 15 minutes is considered stale and will be removed from the cache.
+                    client.expire(name=self.id, time=900)
+
+                except Exception as ex:
+                    logger.error(f'{self.name}: Error updating job cache: {ex}')
+
+                finally:
+                    from time import sleep
+
+                    match self.status:
+                        case TaskStatusCodes.initialized, TaskStatusCodes.idle:
+                            sleep(5)
+
+                        case _:
+                            sleep(1)
+
+        thread = Thread(target=update_task_chain_cache, daemon=True)
+        thread.start()
+
+        return thread
 
 
 class BaseTaskPool:
@@ -1143,3 +1312,23 @@ class BaseTaskPool:
                 return pool
 
         return []
+
+
+class BaseHarvestException(BaseException):
+    """
+    Base exception class for all exceptions in the Harvest system
+    """
+    def __init__(self, *args, log_level: _log_levels = 'error'):
+        super().__init__(*args)
+
+        getattr(logger, log_level.lower())(str(args))
+
+
+class BaseTaskException(BaseHarvestException):
+    def __init__(self, *args):
+        super().__init__(*args)
+
+
+class TaskTerminationException(BaseTaskException):
+    def __init__(self, *args):
+        super().__init__(*args)

@@ -46,7 +46,7 @@ print(task.out_data)  # Output: Content of the file
 # Configuration
 
 ## Arguments
-The `FileTask` class has the following arguments beyond those defined in [BaseTask](./base.md).
+The `FileTask` class has the following arguments beyond those defined in [BaseTask](./base_task).
 
 | Key          | Required | Default | Description                                                           |
 |--------------|----------|---------|-----------------------------------------------------------------------|

@@ -1,10 +1,21 @@
+# 0.4.0
+- Moved MongoDb operations into Tasks since both the Api and Agent will need to interact with the database
+- Moved `BaseCacheTask` and `CacheAggregateTask` to `CloudHarvestCoreTasks` as refactors inheriting `BaseDataTask`
+- Created the `BaseDataTask` which interacts with database backends
+- Created the `MongoTask` and `RedisTask` which inherit from `BaseDataTask`
+- TaskChains will now report progress to the ephemeral cache when the `TaskChain.cache_progress` parameter is set to `True`
+- Caching (ephemeral and persistent) is now handled in [`caching`](CloudHarvestCoreTasks/caching)
+  - The [ephemeral cache](CloudHarvestCoreTasks/caching/ephemeral.py) is a Redis backend
+  - The [persistent cache](CloudHarvestCoreTasks/caching/persistent.py) is a MongoDB backend
+- Added some more documentation
+
 # 0.3.5
 - [#9](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/9) c
 - Updated `WaitTask` to accept `when_after_seconds`
 - Removed `DelayTask` because it is now redundant with the `when_after_seconds` directive in `WaitTask`
 - Updated tests
 - Expanded documentation which is now stored in `docs/`
-- Replaced `BaseTask.data` with `BaseTask.in_data` and `BaseTask.out_data`
+- Replaced `BaseTask.data` with `BaseTask.in_data` and `BaseTask.out_data`-
 - Added a check in `BaseTaskChain` which cleanly exits the loop when there are no more tasks to instantiate
 
 # 0.3.3

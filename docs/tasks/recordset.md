@@ -30,7 +30,7 @@ print(recordset_task.out_data)  # Output: Modified recordset
 # Configuration
 
 ## Arguments
-The `HarvestRecordSetTask` class has the following arguments beyond those defined in [BaseTask](./base.md). Furthermore,
+The `HarvestRecordSetTask` class has the following arguments beyond those defined in [BaseTask](./base_task). Furthermore,
 information on the available functions and their arguments can be found in the [Harvest Recordset documentation](../../CloudHarvestCoreTasks/data_model/README.md).
 
 | Key            | Required | Default | Description                                                                                                    |

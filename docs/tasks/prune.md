@@ -40,7 +40,7 @@ print(prune_task.out_data)  # Output: {'total_bytes_pruned': <number_of_bytes_pr
 # Configuration
 
 ## Arguments
-The `PruneTask` class has the following arguments beyond those defined in [BaseTask](./base.md).
+The `PruneTask` class has the following arguments beyond those defined in [BaseTask](./base_task).
 
 | Key                | Required | Default | Description                                                                            |
 |--------------------|----------|---------|----------------------------------------------------------------------------------------|

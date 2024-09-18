@@ -41,7 +41,7 @@ except Exception as e:
 # Configuration
 
 ## Arguments
-The `ErrorTask` class has no arguments beyond those defined in [BaseTask](./base.md).
+The `ErrorTask` class has no arguments beyond those defined in [BaseTask](./base_task).
 
 ## Example
 

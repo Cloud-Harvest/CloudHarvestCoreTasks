@@ -43,7 +43,7 @@ print(dummy_task.meta) # Output: {'info': 'this is dummy metadata'}
 # Configuration
 
 ## Arguments
-The DummyTask class has no arguments beyond those defined in [BaseTask](./base.md).
+The DummyTask class has no arguments beyond those defined in [BaseTask](./base_task).
 
 ## Example
 

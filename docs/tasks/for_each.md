@@ -59,7 +59,7 @@ for_each_task.run()
 # Configuration
 
 ## Arguments
-The `ForEachTask` class has the following arguments beyond those defined in [BaseTask](./base.md).
+The `ForEachTask` class has the following arguments beyond those defined in [BaseTask](./base_task).
 
 | Key                      | Required | Default | Description                                                                                        |
 |--------------------------|----------|---------|----------------------------------------------------------------------------------------------------|

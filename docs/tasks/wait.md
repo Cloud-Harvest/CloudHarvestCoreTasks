@@ -53,7 +53,7 @@ print('Waited for 5 seconds.')
 # Configuration
 
 ## Arguments
-The following arguments can be used to configure a `WaitTask` beyond those defined in [BaseTask](./base.md).
+The following arguments can be used to configure a `WaitTask` beyond those defined in [BaseTask](./base_task).
 
 Note that it is not necessary to supply conditions beyond the one that is immediately required. For example, if the task
 only needs to wait for a specified amount of time, only `when_after_seconds` needs to be supplied.

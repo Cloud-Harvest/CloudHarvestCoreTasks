@@ -599,32 +599,24 @@ class MongoTask(BaseDataTask):
 
         # If connected, return existing _connection otherwise connect
         super().connect()
-        try:
-            if self.collection:
-                # Note that MongoDb does not return an error if a collection is not found. Instead, MongoDb will faithfully
-                # create the new collection name, even if it malformed or incorrect. This is an intentional feature of MongoDb.
-                database_object = self._connection[self._db['database']][self.collection]
+        if self.collection:
+            # Note that MongoDb does not return an error if a collection is not found. Instead, MongoDb will faithfully
+            # create the new collection name, even if it malformed or incorrect. This is an intentional feature of MongoDb.
+            database_object = self._connection[self._db['database']][self.collection]
 
-            else:
-                # Expose database-level commands
-                database_object = self._connection[self._db['database']]
+        else:
+            # Expose database-level commands
+            database_object = self._connection[self._db['database']]
 
-            # Execute the command on the database or collection
-            result = getattr(database_object, self.command)(**self.arguments)
+        # Execute the command on the database or collection
+        result = getattr(database_object, self.command)(**self.arguments)
 
-            # Extract the desired attribute from the result, if applicable
-            if self.result_attribute:
-                result = getattr(result, self.result_attribute)
+        # Extract the desired attribute from the result, if applicable
+        if self.result_attribute:
+            result = getattr(result, self.result_attribute)
 
-            # Record the result
-            self.out_data = result
-
-        except Exception as ex:
-            self.on_error(ex)
-
-        finally:
-            # Be a good citizen and disconnect from the database
-            self.disconnect()
+        # Record the result
+        self.out_data = result
 
         return self
 

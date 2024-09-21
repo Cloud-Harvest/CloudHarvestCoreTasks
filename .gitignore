@@ -134,3 +134,6 @@ dmypy.json
 
 # Poetry
 poetry.lock
+
+# Draw.io
+.$*.bkp

@@ -4,9 +4,9 @@
 - Created the `BaseDataTask` which interacts with database backends
 - Created the `MongoTask` and `RedisTask` which inherit from `BaseDataTask`
 - TaskChains will now report progress to the ephemeral cache when the `TaskChain.cache_progress` parameter is set to `True`
-- Caching (ephemeral and persistent) is now handled in [`caching`](CloudHarvestCoreTasks/caching)
-  - The [ephemeral cache](CloudHarvestCoreTasks/caching/ephemeral.py) is a Redis backend
-  - The [persistent cache](CloudHarvestCoreTasks/caching/persistent.py) is a MongoDB backend
+- Caching (ephemeral and persistent) is now handled in [`silos`](CloudHarvestCoreTasks/silos)
+  - The [ephemeral silo](CloudHarvestCoreTasks/silos/ephemeral.py) is a Redis backend
+  - The [persistent silo](CloudHarvestCoreTasks/silos/persistent.py) is a MongoDB backend
 - Added some more documentation
 
 # 0.3.5

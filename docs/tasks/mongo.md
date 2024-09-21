@@ -2,7 +2,7 @@
 The MongoTask class is a subclass of the BaseDataTask(BaseTask) class. It represents a task connects to a Mongo
 database and performs some action. 
 
-> This class is primarily used for testing purposes.
+> If a TaskChain needs to accept user input, it should use the [AugerTask class](./auger.md) instead of the MongoTask class.
 
 # Table of Contents
 
@@ -11,12 +11,12 @@ database and performs some action.
     - [Attributes](#attributes)
     - [Methods](#methods)
 - [Code Example](#code-example)
-- [Configuration](#configuration)
-    - [Arguments](#arguments)
-    - [Example](#example)
+- [Configuration](#configuration-example)
 
 # Python
 ## Attributes
+
+> **Note** This Task inherits parameters from the [`BaseDataTask`](base_data.md#the-db-attribute) class, such as `db`. 
 
 | Attribute         | Description                                                                                                                                                                                                                             | 
 |-------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------| 

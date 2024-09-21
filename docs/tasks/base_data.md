@@ -5,6 +5,7 @@ It represents a task that connects to a data provider and performs some action.
 - [BaseDataTask](#basedatatask)
 - [Python](#python)
     - [Attributes](#attributes)
+    - [The `db` Attribute](#the-db-attribute)
     - [Methods](#methods)
 - [Code Example](#code-example)
 - [Configuration](#configuration)

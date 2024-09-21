@@ -615,6 +615,8 @@ class BaseTaskChain(List[BaseTask]):
             cache_progress(bool, optional): A boolean indicating whether the progress of the task chain should
                                             be reported to the ephemeral cache. Defaults to False.
         """
+        self.original_template = template
+
         super().__init__()
 
         from uuid import uuid4
@@ -1103,7 +1105,7 @@ class BaseTaskChain(List[BaseTask]):
             Updates the job cache with the task chain's progress.
             """
 
-            from caching.ephemeral import connect
+            from silos.ephemeral import connect
 
             while True:
                 cache_entry = {

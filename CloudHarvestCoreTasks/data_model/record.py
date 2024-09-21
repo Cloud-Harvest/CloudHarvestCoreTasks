@@ -4,6 +4,10 @@ from .matching import HarvestMatch
 
 
 class HarvestRecord(OrderedDict):
+    """
+    A class representing an individual record in a HarvestRecordSet.
+    """
+
     def __init__(self, recordset=False, is_flat: bool = False, **kwargs):
         super().__init__(**kwargs)
 

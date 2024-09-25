@@ -7,7 +7,12 @@
 - Caching (ephemeral and persistent) is now handled in [`silos`](CloudHarvestCoreTasks/silos)
   - The [ephemeral silo](CloudHarvestCoreTasks/silos/ephemeral.py) is a Redis backend
   - The [persistent silo](CloudHarvestCoreTasks/silos/persistent.py) is a MongoDB backend
+- Data model Matching logic improvements
+  - SQL is now supported
+  - Added helper functions `build_mongo_matching_syntax()` and `build_sql_matching_syntax()`
+  - Expanded tests
 - Added some more documentation
+- Improved the efficiency of `HarvestMatchSet` and `HarvestMatch` by instantiating them once, then applying the `match()` method to the data
 
 # 0.3.5
 - [#9](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/9) c

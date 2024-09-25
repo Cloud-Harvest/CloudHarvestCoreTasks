@@ -1,6 +1,10 @@
+"""
+This module contains the HarvestRecord class, which represents an individual record in a HarvestRecordSet.
+"""
+
 from typing import List, Literal
 from collections import OrderedDict
-from .matching import HarvestMatch
+from .recordset import HarvestRecordSet
 
 
 class HarvestRecord(OrderedDict):
@@ -8,7 +12,11 @@ class HarvestRecord(OrderedDict):
     A class representing an individual record in a HarvestRecordSet.
     """
 
-    def __init__(self, recordset=False, is_flat: bool = False, **kwargs):
+    def __init__(self, recordset: HarvestRecordSet = False, is_flat: bool = False, **kwargs):
+        """
+        Initialize the HarvestRecord object.
+        """
+
         super().__init__(**kwargs)
 
         self.recordset = recordset
@@ -197,7 +205,7 @@ class HarvestRecord(OrderedDict):
         """
 
         if self.is_flat:
-            return
+            return self
 
         from flatten_json import flatten
         flat = flatten(self, separator=separator)
@@ -208,8 +216,12 @@ class HarvestRecord(OrderedDict):
 
         return self
 
-    def key_value_list_to_dict(self, source_key: str, name_key: str = 'Key',
-                               value_key: str = 'Value', preserve_original: bool = False, target_key: str = None) -> 'HarvestRecord':
+    def key_value_list_to_dict(self,
+                               source_key: str,
+                               name_key: str = 'Key',
+                               value_key: str = 'Value',
+                               preserve_original: bool = False,
+                               target_key: str = None) -> 'HarvestRecord':
         """
         Convert a list of key-value pairs to a dictionary.
 
@@ -243,34 +255,14 @@ class HarvestRecord(OrderedDict):
 
         return self
 
-    def clear_matches(self) -> 'HarvestRecord':
+    def match(self) -> 'HarvestRecord':
         """
-        Clear the matches of the record.
+        Match the record against the match set.
         """
 
-        self.matching_expressions.clear()
-        self.non_matching_expressions.clear()
+        self.matching_expressions, self.non_matching_expressions = self.recordset.match_set.match(self)
 
         return self
-
-    def match(self, syntax: str) -> bool:
-        """
-        Check if the record matches a statement.
-
-        :param syntax: the match statement
-        :return: True if the record matches the statement, False otherwise
-        """
-
-        match = HarvestMatch(record=self, syntax=syntax)
-        match.match()
-
-        if match.is_match:
-            self.matching_expressions.append(match)
-
-        else:
-            self.non_matching_expressions.append(match)
-
-        return match.is_match
 
     def remove_key(self, key: str) -> 'HarvestRecord':
         """
@@ -340,7 +332,7 @@ class HarvestRecord(OrderedDict):
         """
 
         if self.is_flat is False:
-            return
+            return self
 
         from flatten_json import unflatten_list
         unflat = unflatten_list(self, separator=separator)

@@ -54,7 +54,7 @@ Dependencies:
 import operator
 from collections import OrderedDict
 from re import findall
-from typing import List
+from typing import List, Tuple
 
 # The order of _MATCH_OPERATIONS's keys is important. The keys should be ordered from longest to shortest to ensure that
 # the longest match is attempted first. For example, '==' should be before '=' to ensure that '==' is matched
@@ -96,121 +96,20 @@ class HarvestMatch:
             Retrieves the operator key from the matching syntax.
     """
 
-    def __init__(self, syntax: str, record: OrderedDict = None):
+    def __init__(self, syntax: str):
         """
         Constructs a new HarvestMatch instance.
 
         Args:
             syntax (str): The matching syntax to be used.
-            record (OrderedDict, optional): The record to be matched. Defaults to an empty dictionary.
         """
 
-        self._record = record or {}
         self.syntax = syntax
         self.key = None
         self.value = None
 
         self.operator = self.get_operator_key()
         self.final_match_operation = None
-        self.is_match = None
-
-    # def as_mongo_filter(self) -> dict:
-    #     """
-    #     Converts the matching operation into a MongoDB match operation.
-    #
-    #     Returns:
-    #         dict: A dictionary representing the MongoDB match operation.
-    #     """
-    #
-    #     if self.key is None and self.value is None:
-    #         self.key, self.value = self.syntax.split(self.operator, maxsplit=1)
-    #
-    #         # strip whitespace from the key, value, and operator
-    #         for v in ['key', 'value', 'operator']:
-    #             if hasattr(getattr(self, v), 'strip'):
-    #                 setattr(self, v, getattr(self, v).strip())
-    #
-    #         # fuzzy cast the value to the appropriate type
-    #         from .functions import fuzzy_cast
-    #         self.value = fuzzy_cast(self.value)
-    #
-    #         if self.value is None:
-    #             return {
-    #                 self.key: None
-    #             }
-    #
-    #     key = f'${self.key}'
-    #
-    #     match self.operator:
-    #         # https://www.mongodb.com/docs/manual/reference/operator/aggregation/regexMatch/
-    #         case '=':
-    #             result = {
-    #                 "$regexMatch": {
-    #                     "input": {
-    #                         "$toString": key
-    #                     },
-    #                     "regex": str(self.value),       # $regexMatch requires a string
-    #                     "options": "i"
-    #                 }
-    #             }
-    #
-    #         case '<=' | '=<':
-    #             # https://www.mongodb.com/docs/manual/reference/operator/aggregation/lte/
-    #             result = {
-    #                 self.key: {
-    #                     "$lte": self.value
-    #                 }
-    #             }
-    #
-    #         case '>=' | '=>':
-    #             # https://www.mongodb.com/docs/manual/reference/operator/aggregation/gte/
-    #             result = {
-    #                 self.key: {
-    #                     "$gte": self.value
-    #                 }
-    #             }
-    #
-    #         case '==':
-    #             # https://www.mongodb.com/docs/manual/reference/operator/aggregation/match/
-    #             result = {
-    #                 self.key: self.value
-    #             }
-    #
-    #         case '!=':
-    #             # https://www.mongodb.com/docs/manual/reference/operator/aggregation/not/
-    #             # https://www.mongodb.com/docs/manual/reference/operator/aggregation/regexMatch/
-    #             result = {
-    #                 "$not": {
-    #                     "$regexMatch": {
-    #                         "input": {
-    #                             "$toString": key
-    #                         },
-    #                         "regex": str(self.value),       # $regexMatch requires a string
-    #                         "options": "i"
-    #                     }
-    #                 }
-    #             }
-    #
-    #         case '<':
-    #             # https://www.mongodb.com/docs/manual/reference/operator/aggregation/lt/
-    #             result = {
-    #                 self.key: {
-    #                     "$lt": self.value
-    #                 }
-    #             }
-    #
-    #         case '>':
-    #             # https://www.mongodb.com/docs/manual/reference/operator/aggregation/gt/
-    #             result = {
-    #                 self.key: {
-    #                     "$gt": self.value
-    #                 }
-    #             }
-    #
-    #         case _:
-    #             raise ValueError('No valid matching statement returned')
-    #
-    #     return result
 
     def as_mongo_filter(self) -> dict:
         """
@@ -341,9 +240,12 @@ class HarvestMatch:
 
         return result
 
-    def match(self) -> bool:
+    def match(self, record: OrderedDict) -> bool:
         """
         Performs the matching operation and returns the result.
+
+        Arguments:
+            record (OrderedDict): The record to be matched against.
 
         Returns:
             bool: The result of the matching operation.
@@ -353,7 +255,7 @@ class HarvestMatch:
 
         from .functions import is_bool, is_datetime, is_null, is_number
         matching_value = self.value
-        record_key_value = self._record.get(self.key)
+        record_key_value = record.get(self.key)
 
         # convert types if they do not match
         if type(matching_value) is not type(record_key_value):
@@ -384,8 +286,6 @@ class HarvestMatch:
             result = _MATCH_OPERATIONS[self.operator](record_key_value, matching_value)
 
         self.final_match_operation = f'{record_key_value}{self.operator}{matching_value}'
-
-        self.is_match = result
 
         return result
 
@@ -420,48 +320,24 @@ class HarvestMatchSet(list):
             Converts the matching operations of all HarvestMatch instances into MongoDB match operations.
     """
 
-    def __init__(self, matches: List[str], record: OrderedDict = None):
+    def __init__(self, matches: List[str]):
         """
         Constructs a new HarvestMatchSet instance.
 
         Args:
             matches (List[str]): The list of matching syntaxes to be used.
-            record (OrderedDict, optional): The record to be matched. Defaults to an empty dictionary.
         """
 
         super().__init__()
 
-        self._record = record
+        if isinstance(matches, str):
+            self.matches = [HarvestMatch(syntax=matches)]
 
-        self.matches = [HarvestMatch(record=record, syntax=match) for match in matches]
+        elif isinstance(matches, list):
+            self.matches = [HarvestMatch(syntax=match) for match in matches]
 
-    # def as_mongo_filter(self) -> dict:
-    #     """
-    #     Converts the matching operations of all HarvestMatch instances into MongoDB match operations.
-    #
-    #     Returns:
-    #         dict: A dictionary representing the MongoDB match operations.
-    #     """
-    #
-    #     result = {}
-    #     expr = {'$expr': {'$and': []}}
-    #     non_expr = {}
-    #
-    #     for match in self.matches:
-    #         match_syntax = match.as_mongo_filter()
-    #         if list(match_syntax.keys())[0].startswith('$'):
-    #             expr['$expr']['$and'].append(match_syntax)
-    #
-    #         else:
-    #             non_expr.update(match_syntax)
-    #
-    #     if expr['$expr']['$and']:
-    #         result.update(expr)
-    #
-    #     if non_expr:
-    #         result.update(non_expr)
-    #
-    #     return result
+        else:
+            raise ValueError('Invalid type for matches. Expected str or list of str, got ' + type(matches).__name__)
 
     def as_mongo_filter(self) -> dict:
         """
@@ -504,6 +380,32 @@ class HarvestMatchSet(list):
         result = ' AND '.join(conditions)
 
         return result
+
+    def match(self, record: OrderedDict) -> Tuple[List[str], List[str]]:
+        """
+        Performs the matching operation using all Matches in the MatchSet and returns the result. Multiple Matches are
+        treated as an OR expression, meaning that if any of the Matches return True, the MatchSet will return True.
+
+        Arguments:
+            record (OrderedDict): The record to be matched against.
+
+        Returns:
+            bool: The result of the matching operation.
+        """
+
+        match_true = []
+        match_false = []
+
+        for match in self.matches:
+            result = match.match(record)
+
+            if result:
+                match_true.append(match.final_match_operation)
+
+            else:
+                match_false.append(match.final_match_operation)
+
+        return match_true, match_false
 
 def build_mongo_matching_syntax(matches: List[List[str]]) -> dict:
     """

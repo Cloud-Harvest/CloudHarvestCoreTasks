@@ -1,8 +1,23 @@
-from typing import Dict, List, Literal
+"""
+This module defines the `HarvestRecordSet` and `HarvestRecordSets` classes for managing collections of
+`HarvestRecord` objects.
+
+Classes:
+    HarvestRecordSet: A class representing a list of `HarvestRecord` objects with methods for performing operations on all records in the set.
+    HarvestRecordSets: A dictionary-like class for managing multiple `HarvestRecordSet` objects.
+
+"""
+
+from typing import Dict, List
 from .record import HarvestRecord
 
 
 class HarvestRecordSet(List[HarvestRecord]):
+    """
+    A HarvestRecordSet is a list of HarvestRecord objects. It contains methods for performing operations on
+    all records in the set.
+    """
+
     def __init__(self, name: str = None, data: List[Dict] = None, **kwargs):
         """
         Initialize a HarvestRecordSet object.
@@ -18,6 +33,7 @@ class HarvestRecordSet(List[HarvestRecord]):
 
         self.indexes = {}
         self.index_fields = {}
+        self.match_set = None
 
         if data:
             self.add(data=data)
@@ -35,6 +51,10 @@ class HarvestRecordSet(List[HarvestRecord]):
 
     @property
     def keys(self) -> List[str]:
+        """
+        Retrieve a list of all unique keys for all records in the record set.
+        """
+
         return sorted(list(set([key for record in self for key in record.keys()])))
 
     def add(self, data: (List[dict or HarvestRecord]) or dict or HarvestRecord) -> 'HarvestRecordSet':
@@ -72,17 +92,6 @@ class HarvestRecordSet(List[HarvestRecord]):
 
         return self
 
-    def add_match(self, syntax: str) -> 'HarvestRecordSet':
-        """
-        Add a match to the record set.
-
-        :param syntax: The match syntax to add
-        """
-
-        [record.match(syntax) for record in self]
-
-        return self
-
     def clear_matches(self) -> 'HarvestRecordSet':
         """
         Clear all matches from the record set.
@@ -98,7 +107,6 @@ class HarvestRecordSet(List[HarvestRecord]):
 
         :param index_name: The name of the index
         :param fields: The fields to include in the index
-
         """
 
         index = {}
@@ -193,6 +201,29 @@ class HarvestRecordSet(List[HarvestRecord]):
 
         return self
 
+    def set_match_set(self, syntax: str or List[str]) -> 'HarvestRecordSet':
+        """
+        Add a match to the record set.
+
+        :param syntax: The match syntax to add
+        """
+
+        from .matching import HarvestMatchSet
+        self.match_set = HarvestMatchSet(matches=syntax)
+
+        return self
+
+    def sort(self, *keys: str) -> 'HarvestRecordSet':
+        """
+        Sort the records in the record set by one or more keys.
+
+        :param keys: The keys to sort by
+        """
+
+        super().sort(key=lambda record: [record[key] for key in keys])
+
+        return self
+
     def unwind(self, source_key: str, preserve_null_and_empty_keys: bool = True) -> 'HarvestRecordSet':
         """
         Unwind a list of records in the record set into separate records.
@@ -222,13 +253,24 @@ class HarvestRecordSet(List[HarvestRecord]):
 
 
 class HarvestRecordSets(Dict[str, HarvestRecordSet]):
+    """
+    A dictionary of HarvestRecordSet objects.
+    """
 
     def add(self, recordset_name: str, recordset: HarvestRecordSet) -> 'HarvestRecordSets':
+        """
+        Add a record set to the HarvestRecordSets object.
+        """
+
         self[recordset_name] = recordset
 
         return self
 
     def index(self, recordset_name: str, index_name: str, *fields) -> 'HarvestRecordSets':
+        """
+        Create an index for a record set.
+        """
+
         self[recordset_name].create_index(index_name, fields)
 
         return self
@@ -272,6 +314,10 @@ class HarvestRecordSets(Dict[str, HarvestRecordSet]):
     #     return self
 
     def list(self) -> List[dict]:
+        """
+        List all record sets in the HarvestRecordSets object.
+        """
+
         return [
             {
                 'Name': name,
@@ -283,23 +329,43 @@ class HarvestRecordSets(Dict[str, HarvestRecordSet]):
         ]
 
     def purge(self) -> 'HarvestRecordSets':
+        """
+        Deletes all record sets from the HarvestRecordSets object.
+        """
+
         self.clear()
 
         return self
 
     def query(self, recordset_name: str):
+        """
+        Retrieve a record set by name.
+        """
+
         return self.get(recordset_name)
 
     def remove(self, name: str) -> 'HarvestRecordSets':
+        """
+        Remove a record set from the HarvestRecordSets object by name.
+        """
+
         self.pop(name)
         return self
 
     def rename(self, old_recordset_name: str, new_recordset_name: str) -> 'HarvestRecordSets':
+        """
+        Changes the name of a record set in the HarvestRecordSets object.
+        """
+
         self[new_recordset_name] = self.pop(old_recordset_name)
 
         return self
 
     def union(self, new_recordset_name: str, recordset_names: List[str]) -> 'HarvestRecordSets':
+        """
+        Combine two or more record sets into a new record set.
+        """
+
         new_recordset = HarvestRecordSet()
         [new_recordset.add(data=self[recordset_name]) for recordset_name in recordset_names]
 

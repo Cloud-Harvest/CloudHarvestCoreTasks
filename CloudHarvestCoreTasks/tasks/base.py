@@ -21,6 +21,7 @@ Modules:
 """
 
 from CloudHarvestCorePluginManager.decorators import register_definition
+from ..user_filters import HarvestRecordSetUserFilter
 from datetime import datetime, timezone
 from enum import Enum
 from threading import Thread
@@ -29,6 +30,15 @@ from logging import getLogger
 
 
 _log_levels = Literal['debug', 'info', 'warning', 'error', 'critical']
+USER_FILTERS = {
+    'add_keys': [],
+    'count': False,
+    'exclude_keys': [],
+    'headers': [],
+    'limit': None,
+    'matches': [],
+    'sort': None
+}
 
 logger = getLogger('harvest')
 
@@ -74,8 +84,8 @@ class TaskConfiguration:
         instantiate() -> BaseTask: Instantiates a task based on the task configuration.
     """
 
-    def __init__(self, task_configuration: dict,
-                 in_data: Any = None,
+    def __init__(self,
+                 task_configuration: dict,
                  task_chain: 'BaseTaskChain' = None,
                  template_vars: Any = None,
                  **kwargs):
@@ -84,14 +94,12 @@ class TaskConfiguration:
 
         Args:
             task_configuration (dict): The configuration for the task.
-            in_data (Any, optional): Starting data that the newly instantiated task will use. Defaults to None.
             task_chain (BaseTaskChain, optional): The task chain that the task belongs to. Defaults to None.
             template_vars (dict, optional): A dictionary of variables to use for templating the task configuration. Defaults to None.
             with_vars (list[str], optional): A list of variables from the parent task chain that templated tasks will use. Defaults to None.
         """
 
         self.class_name = list(task_configuration.keys())[0]
-        self.in_data = in_data
         self.task_configuration = task_configuration[self.class_name].copy()
         self.template_vars = template_vars or {}
 
@@ -137,11 +145,25 @@ class TaskConfiguration:
 
             template_vars = {}
 
-        from .templating.functions import template_object
+        from ..templating.functions import template_object
 
         # Template the task configuration with the variables from the task chain
         templated_task_configuration = template_object(template=self.task_configuration,
                                                        variables=template_vars)
+
+        # If this template is part of a TaskChain and there are task variables, add those object to the template
+        # based on the object pointer format `var.variable_name`. This is only necessary when these conditions are met
+        # because no variables can be added to a task when it is not part of the chain *and* there is no point in
+        # flattening the template if there are no variables to add.
+        if self.task_chain and self.task_chain.variables:
+            from flatten_json import flatten, unflatten_list
+            flat_template = flatten(templated_task_configuration, separator='.')
+
+            for key, value in flat_template.items():
+                if value.startswith('var.'):
+                    flat_template[key] = self.task_chain.variables.get(value[4:])
+
+            templated_task_configuration = unflatten_list(flat_template)
 
         # Instantiate the task with the templated configuration and return it
         self.instantiated_class = self.task_class(task_chain=self.task_chain,
@@ -159,15 +181,20 @@ class BaseTask:
     subclasses that provide specific functionality.
     """
 
+    # By default, the user filter class is HarvestRecordSetUserFilter. This is because most tasks which return data do
+    # so after the overarching data set has been retrieved. An example of this include the FileTask which reads a file
+    # and returns the data.
+    USER_FILTER_STAGE = 'complete'
+
     def __init__(self,
                  name: str,
                  blocking: bool = True,
                  description: str = None,
-                 in_data: Any = None,
                  on: dict = None,
                  task_chain: 'BaseTaskChain' = None,
                  result_as: str = None,
                  retry: dict = None,
+                 user_filters:dict = None,
                  when: str = None,
                  with_vars: list[str] = None,
                  **kwargs):
@@ -181,9 +208,9 @@ class BaseTask:
 
         Attributes:
             name (str): The name of the task.
+            apply_user_filters (bool, optional): A boolean indicating whether user filters should be applied to the data. Defaults to False.
             blocking (bool): A boolean indicating whether the task is blocking or not. If True, the task will block the task chain until it completes.
             description (str): A brief description of what the task does.
-            in_data (Any): The input data that the task uses.
             on (dict): A dictionary of task configurations for the task to run when it completes, errors, is skipped, or starts.
             task_chain (BaseTaskChain): The task chain that this task belongs to, if applicable.
             with_vars (list[str]): A list of variables that this task uses. These variables are retrieved from the task chain
@@ -193,6 +220,7 @@ class BaseTask:
             meta (Any): Any metadata associated with this task.
             retry (dict): A dictionary of retry configurations for the task.
             result_as (str): The name of the variable to store the result of this task in the task chain's variables.
+            user_filters (dict): A dictionary of user filters to apply to the data.
             when (str): A string representing a conditional argument using Jinja2 templating. If provided, the task
                 will only run if the condition evaluates to True.
         """
@@ -201,7 +229,6 @@ class BaseTask:
         self.name = name
         self.blocking = blocking
         self.description = description
-        self.in_data = in_data
         self.on = on or {}
         self.output = None
         self.result_as = result_as
@@ -214,16 +241,20 @@ class BaseTask:
         self.attempts = 0
         self.status = TaskStatusCodes.initialized
         self.original_template = None
-        self.out_data = None
+        self.result = None
         self.meta = None
         self.start = None
         self.end = None
+
+        # Defaults < task-chain < user
+        self.user_filters = USER_FILTERS | self.task_chain.user_filters if self.task_chain else {} | user_filters or {}
 
     @property
     def duration(self) -> float:
         """
         Returns the duration of the task in seconds.
         """
+
         return ((self.end or datetime.now(tz=timezone.utc)) - self.start).total_seconds() if self.start else -1
 
     @property
@@ -243,10 +274,26 @@ class BaseTask:
         except ValueError:
             return -1
 
+    def apply_user_filters(self):
+        """
+        Applies user filters to the Task. The default user filter class is HarvestRecordSetUserFilter which is executed
+        when on_complete() is called. This method should be overwritten in subclasses to provide specific functionality.
+        """
+
+        # If the user filters not configured for this Task, return
+        if self.user_filters.get('accepted') is None:
+            return
+
+        from ..user_filters import HarvestRecordSetUserFilter
+
+        with HarvestRecordSetUserFilter(recordset=self.result, **self.user_filters) as user_filter:
+            self.result = user_filter.apply()
+
     def method(self):
         """
         This method should be overwritten in subclasses to provide specific functionality.
         """
+
         # Example code to simulate a long-running task.
         for i in range(10):
 
@@ -258,7 +305,7 @@ class BaseTask:
             sleep(1)
 
         # Set the data attribute to the result of the task, otherwise `as_result` will not populate.
-        self.out_data = {'Test': 'Result'}
+        self.result = {'Test': 'Result'}
 
         return self
 
@@ -285,7 +332,7 @@ class BaseTask:
 
                     # Check of the `when` condition is met
                     if self.when and self.task_chain:
-                        from .templating.functions import template_object
+                        from ..templating.functions import template_object
                         when_result = True if template_object(template={'result': '{{ ' + self.when + ' }}'}, variables=self.task_chain.variables).get('result') == 'True' else False
 
                     # If `self.when` condition is met or is None, run the method
@@ -360,6 +407,7 @@ class BaseTask:
         Returns:
             BaseTask: The instance of the task.
         """
+
         i = 1
 
         for d in (self.on.get(directive) or []):
@@ -379,7 +427,6 @@ class BaseTask:
 
         return self
 
-
     def on_complete(self) -> 'BaseTask':
         """
         Method to run when a task completes.
@@ -391,7 +438,10 @@ class BaseTask:
 
         # Store the result in the task chain's variables if a result_as variable is provided
         if self.result_as and self.task_chain:
-            self.task_chain.variables[self.result_as] = self.out_data
+            self.task_chain.variables[self.result_as] = self.result
+
+        if self.USER_FILTER_STAGE == 'complete':
+            self.apply_user_filters()
 
         self._run_on_directive('complete')
 
@@ -422,7 +472,6 @@ class BaseTask:
 
         self._run_on_directive('error')
 
-
         return self
 
     def on_skipped(self) -> 'BaseTask':
@@ -437,7 +486,6 @@ class BaseTask:
         self.status = TaskStatusCodes.skipped
 
         self._run_on_directive('skipped')
-
 
         return self
 
@@ -454,6 +502,9 @@ class BaseTask:
         self.start = datetime.now(tz=timezone.utc)
 
         self._run_on_directive('start')
+
+        if self.USER_FILTER_STAGE == 'start':
+            self.apply_user_filters()
 
         return self
 
@@ -488,7 +539,11 @@ class BaseDataTask(BaseTask):
 
     REQUIRED_CONFIGURATION_KEYS = []
 
-    def __init__(self, command: str, db: dict, arguments: dict = None, max_pool_size: int = 10, *args, **kwargs):
+    def __init__(self, command: str,
+                 db: dict,
+                 arguments: dict = None,
+                 max_pool_size: int = 10,
+                 *args, **kwargs):
         """
         Initializes a new instance of the BaseDataTask class. In order to instantiate a BaseDataTask, a configuration
         dictionary must be provided. This dictionary should contain the necessary information to connect to the data
@@ -539,6 +594,7 @@ class BaseDataTask(BaseTask):
 
         This method should be overwritten in subclasses to provide specific functionality.
         """
+
         return False
 
     def connect(self):
@@ -559,6 +615,7 @@ class BaseDataTask(BaseTask):
 
         This method should be overwritten in subclasses to provide specific functionality.
         """
+
         pass
 
 
@@ -602,6 +659,7 @@ class BaseTaskChain(List[BaseTask]):
     def __init__(self,
                  template: dict,
                  cache_progress: bool = False,
+                 user_filters: dict = None,
                  *args, **kwargs):
         """
         Initializes a new instance of the BaseTaskChain class.
@@ -613,7 +671,7 @@ class BaseTaskChain(List[BaseTask]):
                 description(str, optional): A brief description of what the task chain does. Defaults to None.
                 max_workers(int, optional): The maximum number of concurrent workers that are permitted.
             cache_progress(bool, optional): A boolean indicating whether the progress of the task chain should
-                                            be reported to the ephemeral cache. Defaults to False.
+                                            be reported to the Ephemeral Silo. Defaults to False.
         """
         self.original_template = template
 
@@ -631,7 +689,7 @@ class BaseTaskChain(List[BaseTask]):
             TaskConfiguration(task_configuration=t,
                               task_chain=self,
                               **kwargs)
-            for t in template.get('tasks', [])
+            for t in template.get('', [])
         ]
 
         self.status = TaskStatusCodes.initialized
@@ -644,6 +702,7 @@ class BaseTaskChain(List[BaseTask]):
 
         self.start = None
         self.end = None
+        self.user_filters = USER_FILTERS | user_filters
 
         self._data = None
         self._meta = None
@@ -669,6 +728,7 @@ class BaseTaskChain(List[BaseTask]):
             exc_val (Exception): The instance of the exception that caused the context management protocol to end, if any.
             exc_tb (traceback): A traceback object encapsulating the call stack at the point where the exception was raised, if any.
         """
+
         return None
 
     @property
@@ -717,6 +777,7 @@ class BaseTaskChain(List[BaseTask]):
         """
         Returns the current progress of the task chain as a percentage cast as float.
         """
+
         return self.position / self.total if self.total > 0 else -1
 
     @property
@@ -769,8 +830,8 @@ class BaseTaskChain(List[BaseTask]):
         Returns:
             List[dict]: A dictionary representing the performance metrics of the task chain.
         """
+
         from sys import getsizeof
-        from statistics import mean, stdev
 
         # This part of the report returns results for each task in the task chain.
         task_metrics = [
@@ -779,8 +840,8 @@ class BaseTaskChain(List[BaseTask]):
                 'Name': task.name,
                 'Status': task.status.__str__(),
                 'Attempts': task.attempts,
-                'DataBytes': getsizeof(task.out_data),
-                'Records': len(task.out_data) if hasattr(task.out_data, '__len__') else 'N/A',
+                'DataBytes': getsizeof(task.result),
+                'Records': len(task.result) if hasattr(task.result, '__len__') else 'N/A',
                 'Duration': task.duration,
                 'Start': task.start,
                 'End': task.end,
@@ -796,10 +857,10 @@ class BaseTaskChain(List[BaseTask]):
         starts = []
         ends = []
         for task in self:
-            if hasattr(task.out_data, '__len__'):
-                total_records.append(len(task.out_data))
+            if hasattr(task.result, '__len__'):
+                total_records.append(len(task.result))
 
-            total_result_size.append(getsizeof(task.out_data))
+            total_result_size.append(getsizeof(task.result))
             starts.append(task.start)
             ends.append(task.end)
 
@@ -840,6 +901,7 @@ class BaseTaskChain(List[BaseTask]):
         Returns the result of the task chain. This can be interpreted either as the 'result' variable in the task
         chain's variables or the data and meta of the last task in the chain.
         """
+
         result = {}
 
         try:
@@ -850,7 +912,7 @@ class BaseTaskChain(List[BaseTask]):
 
             else:
                 result = {
-                    'data': self._data or self.data or self[-1].out_data,
+                    'data': self._data or self.data or self[-1].result,
                     'meta': self._meta or self[-1].meta
                 }
 
@@ -869,6 +931,7 @@ class BaseTaskChain(List[BaseTask]):
         """
         Returns the total number of tasks in the task chain.
         """
+
         return len(self.task_templates)
 
     def find_task_by_name(self, task_name: str) -> 'BaseTask':
@@ -1029,7 +1092,7 @@ class BaseTaskChain(List[BaseTask]):
             BaseTaskChain: The instance of the task chain.
         """
 
-        # Kick off the ephemeral cache thread if the cache_progress flag is set
+        # Kick off the Ephemeral Silo thread if the cache_progress flag is set
         ephemeral_cache_thread = self.update_task_chain_cache_thread() if self.cache_progress else None
 
         try:
@@ -1272,6 +1335,7 @@ class BaseTaskPool:
         """
         The method run by the minder thread to manage task execution.
         """
+
         from time import sleep
         from threading import Thread
 
@@ -1320,6 +1384,7 @@ class BaseHarvestException(BaseException):
     """
     Base exception class for all exceptions in the Harvest system
     """
+
     def __init__(self, *args, log_level: _log_levels = 'error'):
         super().__init__(*args)
 

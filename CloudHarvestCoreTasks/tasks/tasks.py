@@ -10,19 +10,19 @@ a method() function that performs the task's operation. The method() function sh
 """
 
 from CloudHarvestCorePluginManager.decorators import register_definition
-from typing import List, Literal
+from typing import Any, List, Literal
 
 from pymongo import MongoClient
 from redis import StrictRedis
 
-from .data_model.recordset import HarvestRecordSet
-from .base import (
+from tasks.base import (
     BaseDataTask,
     BaseTask,
     BaseTaskChain,
     BaseTaskException,
     TaskStatusCodes
 )
+from user_filters import MongoUserFilter
 
 
 @register_definition(name='dummy')
@@ -199,12 +199,8 @@ class FileTask(BaseTask):
             else:
 
                 try:
-                    # If the user has provided data, use it
-                    if self.in_data:
-                        _data = self.in_data
-
                     # If the user has not provided data but has provided variable names, use them
-                    elif self.with_vars:
+                    if self.with_vars:
                         _data = self.task_chain.get_variables_by_names(*self.with_vars)
 
                         if len(self.with_vars) == 1:
@@ -305,7 +301,9 @@ class HarvestRecordSetTask(BaseTask):
         method(): Executes the function on the record set with the provided arguments and stores the result in the data attribute.
     """
 
-    def __init__(self, stages: List[dict], *args, **kwargs):
+
+
+    def __init__(self, data: Any, stages: List[dict], *args, **kwargs):
         """
         Constructs a new HarvestRecordSetTask instance.
 
@@ -316,6 +314,8 @@ class HarvestRecordSetTask(BaseTask):
         """
         super().__init__(*args, **kwargs)
 
+        from ..data_model import HarvestRecordSet
+        self.data = data if isinstance(data, HarvestRecordSet) else HarvestRecordSet(data=data)
         self.stages = stages
         self.stage_position = 0
 
@@ -333,19 +333,7 @@ class HarvestRecordSetTask(BaseTask):
             self: Returns the instance of the HarvestRecordSetTask.
         """
 
-        from .data_model.record import HarvestRecord
-        from .data_model.recordset import HarvestRecordSet
-
-        recordset = None
-
-        # Get the recordset from the task chain variables
-        if isinstance(self.in_data, str):
-            recordset = self.task_chain.get_variables_by_names(self.in_data).get(self.in_data)
-
-        # If the data is not already a HarvestRecordSet, convert it to a new one.
-        if not isinstance(recordset, HarvestRecordSet):
-            from .data_model.recordset import HarvestRecordSet
-            recordset = HarvestRecordSet(name=self.name, data=self.in_data)
+        from ..data_model import HarvestRecordSet, HarvestRecord
 
         for stage in self.stages:
             # Record the stage_position of stages completed
@@ -356,13 +344,13 @@ class HarvestRecordSetTask(BaseTask):
 
                 # This is a HarvestRecordSet command
                 if hasattr(HarvestRecordSet, function):
-                    getattr(recordset, function)(**arguments or {})
+                    getattr(self.data, function)(**arguments or {})
 
                 # This is a HarvestRecord command
                 elif hasattr(HarvestRecord, function):
                     [
                         getattr(record, function)(**arguments or {})
-                        for record in recordset
+                        for record in self.data
                     ]
 
                 else:
@@ -370,7 +358,7 @@ class HarvestRecordSetTask(BaseTask):
 
                 break
 
-        self.out_data = recordset
+        self.result = self.data
 
         return self
 
@@ -404,8 +392,8 @@ class PruneTask(BaseTask):
         if self.previous_task_data:
             for i in range(self.task_chain.position):
                 if self.task_chain[i].status in [TaskStatusCodes.complete, TaskStatusCodes.error, TaskStatusCodes.skipped]:
-                    total_bytes_pruned += getsizeof(self.task_chain[i].out_data)
-                    self.task_chain[i].out_data = None
+                    total_bytes_pruned += getsizeof(self.task_chain[i].result)
+                    self.task_chain[i].result = None
 
         # If stored_variables is True, clear all variables stored in the task chain
         if self.stored_variables:
@@ -427,18 +415,17 @@ class ForEachTask(BaseTask):
 
     Attributes:
         template (dict): The template for the tasks to be created.
-        in_data (List[dict] or str): The data to iterate over. If a string is provided, the data will be retrieved from the task chain variables.
         insert_tasks_at_position (int): The position at which to insert the tasks.
         insert_tasks_before_name (str): The name of the task before which to insert the tasks.
         insert_tasks_after_name (str): The name of the task after which to insert the tasks.
 
     Methods:
-        method(): Creates a new task for each item in the in_data list.
+        method(): Creates a new task for each item in data.
     """
 
     def __init__(self,
+                 data: Any,
                  template: dict,
-                 in_data: (List[dict] or str) = None,
                  insert_tasks_at_position: int = None,
                  insert_tasks_before_name: str = None,
                  insert_tasks_after_name: str = None,
@@ -449,9 +436,8 @@ class ForEachTask(BaseTask):
         item in a list. The task is created by rendering a template with the item as the context.
 
         Args:
+            data (Any): The data to iterate over.
             template (dict): The template for the tasks to be created.
-            in_data (List[dict] or str, optional): The data to iterate over. If a string is provided, the data will
-                                                   be retrieved from the task chain variables. Defaults to None.
             insert_tasks_at_position (int, optional): The position at which to insert the tasks. Defaults to None.
             insert_tasks_before_name (str, optional): The name of the task before which to insert the tasks. Defaults to None.
             insert_tasks_after_name (str, optional): The name of the task after which to insert the tasks. Defaults to None
@@ -459,22 +445,22 @@ class ForEachTask(BaseTask):
 
         super().__init__(**kwargs)
 
+        self.data = data
         self.template = template
-        self.in_data = in_data if isinstance(in_data, list) else self.task_chain.variables.get(in_data)
 
-        if not isinstance(self.in_data, (dict, list, str)):
-            raise ValueError(f'The ForEachTask requires data in order to function. Got: {str(type(in_data))}')
+        if not isinstance(self.data, (dict, list, str)):
+            raise ValueError(f'The ForEachTask requires data in order to function. Got: {str(type(data))}')
 
         # convert list of non-dictionaries to list of dictionaries
-        elif not isinstance(self.in_data[0], dict):
-            self.in_data = [{'item': item} for item in self.in_data]
+        elif not isinstance(self.data[0], dict):
+            self.data = [{'item': item} for item in self.data]
 
         self.insert_tasks_at_position = insert_tasks_at_position
         self.insert_tasks_before_name = insert_tasks_before_name
         self.insert_tasks_after_name = insert_tasks_after_name
 
     def method(self, *args, **kwargs) -> 'ForEachTask':
-        from .base import TaskConfiguration
+        from tasks.base import TaskConfiguration
 
         # Here we use a copy of the original template to prevent mangling caused by repeated or reused variables from
         # the top-level templating of the task's configuration. This is important because the template is rendered
@@ -485,9 +471,8 @@ class ForEachTask(BaseTask):
         task_configurations = [
             TaskConfiguration(task_configuration=self.original_template['template'].copy(),
                               task_chain=self.task_chain,
-                              template_vars=record,         # we use the record for templating the task configuration because it may be used in task names or file paths
-                              in_data=record)               # we use the record as the in_data which is particularly useful for FileTasks
-            for record in self.in_data
+                              template_vars=record)         # we use the record for templating the task configuration because it may be used in task names or file paths
+            for record in self.data
         ]
 
         # Reverse the task configurations so they are inserted in the correct order
@@ -515,9 +500,11 @@ class MongoTask(BaseDataTask):
     """
     The MongoTask class is a subclass of the BaseDataTask class. It represents a task that interacts with a MongoDB database.
     """
+    from ..user_filters import MongoUserFilter
 
-    REQUIRED_CONFIGURATION_KEYS = ['host', 'port', 'database']
     CONNECTION_POOLS = {}
+    REQUIRED_CONFIGURATION_KEYS = ['host', 'port', 'database']
+    USER_FILTER_CLASS = MongoUserFilter
 
     def __init__(self, collection: str = None, result_attribute: str = None, *args, **kwargs):
         """
@@ -536,7 +523,7 @@ class MongoTask(BaseDataTask):
 
         if self._db.get('alias'):
             if self._db['alias'] == 'persistent':
-                from caching.persistent import connect
+                from silos.persistent import connect
                 self._connection = connect(database=self._db['database'])
 
             else:
@@ -553,6 +540,23 @@ class MongoTask(BaseDataTask):
 
         except Exception:
             return False
+
+    def apply_user_filters(self) -> 'BaseTask':
+        """
+        Applies user filters to the database configuration.
+        """
+        if self.user_filters.get('accepted') is None:
+            return self
+
+        pipeline = self.arguments.get('pipeline')
+        with MongoUserFilter(pipeline=pipeline, **self.user_filters) as ufc:
+            ufc.apply()
+
+            if pipeline:
+                self.arguments['pipeline'] = ufc.result
+
+            else:
+                self.arguments = ufc.result
 
     def connect(self) -> MongoClient:
         """
@@ -593,7 +597,7 @@ class MongoTask(BaseDataTask):
     def method(self, *args, **kwargs):
         """
         Runs the task. This method will execute the method defined in `self.command` on the database or collection and
-        store the result in the out_data attribute. `self.result_attribute` is used to extract the desired attribute
+        store the result in the result attribute. `self.result_attribute` is used to extract the desired attribute
         from the result, if applicable.
         """
 
@@ -636,7 +640,7 @@ class RedisTask(BaseDataTask):
 
         if self._db.get('alias'):
             if self._db['alias'] == 'ephemeral':
-                from caching.ephemeral import connect
+                from silos.ephemeral import connect
                 self._connection = connect(database=self._db['database'])
 
             else:

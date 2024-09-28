@@ -190,7 +190,7 @@ class HarvestMatch:
 
         return result
 
-    def as_sql_filter(self) -> str:
+    def as_sql_filter(self) -> tuple:
         """
         Converts the matching operation into an SQL WHERE clause condition.
 
@@ -213,32 +213,42 @@ class HarvestMatch:
         # Enclose string values in single quotes and self.operator is not '='
         value = f"'{self.value}'" if isinstance(self.value, str) and self.operator != '=' else self.value
 
+        from uuid import uuid4
+        key_uuid = str(uuid4()).replace('-', '')
+        value_uuid = str(uuid4()).replace('-', '')
+
+        param_key = f'%({key_uuid})s'
+        param_value = f'%({value_uuid})s'
+
         match self.operator:
             case '=':
-                result = f"{self.key} ILIKE '%{value}%'"
+                result = f'{param_key} ILIKE "%{param_value}%"'
 
             case '<=' | '=<':
-                result = f"{self.key} <= {value}"
+                result = f"{param_key} <= {param_value}"
 
             case '>=' | '=>':
-                result = f"{self.key} >= {value}"
+                result = f"{param_key} >= {param_value}"
 
             case '==':
-                result = f"{self.key} = {value}"
+                result = f"{param_key} = {param_value}"
 
             case '!=':
-                result = f"{self.key} != {value}"
+                result = f"{param_key} != {param_value}"
 
             case '<':
-                result = f"{self.key} < {value}"
+                result = f"{param_key} < {param_value}"
 
             case '>':
-                result = f"{self.key} > {value}"
+                result = f"{param_key} > {param_value}"
 
             case _:
                 raise ValueError('No valid matching statement returned')
 
-        return result
+        return result, {
+            key_uuid: self.key,
+            value_uuid: value
+        }
 
     def match(self, record: OrderedDict) -> bool:
         """
@@ -359,27 +369,29 @@ class HarvestMatchSet(list):
 
         return result
 
-    def as_sql_filter(self) -> str:
+    def as_sql_filter(self) -> dict:
         """
         Converts the matching operations of all HarvestMatch instances into SQL WHERE clause conditions.
 
-        Args:
-            use_or (bool): If True, combine match conditions using OR logic. Defaults to False (AND logic).
-
         Returns:
-            str: A string representing the SQL WHERE clause conditions.
+            dict: A dictionary representing the SQL WHERE clause conditions and parameters.
         """
 
-        conditions = []
+        clauses = []
+        parameters = {}
 
         for match in self.matches:
             match_syntax = match.as_sql_filter()
-            conditions.append(match_syntax)
+            clauses.append(match_syntax[0])
+            parameters.update(match_syntax[1])
 
         # Combine conditions with the specified operator
-        result = ' AND '.join(conditions)
+        result = ' AND '.join(clauses)
 
-        return result
+        return {
+            'clauses': result,
+            'parameters': parameters
+        }
 
     def match(self, record: OrderedDict) -> Tuple[List[str], List[str]]:
         """
@@ -406,50 +418,3 @@ class HarvestMatchSet(list):
                 match_false.append(match.final_match_operation)
 
         return match_true, match_false
-
-def build_mongo_matching_syntax(matches: List[List[str]]) -> dict:
-    """
-    Converts matching syntax into a MongoDb filter.
-    """
-
-    # Convert the matches into HarvestMatchSet instances
-    if len(matches) == 1:
-        result = HarvestMatchSet(matches=matches[0]).as_mongo_filter()
-
-    # If there are multiple matches, convert each match into a HarvestMatchSet instance and combine them into a single
-    # MongoDB filter. When combining multiple matches, the matches are combined with an OR operation.
-    else:
-        result = {
-            '$or': [
-                HarvestMatchSet(matches=match).as_mongo_filter()
-                for match in matches
-            ]
-        }
-
-    return result
-
-def build_sql_matching_syntax(matches: List[List[str]]) -> str:
-    """
-    Converts matching syntax into an SQL WHERE clause condition.
-
-    Args:
-        matches (List[List[str]]): A list of lists of matching syntaxes.
-
-    Returns:
-        str: A string representing the SQL WHERE clause condition.
-    """
-
-    # Convert the matches into HarvestMatchSet instances
-    if len(matches) == 1:
-        result = HarvestMatchSet(matches=matches[0]).as_sql_filter()
-
-    # If there are multiple matches, convert each match into a HarvestMatchSet instance and combine them into a single
-    # SQL WHERE clause condition. When combining multiple matches, the matches are combined with an OR operation.
-    else:
-        conditions = [
-            HarvestMatchSet(matches=match).as_sql_filter()
-            for match in matches
-        ]
-        result = ' OR '.join(conditions)
-
-    return result

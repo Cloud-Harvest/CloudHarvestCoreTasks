@@ -58,7 +58,7 @@ workers that can be used to run tasks concurrently.
 ## Code Examples
 
 ```python
-from CloudHarvestCoreTasks.base import BaseTaskChain
+from tasks.base import BaseTaskChain
 
 template = {
     'name': 'My Task Chain',
@@ -75,7 +75,6 @@ template = {
         }
     ]
 }
-
 
 # Example usage
 task_chain = BaseTaskChain(template=template)

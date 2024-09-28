@@ -13,6 +13,10 @@
   - Expanded tests
 - Added some more documentation
 - Improved the efficiency of `HarvestMatchSet` and `HarvestMatch` by instantiating them once, then applying the `match()` method to the data
+- Removed the `in_data` and `out_data`
+  - Results are now stored in the `result` attribute
+  - Previously stored TaskChain data is now accessible using the `var.variable_name` format which is applied at the time of instantiation
+- Created [user_filters](CloudHarvestCoreTasks/user_filters) which are used to filter data based on user input
 
 # 0.3.5
 - [#9](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/9) c

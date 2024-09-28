@@ -1,6 +1,10 @@
 # Templating
 This module provides a templating engine for the CloudHarvest framework. The templating engine is based on the Jinja2 library.
 
+# Table of Contents
+1. [filters.py](#filterspy)
+2. [functions.py](#functionspy)
+
 # filters.py
 This module contains custom filters for the Jinja2 templating engine. The filters are used to format data in the templates.
 

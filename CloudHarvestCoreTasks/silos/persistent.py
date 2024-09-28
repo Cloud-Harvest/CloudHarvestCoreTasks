@@ -70,7 +70,7 @@ def is_connected(database: str) -> bool:
         return False
 
 
-# Persistent Cache data record operations and parameters
+# Persistent Silo data record operations and parameters
 _flat_record_separator = '.'
 _required_meta_fields = (
     'Platform',                    # The Platform (ie AWS, Azure, Google)

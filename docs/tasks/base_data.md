@@ -36,8 +36,10 @@ The `db` attribute is a dictionary representing database connection parameters. 
 | method()       | A method overwritten by subclasses used to perform some action.                                                                   | 
 
 # Code Example
+
 ```python 
-from base import BaseDataTask
+from tasks.base import BaseDataTask
+
 
 class CustomDataProvider(BaseDataTask):
     def __init__(self, *args, **kwargs):
@@ -46,13 +48,13 @@ class CustomDataProvider(BaseDataTask):
     @property
     def is_connected(self) -> bool:
         pass
-    
+
     def connect(self):
         pass
-    
+
     def disconnect(self):
         pass
-        
+
     def method(self):
         pass
 ```

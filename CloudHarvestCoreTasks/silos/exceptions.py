@@ -2,7 +2,7 @@
 This module contains the exceptions that are raised by the silos module.
 """
 
-from base import BaseHarvestException
+from tasks.base import BaseHarvestException
 
 
 class BaseCacheException(BaseHarvestException):
@@ -16,7 +16,7 @@ class BaseCacheException(BaseHarvestException):
 
 class EphemerisCacheException(BaseCacheException):
     """
-    This exception is raised when an error occurs in the ephemeral cache.
+    This exception is raised when an error occurs in the Ephemeral Silo.
     """
 
     def __init__(self, *args, **kwargs):

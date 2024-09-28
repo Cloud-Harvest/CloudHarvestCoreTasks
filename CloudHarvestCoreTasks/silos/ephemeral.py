@@ -1,5 +1,5 @@
 """
-The ephemeral cache is a cache that is stored in a non-persistent storage. For Harvest, this means the Redis backend.
+The Ephemeral Silo is a cache that is stored in a non-persistent storage. For Harvest, this means the Redis backend.
 We call this a cache because we expect the data to be invalidated at some point in the future (ie job queues, tokens,
 and agent/api node heartbeats).
 
@@ -7,10 +7,10 @@ We accept that this cache is ephemeral and that data stored in it may be lost at
 cache, the system should be able to recover gracefully and continue to operate as expected once the cache layer as
 been restarted.
 
-At the time of writing, we have no plans to cache query results from our persistent storage in the ephemeral cache. This
+At the time of writing, we have no plans to cache query results from our persistent storage in the Ephemeral Silo. This
 is because we anticipate a combination of query tuning, indexing, configuration, and caching at the persistent layer to
 be sufficient for our needs. We may revisit this decision in the future if we find that we need to cache query results
-in the ephemeral cache.
+in the Ephemeral Silo.
 """
 from logging import getLogger
 from redis import StrictRedis, ConnectionPool

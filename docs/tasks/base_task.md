@@ -86,13 +86,16 @@ A condition that determines if the task should run. The condition is a string th
 | `terminate()`         | Terminates the task.                                                               |
 
 ## Code Example
+
 ```python
-from CloudHarvestCoreTasks.base import BaseTask
+from tasks.base import BaseTask
+
 
 class CustomTask(BaseTask):
     def method(self):
         # Custom task logic here
         self.output = "Task completed"
+
 
 # Example usage
 custom_task = CustomTask(name="Example Task")

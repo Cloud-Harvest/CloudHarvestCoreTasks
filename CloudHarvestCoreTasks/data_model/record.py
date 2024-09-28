@@ -143,6 +143,16 @@ class HarvestRecord(OrderedDict):
 
         return self
 
+    def clear_matches(self) -> 'HarvestRecord':
+        """
+        Removes all matches from the record.
+        """
+
+        self.non_matching_expressions.clear()
+        self.matching_expressions.clear()
+
+        return self
+
     def copy_key(self, source_key: str, target_key: str) -> 'HarvestRecord':
         """
         Copy the value of a key to a new key.
@@ -272,6 +282,20 @@ class HarvestRecord(OrderedDict):
         """
 
         self.pop(key)
+
+        return self
+
+    def remove_keys_not_in(self, keys: List[str]) -> 'HarvestRecord':
+        """
+        Remove keys that are not in a list.
+
+        :param keys: the list of keys to keep
+        """
+
+        [
+            self.pop(key) for key in list(self.keys())
+            if key not in keys
+        ]
 
         return self
 

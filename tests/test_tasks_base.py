@@ -1,7 +1,4 @@
 import unittest
-from unittest.mock import patch
-from ..CloudHarvestCoreTasks.tasks import *
-from ..CloudHarvestCoreTasks.__register__ import *
 from CloudHarvestCorePluginManager.registry import Registry
 
 
@@ -100,7 +97,7 @@ class TestBaseTask(BaseTestCase):
 
     def test_retry(self):
         # Test the retry method
-        from ..CloudHarvestCoreTasks.base import BaseTaskChain
+        from tasks.base import BaseTaskChain
         task_chain = BaseTaskChain(template={
             'name': 'test_chain',
             'description': 'This is a task_chain.',
@@ -245,8 +242,6 @@ class TestBaseTaskChain(BaseTestCase):
         """
         Test the run method of the BaseTaskChain class.
         """
-
-        from asyncio import create_task
 
         # Run the task chain
         self.base_task_chain.run()
@@ -456,7 +451,7 @@ class TestBaseTaskPool(BaseTestCase):
                 }
             ]
         }
-        from ..CloudHarvestCoreTasks.base import BaseTaskChain
+        from tasks.base import BaseTaskChain
         self.base_task_chain = BaseTaskChain(template=template)
 
     def test_pooling(self):

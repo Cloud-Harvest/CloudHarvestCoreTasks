@@ -2,8 +2,7 @@ from datetime import datetime
 import os
 import tempfile
 import unittest
-from ..CloudHarvestCoreTasks.__register__ import *
-from ..CloudHarvestCoreTasks.base import TaskStatusCodes
+from tasks.base import TaskStatusCodes
 from ..CloudHarvestCoreTasks.data_model.recordset import HarvestRecordSet
 
 
@@ -18,7 +17,7 @@ class TestDummyTask(unittest.TestCase):
         self.assertEqual(result, self.dummy_task)
 
         # Check that the data and meta attributes are set correctly
-        self.assertEqual(self.dummy_task.out_data, [{'dummy': 'data'}])
+        self.assertEqual(self.dummy_task.result, [{'dummy': 'data'}])
         self.assertEqual(self.dummy_task.meta, {'info': 'this is dummy metadata'})
 
 
@@ -32,11 +31,10 @@ class TestErrorTask(unittest.TestCase):
 
 class TestFileTask(unittest.TestCase):
     def setUp(self):
-        from ..CloudHarvestCoreTasks.base import BaseTaskChain
+        from tasks.base import BaseTaskChain
         self.temp_files = []
         self.test_task_chain = BaseTaskChain(name='test_task_chain', description='This is a test task chain', template={'name': 'test', 'tasks': []})
 
-        from collections import OrderedDict
         self.test_data = {
             'config': {'section': {'key': 'value'}},
             'csv': [{'key1': 'value1', 'key2': 'value2'}, {'key1': 'value3', 'key2': 'value4'}],
@@ -76,7 +74,7 @@ class TestFileTask(unittest.TestCase):
         path = self.create_temp_file('[section]\nkey = value\n')
         task = FileTask(name="test", path=path, result_as='result', with_vars=['data'], mode='read', format='config')
         task.method()
-        self.assertEqual(task.out_data, {'section': {'key': 'value'}})
+        self.assertEqual(task.result, {'section': {'key': 'value'}})
 
     def test_write_csv(self):
         path = self.create_temp_file()
@@ -102,7 +100,7 @@ class TestFileTask(unittest.TestCase):
         path = self.create_temp_file('key1,key2\nvalue1,value2\nvalue3,value4\n')
         task = FileTask(name="test", path=path, result_as='result', with_vars=['data'], mode='read', format='csv')
         task.method()
-        self.assertEqual(task.out_data, self.test_data['csv'])
+        self.assertEqual(task.result, self.test_data['csv'])
 
     def test_write_json(self):
         path = self.create_temp_file()
@@ -118,7 +116,7 @@ class TestFileTask(unittest.TestCase):
         path = self.create_temp_file('{"key1": "value1", "key2": "value2"}')
         task = FileTask(name="test", path=path, result_as='result', with_vars=['data'], mode='read', format='json')
         task.method()
-        self.assertEqual(task.out_data, self.test_data['json'])
+        self.assertEqual(task.result, self.test_data['json'])
 
     def test_write_yaml(self):
         path = self.create_temp_file()
@@ -145,7 +143,7 @@ class TestFileTask(unittest.TestCase):
                         format='yaml')
         task.method()
         [
-            self.assertEqual(task.out_data[key], self.test_data['yaml'][key])
+            self.assertEqual(task.result[key], self.test_data['yaml'][key])
             for key in self.test_data['yaml'].keys()
         ]
 
@@ -162,7 +160,7 @@ class TestFileTask(unittest.TestCase):
         path = self.create_temp_file('This is raw data')
         task = FileTask(name="test", path=path, result_as='result', with_vars=['data'], mode='read', format='raw')
         task.method()
-        self.assertEqual(task.out_data, 'This is raw data')
+        self.assertEqual(task.result, 'This is raw data')
 
 
 class TestForEachTask(unittest.TestCase):
@@ -225,7 +223,6 @@ class TestForEachTask(unittest.TestCase):
 class TestHarvestRecordSetTask(unittest.TestCase):
     def setUp(self):
         # import required to register class
-        from ..CloudHarvestCoreTasks.tasks import HarvestRecordSetTask
 
         harvest_recordset_task_template = {
             "name": "test_chain",
@@ -277,7 +274,7 @@ class TestHarvestRecordSetTask(unittest.TestCase):
 
         self.recordset = HarvestRecordSet(data=test_data)
 
-        from ..CloudHarvestCoreTasks.base import BaseTaskChain
+        from tasks.base import BaseTaskChain
         self.chain = BaseTaskChain(template=harvest_recordset_task_template)
         self.chain.variables["test_recordset"] = self.recordset
 
@@ -302,7 +299,7 @@ class TestMongoTask(unittest.TestCase):
 
     def test_init(self):
         from ..CloudHarvestCoreTasks.tasks import MongoTask
-        from ..CloudHarvestCoreTasks.base import  BaseTaskException
+        from tasks.base import  BaseTaskException
 
         # Assert that the task is not created if the database parameters are missing
         self.assertRaises(BaseTaskException,
@@ -333,7 +330,7 @@ class TestRedisTask(unittest.TestCase):
 
     def test_init(self):
         from ..CloudHarvestCoreTasks.tasks import RedisTask
-        from ..CloudHarvestCoreTasks.base import  BaseTaskException
+        from tasks.base import  BaseTaskException
 
         # Assert that the task is not created if the database parameters are missing
         self.assertRaises(BaseTaskException,
@@ -403,9 +400,9 @@ class TestPruneTask(unittest.TestCase):
         # run the task chain
         self.task_chain.run()
 
-        # Check that the out_data attribute of each task in the task chain is None
-        self.assertGreaterEqual(self.task_chain[-1].out_data.get('total_bytes_pruned'), 0)
-        [self.assertIsNone(task.out_data) for task in self.task_chain[0:-1]]
+        # Check that the result attribute of each task in the task chain is None
+        self.assertGreaterEqual(self.task_chain[-1].result.get('total_bytes_pruned'), 0)
+        [self.assertIsNone(task.result) for task in self.task_chain[0:-1]]
 
         # Check that the task chain did not result in error
         self.assertIsNone(self.task_chain.result.get('error'))
@@ -427,9 +424,9 @@ class TestPruneTask(unittest.TestCase):
         self.task_chain.run()
 
         # Check that the data attribute of each task in the task before the PruneTask is None
-        self.assertGreater(self.task_chain[3].out_data.get('total_bytes_pruned'), 0)
-        [self.assertIsNone(task.out_data) for task in self.task_chain[0:3]]
-        self.assertEqual(self.task_chain[4].out_data, [{'dummy': 'data'}])
+        self.assertGreater(self.task_chain[3].result.get('total_bytes_pruned'), 0)
+        [self.assertIsNone(task.result) for task in self.task_chain[0:3]]
+        self.assertEqual(self.task_chain[4].result, [{'dummy': 'data'}])
         self.assertEqual(self.task_chain[4].meta, {'info': 'this is dummy metadata'})
 
         # Check that the task chain did not result in error

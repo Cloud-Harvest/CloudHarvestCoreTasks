@@ -213,14 +213,33 @@ class HarvestRecordSet(List[HarvestRecord]):
 
         return self
 
-    def sort(self, *keys: str) -> 'HarvestRecordSet':
+    def sort_records(self, *keys: str) -> 'HarvestRecordSet':
         """
         Sort the records in the record set by one or more keys.
 
         :param keys: The keys to sort by
         """
 
-        super().sort(key=lambda record: [record[key] for key in keys])
+        sorted_keys = {}
+        for s in keys:
+            if ':' in s:
+                key, value = s.split(':')
+                key = key.strip()
+
+                if value.lower() == 'desc':
+                    order = -1
+                else:
+                    order = 1
+            else:
+                key = s
+                order = 1
+
+            sorted_keys[key] = order
+
+        super().sort(key=lambda record: [
+            (record[key] if sorted_keys[key] == 1 else -record[key])
+            for key in sorted_keys
+        ])
 
         return self
 

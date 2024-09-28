@@ -1,5 +1,5 @@
 from CloudHarvestCorePluginManager.decorators import register_definition
-from .base import BaseTaskChain
+from tasks.base import BaseTaskChain
 
 
 @register_definition(name='report')

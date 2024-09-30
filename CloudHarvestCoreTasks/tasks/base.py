@@ -97,7 +97,6 @@ class BaseTask:
 
         Attributes:
             name (str): The name of the task.
-            apply_user_filters (bool, optional): A boolean indicating whether user filters should be applied to the data. Defaults to False.
             blocking (bool): A boolean indicating whether the task is blocking or not. If True, the task will block the task chain until it completes.
             description (str): A brief description of what the task does.
             on (dict): A dictionary of task configurations for the task to run when it completes, errors, is skipped, or starts.
@@ -110,6 +109,16 @@ class BaseTask:
             retry (dict): A dictionary of retry configurations for the task.
             result_as (str): The name of the variable to store the result of this task in the task chain's variables.
             user_filters (dict): A dictionary of user filters to apply to the data.
+                >>> user_filters = {
+                >>>     'accepted': '*',                        # Regex pattern to match the filters allowed in this Task.
+                >>>     'add_keys': ['new_key'],                # Keys to add to the data.
+                >>>     'count': True,                          # Returns a count of data instead of the data itself.
+                >>>     'exclude_keys': ['key_to_exclude'],     # Keys to exclude from the data.
+                >>>     'headers': ['header1', 'header2'],      # Headers to include in the data. Also sets the header and sort order unless 'sort' is also provided.
+                >>>     'limit': 10,                            # The maximum number of records to return.
+                >>>     'matches': [['keyA=valueA', 'keyB=valueB'], 'keyA=valueC'],     # A list of matches to apply to the data.
+                >>>     'sort': ['keyA', 'keyB:desc']           # The keys to sort the data by.
+                >>> }
             when (str): A string representing a conditional argument using Jinja2 templating. If provided, the task
                 will only run if the condition evaluates to True.
         """

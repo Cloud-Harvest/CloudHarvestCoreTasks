@@ -1,8 +1,11 @@
 """
 factories.py - This module contains functions for creating task chains from files or dictionaries.
 """
+from logging import getLogger
+from typing import Any
+from tasks.base import BaseTaskChain, BaseTask
 
-from tasks.base import BaseTaskChain
+logger = getLogger('harvest')
 
 
 def task_chain_from_file(file_path: str) -> BaseTaskChain:
@@ -84,3 +87,87 @@ def task_chain_from_dict(task_chain_registered_class_name: str,
     result = chain_class(template=task_chain, extra_vars=extra_vars, **kwargs)
 
     return result
+
+
+def task_from_dict(task_configuration: dict or BaseTask,
+                   task_chain: 'BaseTaskChain' = None,
+                   template_vars: Any = None) -> BaseTask:
+    """
+    Instantiates a task based on the task configuration.
+
+    This method converts a task configuration into an instantiated class. If a task chain is
+    provided, it retrieves the variables from the task chain and uses them to template the task configuration.
+    The templated configuration is then used to instantiate the task.
+
+    Returns:
+        BaseTask: The instantiated task.
+    """
+
+    # If the task configuration is already an instantiated task, return it.
+    if isinstance(task_configuration, BaseTask):
+        return task_configuration
+
+    # If the task configuration is a dictionary, extract the class name and template the configuration.
+    class_name = list(task_configuration.keys())[0]
+
+    from CloudHarvestCorePluginManager import Registry
+    task_class = Registry.find_definition(class_name=class_name, is_subclass_of=BaseTask)[0]
+
+    if isinstance(template_vars, dict):
+        template_vars = template_vars
+
+    elif isinstance(template_vars, (list, tuple)):
+        template_vars = [{'i': value} for value in template_vars]
+
+    else:
+        logger.warning(f'Unsupported template_vars type: {type(template_vars)}. Must be a dict, list, or tuple.')
+
+        template_vars = {}
+
+    from .templating import template_object
+
+    # Template the task configuration with the variables from the task chain
+    templated_task_configuration = template_object(template=task_configuration, variables=template_vars)
+
+    # If this template is part of a TaskChain and there are task variables, add those object to the template
+    # based on the object pointer format `var.variable_name`. This is only necessary when these conditions are met
+    # because no variables can be added to a task when it is not part of the chain *and* there is no point in
+    # flattening the template if there are no variables to add.
+    if task_chain is not None and task_chain.variables:
+        def replace_vars_in_dict(nested_dict: dict, task_chain: BaseTaskChain):
+            """
+            Walks through a nested dictionary and replaces strings starting with 'var.' with the corresponding value from task_chain.variables.
+
+            Args:
+                nested_dict (dict): The nested dictionary to process.
+                task_chain (BaseTaskChain): The task chain containing the variables.
+
+            Returns:
+                dict: The processed dictionary with replaced values.
+            """
+
+            def replace_vars(value):
+                """
+                Recursively replaces 'var.' strings with the corresponding value from task_chain.variables.
+                """
+
+                if isinstance(value, str) and value.startswith('var.'):
+                    return task_chain.variables.get(value[4:], value)
+                elif isinstance(value, dict):
+                    return {k: replace_vars(v) for k, v in value.items()}
+                elif isinstance(value, list):
+                    return [replace_vars(item) for item in value]
+                else:
+                    return value
+
+            return replace_vars(nested_dict)
+
+        templated_task_configuration = replace_vars_in_dict(templated_task_configuration, task_chain)
+
+    # Instantiate the task with the templated configuration and return it
+    class_configuration = templated_task_configuration.get(class_name) or {}
+    instantiated_class = task_class(task_chain=task_chain, **class_configuration)
+
+    instantiated_class.original_template = task_configuration[class_name]
+
+    return instantiated_class

@@ -11,8 +11,8 @@ class ReportTaskChain(BaseTaskChain):
 
     Attributes
     ----------
-    tasks : list
-        The list of tasks to be executed in this task chain. Each task is an instance of a subclass of the BaseTask class.
+    headers: list
+        A list of headers to be used in the report.
 
     Methods
     -------

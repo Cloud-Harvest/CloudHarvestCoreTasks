@@ -45,7 +45,7 @@ class DummyTask(BaseTask):
         Returns:
             DummyTask: The current instance of the DummyTask class.
         """
-        self.out_data = [{'dummy': 'data'}]
+        self.result = [{'dummy': 'data'}]
         self.meta = {'info': 'this is dummy metadata'}
 
         return self
@@ -186,14 +186,14 @@ class FileTask(BaseTask):
                 # If desired_keys is specified, filter the result to just those keys
                 if self.desired_keys:
                     if isinstance(result, dict):
-                        self.out_data = {k: v for k, v in result.items() if k in self.desired_keys}
+                        self.result = {k: v for k, v in result.items() if k in self.desired_keys}
                     
                     elif isinstance(result, list):
-                        self.out_data = [{k: v for k, v in record.items() if k in self.desired_keys} for record in result]
+                        self.result = [{k: v for k, v in record.items() if k in self.desired_keys} for record in result]
                 
                 # Return the entire result
                 else:
-                    self.out_data = result
+                    self.result = result
 
             # Write operations
             else:
@@ -212,7 +212,7 @@ class FileTask(BaseTask):
 
                     # If the user has provided a template for the output, apply it
                     if self.template:
-                        from templating.functions import template_object
+                        from tasks.templating import template_object
                         _data = template_object(template=self.template, variables=_data)
 
                     # If no template is provided, use _data as provided
@@ -286,7 +286,7 @@ class HarvestRecordSetTask(BaseTask):
     The HarvestRecordSetTask class is a subclass of the BaseTask class. It represents a task that operates on a record set.
 
     Attributes:
-        recordset_name (HarvestRecordSet): The name of the record set this task operates on.
+        data (Any): The record set to operate on.
         stages: A list of dictionaries containing the function name and arguments to be applied to the recordset.
         >>> stages = [
         >>>     {
@@ -314,7 +314,7 @@ class HarvestRecordSetTask(BaseTask):
         """
         super().__init__(*args, **kwargs)
 
-        from ..data_model import HarvestRecordSet
+        from ..data_model.recordset import HarvestRecordSet
         self.data = data if isinstance(data, HarvestRecordSet) else HarvestRecordSet(data=data)
         self.stages = stages
         self.stage_position = 0
@@ -333,8 +333,7 @@ class HarvestRecordSetTask(BaseTask):
             self: Returns the instance of the HarvestRecordSetTask.
         """
 
-        from ..data_model import HarvestRecordSet, HarvestRecord
-
+        from ..data_model.recordset import HarvestRecordSet, HarvestRecord
         for stage in self.stages:
             # Record the stage_position of stages completed
             self.stage_position += 1
@@ -400,7 +399,7 @@ class PruneTask(BaseTask):
             total_bytes_pruned += getsizeof(self.task_chain.variables)
             self.task_chain.variables.clear()
 
-        self.out_data = {
+        self.result = {
             'total_bytes_pruned': total_bytes_pruned
         }
 
@@ -460,18 +459,17 @@ class ForEachTask(BaseTask):
         self.insert_tasks_after_name = insert_tasks_after_name
 
     def method(self, *args, **kwargs) -> 'ForEachTask':
-        from tasks.base import TaskConfiguration
-
         # Here we use a copy of the original template to prevent mangling caused by repeated or reused variables from
         # the top-level templating of the task's configuration. This is important because the template is rendered
         # multiple times with different variables. Although ChainableUndefined could be used to prevent writing missing
         # variables as empty string, it still would not prevent the mangling of the original template by reused
         # variable names.
 
+        from .factories import task_from_dict
         task_configurations = [
-            TaskConfiguration(task_configuration=self.original_template['template'].copy(),
-                              task_chain=self.task_chain,
-                              template_vars=record)         # we use the record for templating the task configuration because it may be used in task names or file paths
+            task_from_dict(task_configuration=self.original_template['template'].copy(),
+                           task_chain=self.task_chain,
+                           template_vars=record)         # we use the record for templating the task configuration because it may be used in task names or file paths
             for record in self.data
         ]
 
@@ -500,11 +498,12 @@ class MongoTask(BaseDataTask):
     """
     The MongoTask class is a subclass of the BaseDataTask class. It represents a task that interacts with a MongoDB database.
     """
-    from ..user_filters import MongoUserFilter
+    from user_filters import MongoUserFilter
 
     CONNECTION_POOLS = {}
     REQUIRED_CONFIGURATION_KEYS = ['host', 'port', 'database']
     USER_FILTER_CLASS = MongoUserFilter
+    USER_FILTER_STAGE = 'start'
 
     def __init__(self, collection: str = None, result_attribute: str = None, *args, **kwargs):
         """
@@ -620,7 +619,7 @@ class MongoTask(BaseDataTask):
             result = getattr(result, self.result_attribute)
 
         # Record the result
-        self.out_data = result
+        self.result = result
 
         return self
 
@@ -683,7 +682,7 @@ class RedisTask(BaseDataTask):
         if self.invalidate_after:
             self._connection.expire(self._db['key'], int(self.invalidate_after))
 
-        self.out_data = result
+        self.result = result
 
         return self
 

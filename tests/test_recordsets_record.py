@@ -1,5 +1,5 @@
 import unittest
-from ..CloudHarvestCoreTasks.data_model import record
+from ..CloudHarvestCoreTasks.data_model import HarvestRecord
 
 
 class TestHarvestRecord(unittest.TestCase):
@@ -11,7 +11,7 @@ class TestHarvestRecord(unittest.TestCase):
         """
         Set up a HarvestRecord object for use in tests
         """
-        self.record = record.HarvestRecord(key1='value1', key2='value2')
+        self.record = HarvestRecord(key1='value1', key2='value2')
 
     def test_add_freshness(self):
         """
@@ -43,7 +43,7 @@ class TestHarvestRecord(unittest.TestCase):
 
     def test_add_key_from_keys(self):
         # Create a HarvestRecord instance
-        r = record.HarvestRecord()
+        r = HarvestRecord()
 
         # Add some keys to the record
         r['key1'] = 'Hello'
@@ -51,9 +51,7 @@ class TestHarvestRecord(unittest.TestCase):
 
         # Call the add_key_from_keys method
         r.add_key_from_keys(new_key='greeting',
-                            sequence=[{'key': 'key1'}, {'key': 'key2'}, 'It is me!'],
-                            delimiter=' ',
-                            abort_on_none=False)
+                            sequence=[{'key': 'key1'}, {'key': 'key2'}, 'It is me!'])
 
         # Assert that the new key has been added with the expected value
         self.assertEqual(r['greeting'], 'Hello World It is me!')
@@ -129,7 +127,7 @@ class TestHarvestRecord(unittest.TestCase):
         """
         Test the flatten method
         """
-        r = record.HarvestRecord()
+        r = HarvestRecord()
 
         r['key1'] = {'key2': {'key3': 'value'}}
         r.flatten()
@@ -151,13 +149,6 @@ class TestHarvestRecord(unittest.TestCase):
         self.record.key_value_list_to_dict('KV')
         self.assertEqual(self.record['KV'], {'name': 'value'})
 
-    def test_match(self):
-        """
-        Test the match method
-        """
-        self.assertTrue(self.record.match('key1=value1'))
-        self.assertFalse(self.record.match('key1=value2'))
-
     def test_remove_key(self):
         """
         Test the remove_key method
@@ -177,7 +168,6 @@ class TestHarvestRecord(unittest.TestCase):
         """
         Test the reset_matches method
         """
-        self.record.match('key1=value1')
         self.record.reset_matches()
         self.assertEqual(self.record.matching_expressions, [])
         self.assertEqual(self.record.non_matching_expressions, [])
@@ -206,7 +196,7 @@ class TestHarvestRecord(unittest.TestCase):
         Test the unflatten method
         """
 
-        r = record.HarvestRecord()
+        r = HarvestRecord()
 
         r['key1.key2.key3'] = 'value'
         r.is_flat = True

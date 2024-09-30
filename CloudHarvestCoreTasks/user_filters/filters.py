@@ -252,9 +252,9 @@ class SqlUserFilters(BaseUserFilter):
         parameters = {}
 
         for match in matches:
-            clause = HarvestMatchSet(matches=match).as_sql_filter()
-            clauses.append(clause['clauses'])
-            parameters.update(clause['parameters'])
+            clause, parameters = HarvestMatchSet(matches=match).as_sql_filter()
+            clauses.append(clause)
+            parameters.update(parameters)
 
         # Combine the clauses
         clauses = ' OR '.join(f'({clauses})')

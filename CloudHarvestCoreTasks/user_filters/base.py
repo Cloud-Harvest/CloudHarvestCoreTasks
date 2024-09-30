@@ -3,7 +3,7 @@ This module contains the BaseUserFilter class which is used to define the struct
 typically provided by a user via a client, such as the CloudHarvestCLI, but could be supplied directly by a developer
 via Python or a Task configuration file.
 """
-from typing import List, Literal
+from typing import List
 
 
 class BaseUserFilter:

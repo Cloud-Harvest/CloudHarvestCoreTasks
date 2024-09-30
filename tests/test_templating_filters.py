@@ -1,11 +1,11 @@
 import unittest
-from datetime import datetime, timedelta, timezone
-from ..CloudHarvestCoreTasks.templating import filters
+from datetime import datetime, timezone
+from ..CloudHarvestCoreTasks.tasks import templating
 
 
 class TestFilters(unittest.TestCase):
     def test_list_filters(self):
-        filter_methods = filters.list_filters()
+        filter_methods = templating.list_filters()
         self.assertIsInstance(filter_methods, dict)
         self.assertIn('datetime_since', filter_methods)
         self.assertIn('datetime_until', filter_methods)
@@ -14,26 +14,26 @@ class TestFilters(unittest.TestCase):
     def test_parse_datetime(self):
         date_str = '2022-01-01T00:00:00'
         date_obj = datetime(2022, 1, 1, tzinfo=timezone.utc)
-        self.assertEqual(filters.parse_datetime(date_str), date_obj)
-        self.assertEqual(filters.parse_datetime(date_obj), date_obj)
-        self.assertIsNone(filters.parse_datetime('invalid date'))
+        self.assertEqual(templating.parse_datetime(date_str), date_obj)
+        self.assertEqual(templating.parse_datetime(date_obj), date_obj)
+        self.assertIsNone(templating.parse_datetime('invalid date'))
 
     def test_filter_datetime_since(self):
         reference_date = datetime(2022, 1, 1, tzinfo=timezone.utc)
         expected_date = datetime(2021, 12, 31, tzinfo=timezone.utc)
-        self.assertEqual(filters.filter_datetime_since(reference_date, days=1), expected_date)
-        self.assertEqual(filters.filter_datetime_since(reference_date.isoformat(), days=1), expected_date)
-        self.assertEqual(filters.filter_datetime_since(reference_date, result_as_string=True, days=1), expected_date.isoformat())
+        self.assertEqual(templating.filter_datetime_since(reference_date, days=1), expected_date)
+        self.assertEqual(templating.filter_datetime_since(reference_date.isoformat(), days=1), expected_date)
+        self.assertEqual(templating.filter_datetime_since(reference_date, result_as_string=True, days=1), expected_date.isoformat())
 
     def test_filter_datetime_until(self):
         reference_date = datetime(2022, 1, 1, tzinfo=timezone.utc)
         expected_date = datetime(2022, 1, 2, tzinfo=timezone.utc)
-        self.assertEqual(filters.filter_datetime_until(reference_date, days=1), expected_date)
-        self.assertEqual(filters.filter_datetime_until(reference_date.isoformat(), days=1), expected_date)
-        self.assertEqual(filters.filter_datetime_until(reference_date, result_as_string=True, days=1), expected_date.isoformat())
+        self.assertEqual(templating.filter_datetime_until(reference_date, days=1), expected_date)
+        self.assertEqual(templating.filter_datetime_until(reference_date.isoformat(), days=1), expected_date)
+        self.assertEqual(templating.filter_datetime_until(reference_date, result_as_string=True, days=1), expected_date.isoformat())
 
     def test_filter_datetime_now(self):
-        from ..CloudHarvestCoreTasks.templating.filters import filter_datetime_now
+        from ..CloudHarvestCoreTasks.tasks.templating import filter_datetime_now
 
         # Test that the function returns a timezone aware datetime object by default
         self.assertIsInstance(filter_datetime_now(), datetime)

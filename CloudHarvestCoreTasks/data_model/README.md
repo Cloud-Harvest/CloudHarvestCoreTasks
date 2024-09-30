@@ -32,7 +32,6 @@ The CDM is responsible for converting parameters into data manipulation instruct
     - [split_key](#split_key)
     - [substring](#substring)
     - [unflatten](#unflatten)
-- [License](#license)
 
 # Usage
 

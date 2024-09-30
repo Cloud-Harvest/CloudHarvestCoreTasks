@@ -14,24 +14,6 @@ class TestHarvestRecordSet(unittest.TestCase):
         self.recordset.add(data=[{'index': 5, 'value': 'value_5'}])
         self.assertEqual(len(self.recordset), 6)
 
-    def test_add_match(self):
-        self.recordset.add_match(syntax='value==value_1')
-        self.assertEqual(self.recordset[1].is_matched_record, True)
-
-    def test_clear_matches(self):
-        self.recordset.add_match(syntax='value==dummy')
-        self.assertEqual(self.recordset[1].is_matched_record, False)
-
-        self.assertEqual(len(self.recordset[1].matching_expressions), 0)
-        self.assertEqual(len(self.recordset[1].non_matching_expressions), 1)
-
-        self.recordset.clear_matches()
-        self.assertEqual(len(self.recordset[1].matching_expressions), 0)
-        self.assertEqual(len(self.recordset[1].non_matching_expressions), 0)
-
-        # Records with no records in non_matching_expressions are considered matched
-        self.assertEqual(self.recordset[1].is_matched_record, True)
-
     def test_create_index(self):
         # Create a recordset with 10 records, each record has 'index' and 'value' fields
         self.recordset = HarvestRecordSet(data=[{'index': i, 'value': f'value_{i}'} for i in range(10)])
@@ -51,11 +33,6 @@ class TestHarvestRecordSet(unittest.TestCase):
         self.recordset.drop_index('index1')
         self.assertEqual('index1' in self.recordset.indexes, False)
 
-    def test_get_matched_records(self):
-        self.recordset.add_match(syntax='value==value_1')
-        matched_records = self.recordset.get_matched_records()
-        self.assertEqual(len(matched_records), 1)
-
     def test_modify_records(self):
         self.recordset.modify_records('copy_key', {'source_key': 'value', 'target_key': 'value_copy'})
         self.assertEqual(self.recordset[1]['value_copy'], 'value_1')
@@ -72,11 +49,6 @@ class TestHarvestRecordSet(unittest.TestCase):
         self.recordset.add(data=[{'index': 1, 'value': 'value_1'}])
         self.recordset.remove_duplicates()
         self.assertEqual(len(self.recordset), 5)
-
-    def test_remove_unmatched_records(self):
-        self.recordset.add_match(syntax='value==value_1')
-        self.recordset.remove_unmatched_records()
-        self.assertEqual(len(self.recordset), 1)
 
     def test_unwind(self):
         self.recordset.add(data=[{'index': 5, 'value': ['value_5', 'value_6']}])

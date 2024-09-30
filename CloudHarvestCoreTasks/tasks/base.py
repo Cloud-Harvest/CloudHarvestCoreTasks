@@ -21,11 +21,10 @@ Modules:
 """
 
 from CloudHarvestCorePluginManager.decorators import register_definition
-from ..user_filters import HarvestRecordSetUserFilter
 from datetime import datetime, timezone
 from enum import Enum
 from threading import Thread
-from typing import Any, List, Literal
+from typing import List, Literal
 from logging import getLogger
 
 
@@ -62,116 +61,6 @@ class TaskStatusCodes(Enum):
     running = 'running'
     skipped = 'skipped'
     terminating = 'terminating'
-
-
-class TaskConfiguration:
-    """
-    The TaskConfiguration class is responsible for managing the configuration of a task.
-
-    It stores the configuration of a task and provides methods to instantiate the task based on this configuration.
-    If a task chain is provided, it retrieves the variables from the task chain and uses them to template the task configuration.
-
-    Attributes:
-        class_name (str): The name of the task class to instantiate.
-        task_configuration (dict): The configuration for the task.
-        name (str): The name of the task.
-        description (str): A brief description of what the task does.
-        task_chain (BaseTaskChain): The task chain that the task belongs to.
-        task_class (BaseTask): The class of the task to instantiate.
-        instantiated_class (BaseTask): The instantiated task.
-
-    Methods:
-        instantiate() -> BaseTask: Instantiates a task based on the task configuration.
-    """
-
-    def __init__(self,
-                 task_configuration: dict,
-                 task_chain: 'BaseTaskChain' = None,
-                 template_vars: Any = None,
-                 **kwargs):
-        """
-        Initializes a new instance of the TaskConfiguration class.
-
-        Args:
-            task_configuration (dict): The configuration for the task.
-            task_chain (BaseTaskChain, optional): The task chain that the task belongs to. Defaults to None.
-            template_vars (dict, optional): A dictionary of variables to use for templating the task configuration. Defaults to None.
-            with_vars (list[str], optional): A list of variables from the parent task chain that templated tasks will use. Defaults to None.
-        """
-
-        self.class_name = list(task_configuration.keys())[0]
-        self.task_configuration = task_configuration[self.class_name].copy()
-        self.template_vars = template_vars or {}
-
-        self.name = self.task_configuration['name']
-        self.description = self.task_configuration.get('description')
-
-        self.task_chain = task_chain
-
-        self.instantiated_class = None
-
-        # Retrieve the class of the task to instantiate
-        from CloudHarvestCorePluginManager import Registry
-
-        try:
-            self.task_class = Registry.find_definition(class_name=self.class_name, is_subclass_of=BaseTask)[0]
-
-        except IndexError:
-            raise BaseTaskException(f'Could not find a task class named {self.class_name}.')
-
-        else:
-            pass
-
-    def instantiate(self) -> 'BaseTask':
-        """
-        Instantiates a task based on the task configuration.
-
-        This method uses the task configuration stored in the instance to instantiate a task. If a task chain is
-        provided, it retrieves the variables from the task chain and uses them to template the task configuration.
-        The templated configuration is then used to instantiate the task.
-
-        Returns:
-            BaseTask: The instantiated task.
-        """
-
-        if isinstance(self.template_vars, dict):
-            template_vars = self.template_vars
-
-        elif isinstance(self.template_vars, (list, tuple)):
-            template_vars = [{'i': value} for value in self.template_vars]
-
-        else:
-            logger.warning(f'Unsupported template_vars type: {type(self.template_vars)}. Must be a dict, list, or tuple.')
-
-            template_vars = {}
-
-        from ..templating.functions import template_object
-
-        # Template the task configuration with the variables from the task chain
-        templated_task_configuration = template_object(template=self.task_configuration,
-                                                       variables=template_vars)
-
-        # If this template is part of a TaskChain and there are task variables, add those object to the template
-        # based on the object pointer format `var.variable_name`. This is only necessary when these conditions are met
-        # because no variables can be added to a task when it is not part of the chain *and* there is no point in
-        # flattening the template if there are no variables to add.
-        if self.task_chain and self.task_chain.variables:
-            from flatten_json import flatten, unflatten_list
-            flat_template = flatten(templated_task_configuration, separator='.')
-
-            for key, value in flat_template.items():
-                if value.startswith('var.'):
-                    flat_template[key] = self.task_chain.variables.get(value[4:])
-
-            templated_task_configuration = unflatten_list(flat_template)
-
-        # Instantiate the task with the templated configuration and return it
-        self.instantiated_class = self.task_class(task_chain=self.task_chain,
-                                                  **templated_task_configuration)
-
-        self.instantiated_class.original_template = self.task_configuration
-
-        return self.instantiated_class
 
 
 class BaseTask:
@@ -247,7 +136,7 @@ class BaseTask:
         self.end = None
 
         # Defaults < task-chain < user
-        self.user_filters = USER_FILTERS | self.task_chain.user_filters if self.task_chain else {} | user_filters or {}
+        self.user_filters = USER_FILTERS | self.task_chain.user_filters if self.task_chain else {} | (user_filters or {})
 
     @property
     def duration(self) -> float:
@@ -332,7 +221,7 @@ class BaseTask:
 
                     # Check of the `when` condition is met
                     if self.when and self.task_chain:
-                        from ..templating.functions import template_object
+                        from tasks.templating import template_object
                         when_result = True if template_object(template={'result': '{{ ' + self.when + ' }}'}, variables=self.task_chain.variables).get('result') == 'True' else False
 
                     # If `self.when` condition is met or is None, run the method
@@ -410,18 +299,17 @@ class BaseTask:
 
         i = 1
 
+        from .factories import task_from_dict
         for d in (self.on.get(directive) or []):
             # If the task is blocking, insert the new task before the next task in the chain
             if self.blocking:
                 self.task_chain.task_templates.insert(self.task_chain.position + i,
-                                                      TaskConfiguration(task_configuration=d,
-                                                                        task_chain=self.task_chain))
+                                                      task_from_dict(task_configuration=d, task_chain=self.task_chain))
 
             # If the task is not blocking, append the new task to the end of the chain since the position of the current
             # task is not known.
             else:
-                self.task_chain.task_templates.append(TaskConfiguration(task_configuration=d,
-                                                                        task_chain=self.task_chain))
+                self.task_chain.task_templates.append(task_from_dict(task_configuration=d, task_chain=self.task_chain))
 
             i += 1
 
@@ -647,9 +535,9 @@ class BaseTaskChain(List[BaseTask]):
         total() -> int: Returns the total number of tasks in the task chain.
         find_task_position_by_name(task_name: str) -> int: Finds the position of a task in the task chain by its name.
         get_variables_by_names(*variable_names) -> dict: Retrieves variables stored in the 'BaseTaskChain.variables' property based on their names.
-        insert_task_after_name(task_name: str, new_task_configuration: TaskConfiguration) -> 'BaseTaskChain': Inserts a new task into the task chain immediately after a task with a given name.
-        insert_task_before_name(task_name: str, new_task_configuration: TaskConfiguration) -> 'BaseTaskChain': Inserts a new task into the task chain immediately before a task with a given name.
-        insert_task_at_position(position: int, new_task_configuration: TaskConfiguration) -> 'BaseTaskChain': Inserts a new task into the task chain at a specific position.
+        insert_task_after_name(task_name: str, new_task_configuration: dict) -> 'BaseTaskChain': Inserts a new task into the task chain immediately after a task with a given name.
+        insert_task_before_name(task_name: str, new_task_configuration: dict) -> 'BaseTaskChain': Inserts a new task into the task chain immediately before a task with a given name.
+        insert_task_at_position(position: int, new_task_configuration: dict) -> 'BaseTaskChain': Inserts a new task into the task chain at a specific position.
         on_complete() -> 'BaseTaskChain': Method to run when the task chain completes.
         on_error(ex: Exception) -> 'BaseTaskChain': Method to run when the task chain errors.
         run() -> 'BaseTaskChain': Runs the task chain.
@@ -685,12 +573,7 @@ class BaseTaskChain(List[BaseTask]):
         self.cache_progress = cache_progress
 
         self.variables = {}
-        self.task_templates: List[TaskConfiguration] = [
-            TaskConfiguration(task_configuration=t,
-                              task_chain=self,
-                              **kwargs)
-            for t in template.get('', [])
-        ]
+        self.task_templates: List[dict or BaseTask] = template.get('tasks', [])
 
         self.status = TaskStatusCodes.initialized
         self.pool = BaseTaskPool(chain=self,
@@ -702,7 +585,7 @@ class BaseTaskChain(List[BaseTask]):
 
         self.start = None
         self.end = None
-        self.user_filters = USER_FILTERS | user_filters
+        self.user_filters = USER_FILTERS | (user_filters or {})
 
         self._data = None
         self._meta = None
@@ -961,7 +844,7 @@ class BaseTaskChain(List[BaseTask]):
         """
 
         for position, task in enumerate(self.task_templates):
-            if task.name == task_name:
+            if task.get('name') == task_name:
                 return position
 
     def get_variables_by_names(self, *variable_names) -> dict:
@@ -981,7 +864,7 @@ class BaseTaskChain(List[BaseTask]):
             if key in variable_names
         }
 
-    def insert_task_after_name(self, task_name: str, new_task_configuration: TaskConfiguration) -> 'BaseTaskChain':
+    def insert_task_after_name(self, task_name: str, new_task_configuration: dict or BaseTask) -> 'BaseTaskChain':
         """
         This method inserts a new task into the task chain immediately after a task with a given name.
 
@@ -997,7 +880,7 @@ class BaseTaskChain(List[BaseTask]):
 
         return self
 
-    def insert_task_before_name(self, task_name: str, new_task_configuration: TaskConfiguration) -> 'BaseTaskChain':
+    def insert_task_before_name(self, task_name: str, new_task_configuration: dict or BaseTask) -> 'BaseTaskChain':
         """
         This method inserts a new task into the task chain immediately before a task with a given name.
 
@@ -1019,7 +902,7 @@ class BaseTaskChain(List[BaseTask]):
 
         return self
 
-    def insert_task_at_position(self, position: int, new_task_configuration: TaskConfiguration) -> 'BaseTaskChain':
+    def insert_task_at_position(self, position: int, new_task_configuration: dict or BaseTask) -> 'BaseTaskChain':
         """
         This method inserts a new task into the task chain at a specific position.
 
@@ -1102,7 +985,10 @@ class BaseTaskChain(List[BaseTask]):
             while True:
                 # Instantiate the task from the task configuration
                 try:
-                    task = self.task_templates[self.position].instantiate()
+                    from .factories import task_from_dict
+                    task = task_from_dict(task_configuration=self.task_templates[self.position],
+                                          task_chain=self,
+                                          template_vars=self.variables)
 
                 # Break when there are no more tasks to run
                 except IndexError:

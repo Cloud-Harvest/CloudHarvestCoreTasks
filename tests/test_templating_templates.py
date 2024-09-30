@@ -1,5 +1,5 @@
 import unittest
-from ..CloudHarvestCoreTasks.templating.functions import template_object
+from tasks.templating import template_object
 
 
 class TestTemplateObject(unittest.TestCase):

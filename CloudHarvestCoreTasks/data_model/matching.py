@@ -83,7 +83,6 @@ class HarvestMatch:
         value (str): The value to be used in the matching operation.
         operator (str): The operator to be used in the matching operation.
         final_match_operation (str): The final matching operation after processing.
-        is_match (bool): The result of the matching operation.
 
     Methods:
         as_mongo_filter() -> dict:
@@ -190,7 +189,7 @@ class HarvestMatch:
 
         return result
 
-    def as_sql_filter(self) -> tuple:
+    def     as_sql_filter(self) -> tuple:
         """
         Converts the matching operation into an SQL WHERE clause condition.
 
@@ -222,7 +221,7 @@ class HarvestMatch:
 
         match self.operator:
             case '=':
-                result = f'{param_key} ILIKE "%{param_value}%"'
+                result = f"{param_key} ILIKE '%{param_value}%'"
 
             case '<=' | '=<':
                 result = f"{param_key} <= {param_value}"
@@ -369,12 +368,12 @@ class HarvestMatchSet(list):
 
         return result
 
-    def as_sql_filter(self) -> dict:
+    def as_sql_filter(self) -> Tuple[str, dict]:
         """
         Converts the matching operations of all HarvestMatch instances into SQL WHERE clause conditions.
 
         Returns:
-            dict: A dictionary representing the SQL WHERE clause conditions and parameters.
+            tuple: A tuple containing the SQL WHERE clause and the parameters.
         """
 
         clauses = []
@@ -388,10 +387,7 @@ class HarvestMatchSet(list):
         # Combine conditions with the specified operator
         result = ' AND '.join(clauses)
 
-        return {
-            'clauses': result,
-            'parameters': parameters
-        }
+        return result, parameters
 
     def match(self, record: OrderedDict) -> Tuple[List[str], List[str]]:
         """

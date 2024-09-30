@@ -1,3 +1,8 @@
+"""
+This module contains various data manipulation functions for casting, converting, and transforming data. It is intended
+to be used in conjunction with the HarvestRecord and HarvestRecordSet classes to manipulate data in record sets.
+"""
+
 from datetime import datetime
 from typing import Any, Dict, List, Literal
 

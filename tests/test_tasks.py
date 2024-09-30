@@ -2,8 +2,8 @@ from datetime import datetime
 import os
 import tempfile
 import unittest
-from tasks.base import TaskStatusCodes
 from ..CloudHarvestCoreTasks.data_model.recordset import HarvestRecordSet
+from ..CloudHarvestCoreTasks.tasks import *
 
 
 class TestDummyTask(unittest.TestCase):
@@ -27,7 +27,7 @@ class TestErrorTask(unittest.TestCase):
 
     def test_run(self):
         self.error_task.run()
-        self.assertEqual(self.error_task.status, TaskStatusCodes.error)
+        self.assertEqual(str(self.error_task.status), str(TaskStatusCodes.error))
 
 class TestFileTask(unittest.TestCase):
     def setUp(self):
@@ -188,13 +188,13 @@ class TestForEachTask(unittest.TestCase):
                                 'path': '/tmp/{{ name }}.json',
                             }
                         },
-                        'in_data': 'i'
+                        'data': 'var.i'
                     }
                 }
             ]
         }
 
-        from ..CloudHarvestCoreTasks.factories import task_chain_from_dict
+        from ..CloudHarvestCoreTasks.tasks import task_chain_from_dict
         self.task_chain = task_chain_from_dict(task_chain_registered_class_name='chain',
                                                task_chain=task_chain_configuration)
 
@@ -232,7 +232,7 @@ class TestHarvestRecordSetTask(unittest.TestCase):
                     "recordset": {
                         "name": "test recordset task",
                         "description": "This is a test record set",
-                        "in_data": "test_recordset",
+                        "data": "var.test_recordset",
                         "stages": [
                             {
                                 "key_value_list_to_dict": {
@@ -272,15 +272,14 @@ class TestHarvestRecordSetTask(unittest.TestCase):
             }
         ]
 
-        self.recordset = HarvestRecordSet(data=test_data)
-
         from tasks.base import BaseTaskChain
+        self.test_data = test_data
         self.chain = BaseTaskChain(template=harvest_recordset_task_template)
-        self.chain.variables["test_recordset"] = self.recordset
+        self.chain.variables["test_recordset"] = self.test_data
 
     def test_init(self):
-        self.assertEqual(self.chain.variables["test_recordset"], self.recordset)
-        self.assertEqual(self.chain.task_templates[0].name, "test recordset task")
+        self.assertEqual(self.chain.variables["test_recordset"], self.test_data)
+        self.assertEqual(self.chain.task_templates[0]['recordset']['name'], "test recordset task")
 
     def test_method(self):
         self.chain.run()
@@ -393,7 +392,7 @@ class TestPruneTask(unittest.TestCase):
             }
 
     def test_run_prune_all_at_end(self):
-        from ..CloudHarvestCoreTasks.factories import task_chain_from_dict
+        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
         self.task_chain = task_chain_from_dict(task_chain_registered_class_name='report',
                                                task_chain=self.task_configuration)
 
@@ -406,7 +405,7 @@ class TestPruneTask(unittest.TestCase):
 
         # Check that the task chain did not result in error
         self.assertIsNone(self.task_chain.result.get('error'))
-        self.assertEqual(self.task_chain.status, TaskStatusCodes.complete)
+        self.assertEqual(str(self.task_chain.status), str(TaskStatusCodes.complete))
 
     def test_run_prune_all_at_near_end(self):
         self.task_configuration['tasks'].append({
@@ -416,7 +415,7 @@ class TestPruneTask(unittest.TestCase):
             }
         })
 
-        from ..CloudHarvestCoreTasks.factories import task_chain_from_dict
+        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
         self.task_chain = task_chain_from_dict(task_chain_registered_class_name='report',
                                                task_chain=self.task_configuration)
 
@@ -431,7 +430,7 @@ class TestPruneTask(unittest.TestCase):
 
         # Check that the task chain did not result in error
         self.assertIsNone(self.task_chain.result.get('error'))
-        self.assertEqual(self.task_chain.status, TaskStatusCodes.complete)
+        self.assertEqual(str(self.task_chain.status), str(TaskStatusCodes.complete))
 
 
 class TestWaitTask(unittest.TestCase):

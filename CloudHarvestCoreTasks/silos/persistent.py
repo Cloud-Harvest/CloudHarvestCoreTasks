@@ -18,13 +18,13 @@ logger = getLogger('harvest')
 _CLIENTS = {}
 
 
-def connect(database: str, *args, **kwargs) -> MongoClient:
+def connect(database: str = 'harvest', *args, **kwargs) -> MongoClient:
     """
     Connects to the MongoDB database using the provided configuration, returning a MongoClient object. If the client
     already exists, it will return the existing client object.
 
     Args:
-        database (str): The name of the database to connect to.
+        database (str, optional): The name of the database to connect to. Defaults to 'harvest'.
         *args: Additional positional arguments for the MongoClient.
         **kwargs: Additional keyword arguments for the MongoClient.
 
@@ -279,9 +279,11 @@ def get_collection_name(**harvest_metadata) -> str:
         str: The collection name.
     """
 
-    return '.'.join([harvest_metadata['Platform'],
-                     harvest_metadata['Service'],
-                     harvest_metadata['Type']])
+    return '.'.join([
+        str(harvest_metadata['Platform']),
+        str(harvest_metadata['Service']),
+        str(harvest_metadata['Type'])
+    ])
 
 
 def get_unique_filter(record: dict, flat_record: dict) -> dict:

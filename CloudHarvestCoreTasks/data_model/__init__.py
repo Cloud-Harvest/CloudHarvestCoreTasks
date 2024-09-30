@@ -13,6 +13,5 @@ Classes:
     HarvestRecord: A class for handling individual records.
 """
 
-from matching import *
-from recordset import HarvestRecordSet
-from record import HarvestRecord
+from .matching import *
+from .recordset import HarvestRecordSets, HarvestRecordSet, HarvestRecord

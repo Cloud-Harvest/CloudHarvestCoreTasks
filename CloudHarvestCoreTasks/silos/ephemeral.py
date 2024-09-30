@@ -44,9 +44,9 @@ def connect(database: str, *args, **kwargs) -> StrictRedis:
     }
 
     _pool = ConnectionPool(*args, **default_configuration | kwargs)
-    _CLIENTS[database] = _pool
+    _CLIENTS[database] = StrictRedis(connection_pool=_pool)
 
-    return StrictRedis(connection_pool=_CLIENTS[database])
+    return _CLIENTS[database]
 
 def is_connected(database: str) -> bool:
     """

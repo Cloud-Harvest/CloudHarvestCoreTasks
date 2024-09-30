@@ -36,7 +36,6 @@ def connect(database: str = 'harvest', *args, **kwargs) -> MongoClient:
         return _CLIENTS.get(database)
 
     default_configuration = {
-        'database': 'harvest',
         'maxPoolSize': 50,
     }
 

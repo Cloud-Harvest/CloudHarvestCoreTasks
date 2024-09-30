@@ -148,7 +148,7 @@ def start_heartbeat(heartbeat_type: Literal['agent', 'api'], database: str = 'ha
 
     # Create and start the background thread for the heartbeat process
     from threading import Thread
-    thread = Thread(target=_run, args=(client,), name='heartbeat', daemon=True)
+    thread = Thread(target=_run, name='heartbeat', daemon=True)
     thread.start()
 
     return thread

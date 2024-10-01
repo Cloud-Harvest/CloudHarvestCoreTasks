@@ -135,7 +135,7 @@ def start_heartbeat(heartbeat_type: Literal['agent', 'api'], database: str = 'ha
 
                 # Serialize the node_info dictionary to a JSON string
                 from json import dumps
-                client.hset(key, value=dumps(node_info, default=str))
+                client.set(key, value=dumps(node_info, default=str))
 
                 # Set the expiration time for the key
                 client.expire(key, int(2 * check_rate))

@@ -627,6 +627,13 @@ class MongoTask(BaseDataTask):
 class RedisTask(BaseDataTask):
     """
     The RedisTask class is a subclass of the BaseDataTask class. It represents a task that interacts with a Redis database.
+
+    When `BaseDataTask.arguments` contains a `value` key, the value will be serialized to JSON before being stored in the database.
+
+    Similarly, results are deserialized from JSON to Python objects if they are JSON strings.
+
+    Attributes:
+        invalidate_after (int, optional): The time in seconds after which the key will be invalidated.
     """
 
     REQUIRED_CONFIGURATION_KEYS = ['host', 'port', 'db']
@@ -677,7 +684,21 @@ class RedisTask(BaseDataTask):
         self._connection.close()
 
     def method(self, *args, **kwargs):
+
+        # If there is an incoming value, serialize it to JSON
+        if self.arguments.get('value'):
+            from json import dumps
+            self.arguments['value'] = dumps(self.arguments['value'], default=str)
+
         result = self._connection.execute_command(self.command, **self.arguments)
+
+        try:
+            # Deserialize the result if it is a JSON string
+            from json import loads
+            result = loads(result)
+
+        except Exception:
+            pass
 
         if self.invalidate_after:
             self._connection.expire(self._db['key'], int(self.invalidate_after))

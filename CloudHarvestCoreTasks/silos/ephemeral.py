@@ -131,7 +131,11 @@ def start_heartbeat(heartbeat_type: Literal['agent', 'api'], database: str = 'ha
 
                 # Update the node status in the Redis cache
                 key = f"harvest:heartbeat_{heartbeat_type}:{getfqdn()}"
-                client.hset(key, mapping=node_info)
+
+
+                # Serialize the node_info dictionary to a JSON string
+                from json import dumps
+                client.hset(key, value=dumps(node_info, default=str))
 
                 # Set the expiration time for the key
                 client.expire(key, int(2 * check_rate))

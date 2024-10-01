@@ -39,8 +39,8 @@ def connect(database: str, *args, **kwargs) -> StrictRedis:
     if _CLIENTS.get(database):
         return _CLIENTS.get(database)
 
-    default_configuration ={
-        'db': _DATABASE_NAME_MAPPING.index(database) or kwargs.get('database'),
+    default_configuration = {
+        'db': kwargs.get('db') or _DATABASE_NAME_MAPPING.index(database),
         'max_connections': 50,
         'decode_responses': True
     }

@@ -20,6 +20,7 @@ logger = getLogger('harvest')
 
 
 _CLIENTS = {}
+_DATABASE_NAME_MAPPING = ('agent', 'api', 'chains', 'tokens')
 
 def connect(database: str, *args, **kwargs) -> StrictRedis:
     """
@@ -38,9 +39,10 @@ def connect(database: str, *args, **kwargs) -> StrictRedis:
     if _CLIENTS.get(database):
         return _CLIENTS.get(database)
 
-    default_configuration = {
-        'db': database,
+    default_configuration ={
+        'db': _DATABASE_NAME_MAPPING.index(database) or kwargs.get('database'),
         'max_connections': 50,
+        'decode_responses': True
     }
 
     _pool = ConnectionPool(*args, **default_configuration | kwargs)
@@ -132,15 +134,14 @@ def start_heartbeat(heartbeat_type: Literal['agent', 'api'], database: str = 'ha
                 # Update the node status in the Redis cache
                 key = f"harvest:heartbeat_{heartbeat_type}:{getfqdn()}"
 
-
                 # Serialize the node_info dictionary to a JSON string
                 from json import dumps
-                client.set(key, value=dumps(node_info, default=str))
-
-                # Set the expiration time for the key
-                client.expire(key, int(2 * check_rate))
+                client.set(key, dumps(node_info, default=str), ex=int(2 * check_rate))
 
             except Exception as ex:
+                from traceback import format_exc
+                message = format_exc()
+
                 message = ' '.join(ex.args)
                 level = 'error'
 

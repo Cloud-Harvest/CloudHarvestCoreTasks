@@ -26,7 +26,7 @@ in the Ephemeral Silo.
 |---------------|---------------------------------------------------------|---------------|
 | `api`         | Stores the API heartbeats.                              | 60 seconds    | 
 | `agent`       | Stores the agent heartbeats.                            | 60 seconds    |
-| `chains`      | Task chains that are currently.                         | 900 seconds   |
+| `chains`      | Task chains that are currently being processed.         | 900 seconds   |
 | `tokens`      | API, User, or other tokens are stored in this database. | Token expiry  |
 
 # Persistent Silo

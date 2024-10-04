@@ -196,7 +196,7 @@ class BaseTask:
         for i in range(10):
 
             # Make sure to include a block which handles termination
-            if self.status == TaskStatusCodes.terminating:
+            if str(self.status) == str(TaskStatusCodes.terminating):
                 raise TaskTerminationException('Task was instructed to terminate.')
 
             from time import sleep
@@ -230,7 +230,7 @@ class BaseTask:
 
                     # Check of the `when` condition is met
                     if self.when and self.task_chain:
-                        from tasks.templating import template_object
+                        from .templating import template_object
                         when_result = True if template_object(template={'result': '{{ ' + self.when + ' }}'}, variables=self.task_chain.variables).get('result') == 'True' else False
 
                     # If `self.when` condition is met or is None, run the method
@@ -261,7 +261,7 @@ class BaseTask:
                             self.attempts < max_attempts,
 
                             # Check if the task is not terminating
-                            self.status != TaskStatusCodes.terminating
+                            str(self.status) != str(TaskStatusCodes.terminating)
                         )
 
                         retry = all(retry)
@@ -285,7 +285,7 @@ class BaseTask:
 
                 else:
                     # If the task was not skipped, call the on_complete() method
-                    if self.status != TaskStatusCodes.skipped:
+                    if str(self.status) != str(TaskStatusCodes.skipped):
                         self.on_complete()
                         break
 
@@ -312,13 +312,12 @@ class BaseTask:
         for d in (self.on.get(directive) or []):
             # If the task is blocking, insert the new task before the next task in the chain
             if self.blocking:
-                self.task_chain.task_templates.insert(self.task_chain.position + i,
-                                                      task_from_dict(task_configuration=d, task_chain=self.task_chain))
+                self.task_chain.task_templates.insert(self.task_chain.position + i, d)
 
             # If the task is not blocking, append the new task to the end of the chain since the position of the current
             # task is not known.
             else:
-                self.task_chain.task_templates.append(task_from_dict(task_configuration=d, task_chain=self.task_chain))
+                self.task_chain.task_templates.append(d)
 
             i += 1
 
@@ -516,7 +515,7 @@ class BaseDataTask(BaseTask):
         pass
 
 
-@register_definition(name='chain')
+@register_definition(name='chain', category='chain')
 class BaseTaskChain(List[BaseTask]):
     """
     The BaseTaskChain class is responsible for managing a chain of tasks.
@@ -797,7 +796,7 @@ class BaseTaskChain(List[BaseTask]):
         result = {}
 
         try:
-            if self.status == TaskStatusCodes.initialized:
+            if str(self.status) == str(TaskStatusCodes.initialized):
                 result = {
                     'info': 'The task chain has not been run yet.'
                 }
@@ -1014,7 +1013,7 @@ class BaseTaskChain(List[BaseTask]):
                     self.pool.add(task)
 
                 # Check for termination
-                if self.status == TaskStatusCodes.terminating:
+                if str(self.status) == str(TaskStatusCodes.terminating):
                     raise TaskTerminationException('Task chain was instructed to terminate.')
 
                 # Hold within the loop if there are outstanding pool tasks because the async task might have an
@@ -1244,7 +1243,7 @@ class BaseTaskPool:
                 Thread(target=next_task.run).start()  # Start the task in a new thread
 
             for task in self._active:
-                if task.status in (TaskStatusCodes.complete, TaskStatusCodes.error, TaskStatusCodes.skipped):
+                if str(task.status) in (str(TaskStatusCodes.complete), str(TaskStatusCodes.error), str(TaskStatusCodes.skipped)):
                     self._active.remove(task)
                     self._complete.append(task)
 
@@ -1252,7 +1251,7 @@ class BaseTaskPool:
             if self.queue_size:
                 sleep(self.worker_refresh_rate)
             else:
-                if self.status == TaskStatusCodes.terminating:
+                if str(self.status) == str(TaskStatusCodes.terminating):
                     break
                 else:
                     sleep(self.idle_refresh_rate)

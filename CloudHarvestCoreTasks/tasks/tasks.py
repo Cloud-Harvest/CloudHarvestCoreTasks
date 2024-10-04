@@ -15,7 +15,7 @@ from typing import Any, List, Literal
 from pymongo import MongoClient
 from redis import StrictRedis
 
-from tasks.base import (
+from .base import (
     BaseDataTask,
     BaseTask,
     BaseTaskChain,
@@ -25,7 +25,7 @@ from tasks.base import (
 from user_filters import MongoUserFilter
 
 
-@register_definition(name='dummy')
+@register_definition(name='dummy', category='task')
 class DummyTask(BaseTask):
     """
     The DummyTask class is a subclass of the Base
@@ -51,7 +51,7 @@ class DummyTask(BaseTask):
         return self
 
 
-@register_definition(name='error')
+@register_definition(name='error', category='task')
 class ErrorTask(BaseTask):
     """
     The ErrorTask class is a subclass of the BaseTask class. It represents a task that raises an exception when run.
@@ -65,7 +65,7 @@ class ErrorTask(BaseTask):
         raise Exception('This is an error task')
 
 
-@register_definition(name='file')
+@register_definition(name='file', category='task')
 class FileTask(BaseTask):
     """
     The FileTask class is a subclass of the BaseTask class. It represents a task that performs file operations such as
@@ -212,7 +212,7 @@ class FileTask(BaseTask):
 
                     # If the user has provided a template for the output, apply it
                     if self.template:
-                        from tasks.templating import template_object
+                        from .templating import template_object
                         _data = template_object(template=self.template, variables=_data)
 
                     # If no template is provided, use _data as provided
@@ -280,7 +280,7 @@ class FileTask(BaseTask):
         return self
 
 
-@register_definition(name='recordset')
+@register_definition(name='recordset', category='task')
 class HarvestRecordSetTask(BaseTask):
     """
     The HarvestRecordSetTask class is a subclass of the BaseTask class. It represents a task that operates on a record set.
@@ -362,7 +362,7 @@ class HarvestRecordSetTask(BaseTask):
         return self
 
 
-@register_definition(name='prune')
+@register_definition(name='prune', category='task')
 class PruneTask(BaseTask):
     def __init__(self, previous_task_data: bool = False, stored_variables: bool = False, *args, **kwargs):
         """
@@ -390,7 +390,7 @@ class PruneTask(BaseTask):
         # If previous_task_data is True, clear the data of all previous tasks
         if self.previous_task_data:
             for i in range(self.task_chain.position):
-                if self.task_chain[i].status in [TaskStatusCodes.complete, TaskStatusCodes.error, TaskStatusCodes.skipped]:
+                if str(self.task_chain[i].status) in [str(TaskStatusCodes.complete), str(TaskStatusCodes.error), str(TaskStatusCodes.skipped)]:
                     total_bytes_pruned += getsizeof(self.task_chain[i].result)
                     self.task_chain[i].result = None
 
@@ -406,7 +406,7 @@ class PruneTask(BaseTask):
         return self
 
 
-@register_definition(name='for_each')
+@register_definition(name='for_each', category='task')
 class ForEachTask(BaseTask):
     """
     The ForEachTask class is a subclass of the BaseTask class. It represents a task that creates a new task for each item
@@ -493,7 +493,7 @@ class ForEachTask(BaseTask):
 
         return self
 
-@register_definition(name='mongo')
+@register_definition(name='mongo', category='task')
 class MongoTask(BaseDataTask):
     """
     The MongoTask class is a subclass of the BaseDataTask class. It represents a task that interacts with a MongoDB database.
@@ -623,7 +623,7 @@ class MongoTask(BaseDataTask):
 
         return self
 
-@register_definition(name='redis')
+@register_definition(name='redis', category='task')
 class RedisTask(BaseDataTask):
     """
     The RedisTask class is a subclass of the BaseDataTask class. It represents a task that interacts with a Redis database.
@@ -707,7 +707,7 @@ class RedisTask(BaseDataTask):
 
         return self
 
-@register_definition(name='wait')
+@register_definition(name='wait', category='task')
 class WaitTask(BaseTask):
     def __init__(self,
                  check_time_seconds: float = 1,

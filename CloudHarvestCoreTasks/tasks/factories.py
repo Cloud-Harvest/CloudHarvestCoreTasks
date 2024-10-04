@@ -3,7 +3,7 @@ factories.py - This module contains functions for creating task chains from file
 """
 from logging import getLogger
 from typing import Any
-from tasks.base import BaseTaskChain, BaseTask
+from .base import BaseTaskChain, BaseTask
 
 logger = getLogger('harvest')
 
@@ -72,11 +72,12 @@ def task_chain_from_dict(task_chain_registered_class_name: str,
     from CloudHarvestCorePluginManager.registry import Registry
 
     try:
-        chain_class = Registry.find_definition(class_name=task_chain_registered_class_name,
-                                               is_subclass_of=BaseTaskChain)[0]
+        chain_class = Registry.find(result_key='cls',
+                                    category='chain',
+                                    name=task_chain_registered_class_name)[0]
 
     except IndexError:
-        from tasks.base import BaseTaskException
+        from .base import BaseTaskException
         raise BaseTaskException(f'No task chain class found for {task_chain_registered_class_name}.')
 
     # Set the name of the task chain if it is not already set.
@@ -110,8 +111,8 @@ def task_from_dict(task_configuration: dict or BaseTask,
     # If the task configuration is a dictionary, extract the class name and template the configuration.
     class_name = list(task_configuration.keys())[0]
 
-    from CloudHarvestCorePluginManager import Registry
-    task_class = Registry.find_definition(class_name=class_name, is_subclass_of=BaseTask)[0]
+    from CloudHarvestCorePluginManager.registry import Registry
+    task_class = Registry.find(result_key='cls', category='task', name=class_name)[0]
 
     if isinstance(template_vars, dict):
         template_vars = template_vars

@@ -1,12 +1,12 @@
 import unittest
-from CloudHarvestCorePluginManager.registry import Registry
+from CloudHarvestCorePluginManager.functions import register_objects
 from ..CloudHarvestCoreTasks.tasks import *
 
 
 class BaseTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        Registry.register_objects()
+        register_objects()
         super(BaseTestCase, cls).setUpClass()
 
 
@@ -69,7 +69,7 @@ class TestTaskConfiguration(BaseTestCase):
 class TestBaseTask(BaseTestCase):
     def setUp(self):
         from CloudHarvestCorePluginManager.registry import Registry
-        task = Registry.find_definition(class_name='wait', is_subclass_of=BaseTask)[0]
+        task = Registry.find(result_key='cls', name='wait', category='task')[0]
         self.base_task = task(name='test', description='test task', when_after_seconds=10)
 
     def test_init(self):
@@ -489,7 +489,8 @@ class TestBaseTaskPool(BaseTestCase):
         while str(str(self.base_task_chain.status)) != str(TaskStatusCodes.complete):
             sleep(.5)
 
-        # Verify that wait task 2's child on_complete task succeeded
+        # Verify that wait task 2's child on_complete task was included in the chain
+        self.assertEqual(6, len(self.base_task_chain))
         self.assertEqual(str(self.base_task_chain.find_task_by_name('Async Child Dummy Task').status), str(TaskStatusCodes.complete))
 
         # Assert that all tasks in the pool have completed

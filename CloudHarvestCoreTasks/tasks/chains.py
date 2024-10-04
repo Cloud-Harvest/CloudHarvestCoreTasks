@@ -1,8 +1,12 @@
+"""
+This module contains subclasses of BaseTaskChain that are used to represent different types of task chains.
+"""
+
 from CloudHarvestCorePluginManager.decorators import register_definition
-from tasks.base import BaseTaskChain
+from .base import BaseTaskChain
 
 
-@register_definition(name='report')
+@register_definition(name='report', category='chain')
 class ReportTaskChain(BaseTaskChain):
     """
     A class used to represent a Report Task Chain.

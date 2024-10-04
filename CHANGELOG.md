@@ -17,6 +17,8 @@
   - Results are now stored in the `result` attribute
   - Previously stored TaskChain data is now accessible using the `var.variable_name` format which is applied at the time of instantiation
 - Created [user_filters](CloudHarvestCoreTasks/user_filters) which are used to filter data based on user input
+- Updates to support [CloudHarvestCorePluginManager 0.3.0](https://github.com/Cloud-Harvest/CloudHarvestCorePluginManager/tree/v/0.3.0)
+- Fixed an issue where `BaseTask._run_on_directive()` was templating objects when it should simply return the configuration back to the TaskChain for templating.
 
 # 0.3.5
 - [#9](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/9) c

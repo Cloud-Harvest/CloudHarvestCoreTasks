@@ -4,7 +4,7 @@ This module accepts data filters provided by users and returns the derived synta
 from typing import List, Literal
 from logging import getLogger
 
-from user_filters.base import BaseUserFilter
+from .base import BaseUserFilter
 
 logger = getLogger('harvest')
 

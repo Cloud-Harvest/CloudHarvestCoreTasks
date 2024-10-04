@@ -31,7 +31,7 @@ class TestErrorTask(unittest.TestCase):
 
 class TestFileTask(unittest.TestCase):
     def setUp(self):
-        from tasks.base import BaseTaskChain
+        from ..CloudHarvestCoreTasks.tasks.base import BaseTaskChain
         self.temp_files = []
         self.test_task_chain = BaseTaskChain(name='test_task_chain', description='This is a test task chain', template={'name': 'test', 'tasks': []})
 
@@ -272,7 +272,7 @@ class TestHarvestRecordSetTask(unittest.TestCase):
             }
         ]
 
-        from tasks.base import BaseTaskChain
+        from ..CloudHarvestCoreTasks.tasks.base import BaseTaskChain
         self.test_data = test_data
         self.chain = BaseTaskChain(template=harvest_recordset_task_template)
         self.chain.variables["test_recordset"] = self.test_data
@@ -298,7 +298,7 @@ class TestMongoTask(unittest.TestCase):
 
     def test_init(self):
         from ..CloudHarvestCoreTasks.tasks import MongoTask
-        from tasks.base import  BaseTaskException
+        from ..CloudHarvestCoreTasks.tasks.base import  BaseTaskException
 
         # Assert that the task is not created if the database parameters are missing
         self.assertRaises(BaseTaskException,
@@ -329,7 +329,7 @@ class TestRedisTask(unittest.TestCase):
 
     def test_init(self):
         from ..CloudHarvestCoreTasks.tasks import RedisTask
-        from tasks.base import  BaseTaskException
+        from ..CloudHarvestCoreTasks.tasks.base import  BaseTaskException
 
         # Assert that the task is not created if the database parameters are missing
         self.assertRaises(BaseTaskException,

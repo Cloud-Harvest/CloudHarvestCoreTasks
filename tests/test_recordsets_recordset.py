@@ -33,10 +33,6 @@ class TestHarvestRecordSet(unittest.TestCase):
         self.recordset.drop_index('index1')
         self.assertEqual('index1' in self.recordset.indexes, False)
 
-    def test_modify_records(self):
-        self.recordset.modify_records('copy_key', {'source_key': 'value', 'target_key': 'value_copy'})
-        self.assertEqual(self.recordset[1]['value_copy'], 'value_1')
-
     def test_rebuild_indexes(self):
         self.recordset.create_index('index1', 'index')
         self.assertEqual(len(self.recordset.indexes['index1']), 5)

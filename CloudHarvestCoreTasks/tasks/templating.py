@@ -9,7 +9,7 @@ from logging import getLogger
 logger = getLogger('harvest')
 
 
-def template_object(template: Any, variables: dict = None) -> dict:
+def template_object(template: Any, variables: dict = None, task_chain_vars: dict = None) -> dict:
     """
     Render a template object.
 
@@ -50,13 +50,18 @@ def template_object(template: Any, variables: dict = None) -> dict:
     try:
         # Render the template with the provided variables (or an empty dictionary if no variables were provided)
         from json import loads
-        result = loads(environment.get_template('template').render(**variables or {}))
+        rendered = environment.get_template('template').render(**variables or {})
+        result = loads(rendered)
 
+    # '{ "name": "record::Test1", "value": "{"name": "Test1", "age": 30, "date": "2024-10-14 13:19:20.444630", "tags": [{"Name": "color", "Value": "blue"}, {"Name": "size", "Value": "large"}]}" }'
     except Exception as e:
         logger.warning(f'Error rendering template: {e}')
 
-    finally:
-        return result
+    if task_chain_vars:
+        from .factories import replace_vars_in_dict
+        result = replace_vars_in_dict(nested_dict=result, vars=task_chain_vars)
+
+    return result
 
 def list_filters() -> dict:
     """

@@ -24,7 +24,7 @@ from CloudHarvestCorePluginManager.decorators import register_definition
 from datetime import datetime, timezone
 from enum import Enum
 from threading import Thread
-from typing import List, Literal
+from typing import Any, List, Literal
 from logging import getLogger
 
 
@@ -133,14 +133,13 @@ class BaseTask:
         self.retry = retry or {}
         self.task_chain = task_chain
         self.when = when
-        self.with_vars = with_vars
 
         # Programmatic attributes
         self.attempts = 0
         self.status = TaskStatusCodes.initialized
         self.original_template = None
         self.result = None
-        self.meta = None
+        self.meta = {}
         self.start = None
         self.end = None
 
@@ -187,7 +186,7 @@ class BaseTask:
         with HarvestRecordSetUserFilter(recordset=self.result, **self.user_filters) as user_filter:
             self.result = user_filter.apply()
 
-    def method(self):
+    def method(self, *args, **kwargs) -> 'BaseTask':
         """
         This method should be overwritten in subclasses to provide specific functionality.
         """
@@ -231,7 +230,7 @@ class BaseTask:
                     # Check of the `when` condition is met
                     if self.when and self.task_chain:
                         from .templating import template_object
-                        when_result = True if template_object(template={'result': '{{ ' + self.when + ' }}'}, variables=self.task_chain.variables).get('result') == 'True' else False
+                        when_result = True if template_object(template={'result': '{{ ' + self.when + ' }}'}, variables=self.task_chain.variables, task_chain_vars=self.task_chain.variables).get('result') == 'True' else False
 
                     # If `self.when` condition is met or is None, run the method
                     if when_result:
@@ -242,9 +241,9 @@ class BaseTask:
                         self.on_skipped()
 
                 except Exception as ex:
-
-                    # If the `retry` directive is provided, check if the task should be retried
-                    if isinstance(self.retry, dict):
+                    # If the `retry` directive is provided, check if the task should be retried. We include isinstance()
+                    # to ensure that the retry directive is a dictionary.
+                    if self.retry and isinstance(self.retry, dict):
                         from re import findall, IGNORECASE
 
                         # Collect the retry conditions
@@ -257,7 +256,7 @@ class BaseTask:
                             not findall(self.retry.get('when_error_not_like') or '.*', str(ex.args), flags=IGNORECASE)
                             if self.retry.get('when_error_not_like') else True,
 
-                            # CHeck if the number of attempts is less than the maximum number of attempts
+                            # Check if the number of attempts is less than the maximum number of attempts
                             self.attempts < max_attempts,
 
                             # Check if the task is not terminating
@@ -292,6 +291,17 @@ class BaseTask:
 
         except Exception as ex:
             raise BaseTaskException(f'Top level error while running task {self.name}: {ex}')
+
+        finally:
+            # Update the metadata with the task's status, duration, and other information
+            self.meta.update(
+                {
+                    'attempts': self.attempts,
+                    'count': len(self.result) if hasattr(self, '__len__') else 1,
+                    'duration': self.duration,
+                    'status': self.status.__str__(),
+                }
+            )
 
         return self
 
@@ -362,7 +372,7 @@ class BaseTask:
         self.status = TaskStatusCodes.error
 
         if hasattr(ex, 'args'):
-            self.meta = ex.args
+            self.meta['Error'] = ex.args
 
         logger.error(f'Error running task {self.name}: {ex}')
 
@@ -433,11 +443,33 @@ class BaseDataTask(BaseTask):
     provide specific functionality.
     """
 
-    REQUIRED_CONFIGURATION_KEYS = []
+    # The connection key map is used to map the connection attributes to the appropriate attributes in the subclass.
+    # base_configration_key: The attribute in the BaseDataTask class.
+    # driver_configuration_key: The attribute specific to the data provider driver / module.
+    # Format: (base_configuration_key, driver_configuration_key)
+    CONNECTION_KEY_MAP = (
+        ('host', 'host'),
+        ('port', 'port'),
+        ('username', 'username'),
+        ('password', 'password'),
+        ('database', 'database')
+    )
+
+    # Connection pools are used to store connections to the data provider. This reduces the number of connections to the
+    # data provider and allows us to reuse connections. Override this attribute in subclasses to provide data provider
+    # specific connection pools.
+    CONNECTION_POOLS = {}
 
     def __init__(self, command: str,
-                 db: dict,
                  arguments: dict = None,
+                 alias: Literal['ephemeral', 'persistent'] = None,
+                 data: Any = None,
+                 host: str = None,
+                 port: int = None,
+                 username: str = None,
+                 password: str = None,
+                 database: str or int = None,
+                 extended_db_configuration: dict = None,
                  max_pool_size: int = 10,
                  *args, **kwargs):
         """
@@ -448,34 +480,33 @@ class BaseDataTask(BaseTask):
 
         Args:
             command (str): The command to run on the data provider.
-            db (dict): The configuration for the data provider. The connection configuration is driver-specific
-                       *except* when the 'alias' key is provided. In this case, the 'alias' key should be set to 'ephemeral'
-                       or 'persistent' to connect to the appropriate data provider. Connections made using the 'alias' key
-                       will leverage a Connection Pool if supported by the underlying data provider.
             arguments (dict, optional): Arguments to pass to the command.
             max_pool_size (int, optional): The maximum number of connections to allow in the connection pool. Defaults to 10.
         """
 
+        # Initialize the BaseTask class
         super().__init__(*args, **kwargs)
 
-        self._connection = None
-        self._db = db or {}
-
-        self.command = command
+        # Assigned attributes
+        self.alias = alias
         self.arguments = arguments or {}
+        self.command = command
+        self.data = data
+        self.database = database
+        self.extended_db_configuration = extended_db_configuration or {}
+        self.host = host
         self.max_pool_size = max_pool_size
+        self.password = password
+        self.port = port
+        self.username = username
 
-        # Check if the configuration dictionary contains the required keys for the subclass data provider.
-        # If the configuration dictionary contains an 'alias' key, check that 'alias' is either 'ephemeral' or 'persistent'.
-        if db.get('alias'):
-            if db['alias'] not in ('ephemeral', 'persistent'):
-                raise BaseTaskException(f'Invalid alias value: {db["alias"]}. Must be "ephemeral" or "persistent".')
+        # Programmatic attributes
+        self.connection = None
+        self.calls = 0
 
-        # Check if the configuration dictionary contains the required keys for the subclass data provider.
-        else:
-            missing_keys = [key for key in self.REQUIRED_CONFIGURATION_KEYS if key not in db.keys()]
-            if missing_keys:
-                raise BaseTaskException(f'Missing required configuration keys: {", ".join(missing_keys)}')
+        # Verify that the alias is valid
+        if self.alias and self.alias not in ('ephemeral', 'persistent'):
+            raise ValueError(f'Alias must be either "ephemeral" or "persistent". Got: "{self.alias}"')
 
     def __enter__(self):
         return self
@@ -484,35 +515,109 @@ class BaseDataTask(BaseTask):
         return None
 
     @property
+    def connection_pool_key(self) -> str:
+        """
+        Constructs a connection pool key in the form of a URL-like address.
+        The key consists of the username, password SHA, hostname, port, and database.
+
+        We use this key to store connection pools and return a pool based on the connection parameters. This allows us to
+        reuse connections and reduce the number of connections to the data provider.
+        """
+
+        if self.alias:
+            return self.alias
+
+        from hashlib import sha256
+
+        # Compute the SHA-256 hash of the password
+        password_sha = sha256(self.password.encode()).hexdigest()
+
+        # Construct the URL-like address
+        connection_pool_key = f"{self.username}:{password_sha}@{self.host}:{self.port}/{self.database}"
+
+        return connection_pool_key
+
+    @property
+    def mapped_connection_configuration(self, include_null_values: bool = False) -> dict:
+        """
+        Maps the connection keys to the appropriate attributes. Update CONNECTION_KEY_MAP in subclasses to include
+        driver-specific keys. Returns None if there is an error.
+        """
+        result = None
+
+        try:
+            result = self.extended_db_configuration | {
+                driver_configuration_key: getattr(self, base_configuration_key)
+                for base_configuration_key, driver_configuration_key in self.CONNECTION_KEY_MAP
+                if getattr(self, base_configuration_key) or include_null_values
+            }
+
+        finally:
+            return result
+
+    @property
     def is_connected(self) -> bool:
         """
         Returns a boolean indicating whether the task is connected to the data provider.
 
         This method should be overwritten in subclasses to provide specific functionality.
+
+        >>> try:
+        >>>     # Your connection test here.
+        >>>     return True
+        >>>
+        >>> except Exception:
+        >>>     return False
         """
 
         return False
 
-    def connect(self):
+    def connect(self) -> 'BaseDataTask':
         """
         Connect the Task to the data provider.
 
         This method should be overwritten in subclasses to provide specific functionality. However, super().connect()
         should be called in the subclass method to ensure that the connection is established.
+
+        >>> # If the task is already connected, return the connection
+        >>> if self.is_connected:
+        >>>     return self.connection
+        >>>
+        >>> # Check if there is a connection pool available
+        >>> connection_key = self.connection_pool_key()
+        >>> connection_pool = self.CONNECTION_POOLS.redis_get()
+        >>>
+        >>> if connection_pool:
+        >>>     self.connection = connection_pool.get_connection()
+        >>>     return self.connection
+        >>>
+        >>> else:
+        >>>     # Establish a new connection
+        >>>     self.connection = self._establish_connection()
+        >>>
+        >>>     # Add the connection to the connection pool
+        >>>     self.CONNECTION_POOLS[connection_key] = self.connection
+        >>>
+        >>>     return self.connection
         """
 
-        # If the task is already connected, return the connection
-        if self.is_connected:
-            return self._connection
+        return self
 
-    def disconnect(self):
+    def disconnect(self) -> 'BaseDataTask':
         """
         Disconnect the task from the data provider.
 
         This method should be overwritten in subclasses to provide specific functionality.
+
+        >>> # If the task is connected, disconnect it
+        >>> if self.connection:
+        >>>     try:
+        >>>         self.connection.close()
+        >>>     except Exception as ex:
+        >>>         logger.error(f'Error closing connection: {ex}')
         """
 
-        pass
+        return self
 
 
 @register_definition(name='chain', category='chain')
@@ -852,7 +957,7 @@ class BaseTaskChain(List[BaseTask]):
         """
 
         for position, task in enumerate(self.task_templates):
-            if task.get('name') == task_name:
+            if task.redis_get() == task_name:
                 return position
 
     def get_variables_by_names(self, *variable_names) -> dict:
@@ -973,6 +1078,143 @@ class BaseTaskChain(List[BaseTask]):
         self.start = datetime.now(tz=timezone.utc)
 
         return self
+
+    def replace_variable_path_with_value(self,
+                                         original_string: str,
+                                         item: (dict or list or tuple) = None,
+                                         fail_on_unassigned: bool = False) -> Any:
+        """
+        Accepts a path like 'item.key[index].key' and returns the value of that path in the task chain's variables.
+
+        Args:
+            original_string (str): The path to the variable in the task chain's variables.
+            item (dict, list, tuple): When iteration is in effect,
+            fail_on_unassigned (bool): If True, the method will raise an exception if the variable is not assigned.
+        """
+
+        from re import compile, split
+
+        """
+        Regex expression breakdown:
+            (item|var): Matches the literal strings "item" or "var".
+            \.: Matches a literal dot.
+            [^\s]*: Matches zero or more characters that are not whitespace.
+        """
+
+        # If the original string is not a string or does not contain 'var' or 'item', return the original string
+        if not isinstance(original_string, str) or ('var' not in original_string and 'item' not in original_string):
+            return original_string
+
+        pattern = compile('(item|var)\.[^\s]*')
+
+        # Find all the matches in the path
+        matches = [match.group(0) for match in pattern.finditer(original_string)]
+
+        # Determines if the entire string will be replaced by the output. When True, the output will be
+        # a single value. Otherwise, the output will be a string with the replaced values. This allows users to
+        # concatenate strings with variables.
+        replace_string_with_value = (len(matches) == 1 and original_string == matches[0])
+
+        def walk_path(p, obj) -> Any:
+            """
+            Walks the path of the object to retrieve the value at the end of the path.
+            """
+            # Convert the path string into a list of keys and indices
+            path = []
+
+            # Splits the string at either a dot (.) or any substring enclosed in square brackets ([]),
+            # while keeping the delimiters (dot or square brackets) in the result.
+            parts = split(r'(\[.*?\]|\.)', p)
+
+            # The start_index is assigned based on the type of variable (item or var). This is necessary because the
+            # variable identifier (item/var) is not a valid part of the object itself.
+            if parts[0] == 'item':
+                start_index = 2
+
+            elif parts[0] == 'var':
+                start_index = 3
+
+            else:
+                start_index = 0
+
+            for part in parts[start_index:]:
+                if part == '' or part == '.':
+                    continue
+
+                if part.startswith('[') and part.endswith(']'):
+                    path.append(int(part[1:-1]))
+                else:
+                    path.append(part)
+
+            # Traverse the object using the parsed path
+            for p in path:
+                obj = obj[p]
+
+            return obj
+
+        # Prepare the replacement values dictionary
+        replacement_values = {}
+
+        for match in matches:
+            # The type of variable (item, var) and the name of the variable
+            ms = match.split('.')
+
+            var_type = ms[0]
+            var_name = ms[1]
+
+            match var_type:
+                # Use the iterator as the source object
+                case 'item':
+                    replacement_values[match] = walk_path(match, item)
+
+                # Get a component of a task chain variable
+                case 'var':
+                    var = self.variables.get(var_name)
+
+                    if not var:
+                        # From an internal code perspective there may be times when we need to raise errors when a variable
+                        # is not assigned. However, in the context of the task chain, we may want to ignore this error and
+                        # continue. This is especially useful when we are scanning the task chain configurations for
+                        # variables that need to be replaced. We may not have assigned the variable yet.
+                        if fail_on_unassigned:
+                            raise ValueError(f'Variable "{var_name}" is not assigned in the task chain. '
+                                             f'Did you remember to assign in a previous task with "result_as: var.{var}"?')
+
+                        else:
+                            # Normally we will ignore this variable and continue because the variable may not have been
+                            # assigned yet. Configurations may be scanned by this method several times before the variable
+                            # is assigned.
+                            continue
+
+                    # Assign the value to the replacement_values dictionary
+                    replacement_values[match] = walk_path(match, var)
+
+                case _:
+                    # We shouldn't actually see this error, but it is here just in case.
+                    raise ValueError(f'Invalid path: {match}; must begin with "item" or "var".')
+
+        # Perform the replacement
+        if replace_string_with_value:
+            if replacement_values.values():
+                # Since the only value of the original_string is a variable reference, we will return the actual
+                # variable's object.
+                result = list(replacement_values.values())[0]
+
+            # No replacement value was retrieved, so we will return the original string
+            else:
+                result = original_string
+
+        else:
+            # Copy the original string so that we don't mangle the input
+            from copy import copy
+            result = copy(original_string)
+
+            # Replace the variables in the string
+            for key, value in replacement_values.items():
+                result = result.replace(key, str(value))
+
+        return result
+
 
     def run(self) -> 'BaseTaskChain':
         """

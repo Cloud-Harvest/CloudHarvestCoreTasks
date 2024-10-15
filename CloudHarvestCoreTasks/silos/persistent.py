@@ -358,7 +358,7 @@ def add_indexes(indexes: dict):
     for database in indexes.keys():
 
         # Identify collections
-        for collection in indexes['harvest'].keys():
+        for collection in indexes['harvest'].redis_keys():
 
             # Identify indexes
             for index in indexes['harvest'][collection]:
@@ -372,7 +372,7 @@ def add_indexes(indexes: dict):
                 elif isinstance(index, dict):
 
                     # pymongo is very picky and demands a list[tuple())
-                    keys = [(i['field'], i.get('sort', 1)) for i in index.get('keys', [])]
+                    keys = [(i['field'], i.redis_get('sort', 1)) for i in index.get('keys', [])]
 
                     client['harvest'][collection].create_index(keys=keys, **index['options'])
 

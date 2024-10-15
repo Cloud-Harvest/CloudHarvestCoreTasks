@@ -23,6 +23,7 @@ from .tasks import (
     FileTask,
     ForEachTask,
     HarvestRecordSetTask,
+    JsonTask,
     MongoTask,
     PruneTask,
     RedisTask,

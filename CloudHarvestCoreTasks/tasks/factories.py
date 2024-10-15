@@ -109,7 +109,7 @@ def task_from_dict(task_configuration: dict or BaseTask,
         return task_configuration
 
     # If the task configuration is a dictionary, extract the class name and template the configuration.
-    class_name = list(task_configuration.keys())[0]
+    class_name = list(task_configuration.redis_keys())[0]
 
     from CloudHarvestCorePluginManager.registry import Registry
     task_class = Registry.find(result_key='cls', category='task', name=class_name)[0]
@@ -128,42 +128,16 @@ def task_from_dict(task_configuration: dict or BaseTask,
     from .templating import template_object
 
     # Template the task configuration with the variables from the task chain
-    templated_task_configuration = template_object(template=task_configuration, variables=template_vars)
+    templated_task_configuration = template_object(template=task_configuration,
+                                                   variables=template_vars,
+                                                   task_chain_vars=task_chain.variables)
 
     # If this template is part of a TaskChain and there are task variables, add those object to the template
     # based on the object pointer format `var.variable_name`. This is only necessary when these conditions are met
     # because no variables can be added to a task when it is not part of the chain *and* there is no point in
     # flattening the template if there are no variables to add.
     if task_chain is not None and task_chain.variables:
-        def replace_vars_in_dict(nested_dict: dict, task_chain: BaseTaskChain):
-            """
-            Walks through a nested dictionary and replaces strings starting with 'var.' with the corresponding value from task_chain.variables.
-
-            Args:
-                nested_dict (dict): The nested dictionary to process.
-                task_chain (BaseTaskChain): The task chain containing the variables.
-
-            Returns:
-                dict: The processed dictionary with replaced values.
-            """
-
-            def replace_vars(value):
-                """
-                Recursively replaces 'var.' strings with the corresponding value from task_chain.variables.
-                """
-
-                if isinstance(value, str) and value.startswith('var.'):
-                    return task_chain.variables.get(value[4:], value)
-                elif isinstance(value, dict):
-                    return {k: replace_vars(v) for k, v in value.items()}
-                elif isinstance(value, list):
-                    return [replace_vars(item) for item in value]
-                else:
-                    return value
-
-            return replace_vars(nested_dict)
-
-        templated_task_configuration = replace_vars_in_dict(templated_task_configuration, task_chain)
+        templated_task_configuration = replace_vars_in_dict(templated_task_configuration, task_chain.variables)
 
     # Instantiate the task with the templated configuration and return it
     class_configuration = templated_task_configuration.get(class_name) or {}
@@ -172,3 +146,36 @@ def task_from_dict(task_configuration: dict or BaseTask,
     instantiated_class.original_template = task_configuration[class_name]
 
     return instantiated_class
+
+
+def replace_vars_in_dict(nested_dict: dict, vars: dict):
+    """
+    Walks through a nested dictionary and replaces strings starting with 'var.' with the corresponding value
+    from the vars dictionary.
+
+    Args:
+        nested_dict (dict): The nested dictionary to process.
+        vars (dict): The task chain containing the variables.
+
+    Returns:
+        dict: The processed dictionary with replaced values.
+    """
+
+    def replace_vars(value):
+        """
+        Recursively replaces 'var.' strings with the corresponding value from task_chain.variables.
+        """
+
+        if isinstance(value, str) and value.startswith('var.'):
+            return vars.get(value[4:], value)
+
+        elif isinstance(value, dict):
+            return {k: replace_vars(v) for k, v in value.items()}
+
+        elif isinstance(value, list):
+            return [replace_vars(item) for item in value]
+
+        else:
+            return value
+
+    return replace_vars(nested_dict)

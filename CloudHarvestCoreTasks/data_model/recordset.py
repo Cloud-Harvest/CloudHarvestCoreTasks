@@ -11,6 +11,9 @@ Classes:
 from typing import Dict, List, Literal
 from collections import OrderedDict
 
+from redis.utils import deprecated_function
+from yaml import serialize
+
 
 class HarvestRecord(OrderedDict):
     """
@@ -79,33 +82,64 @@ class HarvestRecord(OrderedDict):
 
         return self
 
-    def add_key_from_keys(self, new_key: str, sequence: List[str], delimiter: str = ' ', abort_on_none: bool = False) -> 'HarvestRecord':
+    def add_key_from_values(self, target_key: str, values: List[str], abort_if_null: bool = False, delimiter: str = '') -> 'HarvestRecord':
         """
-        This method creates a new key in the record, with its value being a concatenation of the values of the keys provided in the sequence.
-        If a value in the sequence is not a key, it is interpreted as a literal string.
+        Create a new key in the record by concatenating the values of the keys provided.
 
-        :param new_key: The name of the new key to be added to the record.
-        :param sequence: A list of keys whose values will be concatenated to form the value of the new key.
-        :param delimiter: The delimiter to use when concatenating the values. Defaults to a space character.
-        :param abort_on_none: If True, the method will abort if a value in the sequence is None. Defaults to False.
-        :return: The record with the new key added.
+        Arguments
+        ---------
+        target_key (str): The name of the new key.
+        values (List[str]): The values to apply to the new key.
+        abort_if_null (bool, optinal): If True, the method will abort if any value in the sequence is None, defaults to False
+        delimiter (str, optional): The delimiter to use when concatenating the values, defaults to '' (no delimiter).
+
+        Example
+        -------
+        Python
+        >>> record = HarvestRecord(data={'first_name': 'John', 'last_name': 'Doe'})
+        >>> record.add_key_from_values(target_key='full_name', values=['John', 'Doe'], delimiter=' ')
+        >>> print(record['full_name'])
+        >>> 'John Doe'
+
+        Configuration
+        -------------
+        This example templates the configuration to produce the same result as the Python example above.
+        ```yaml
+        - add_key_from_values:
+            target_key: full_name
+            values:
+              - {{first_name}}
+              - {{last_name}}
+            delimiter: ' '
+        ```
         """
 
         result = []
-        for s in sequence:
-            if isinstance(s, dict):
-                subresult = self.get(s.get('key'))
+        for value in values:
 
-            else:
-                subresult = s
-
-            if abort_on_none and subresult is None:
+            # If the value is None and abort_if_null is True, the method will abort
+            if abort_if_null and self.get(value) is None:
+                self[target_key] = None
                 return self
 
-            else:
-                result.append(subresult)
+            # We convert the value to a string to avoid errors when joining
+            result.append(str(value))
 
-        self[new_key] = delimiter.join([str(s) for s in result])
+        self[target_key] = delimiter.join(result)
+
+        return self
+
+    def add_key_values(self, data: dict, replace_existing: bool = False) -> 'HarvestRecord':
+        """
+        Add multiple key-value pairs to the record.
+
+        :param data: A dictionary containing the key-value pairs to add to the record.
+        :param replace_existing: If True, existing keys in the record will be replaced by the new values. Defaults to False.
+        """
+
+        for key, value in data.items():
+            if replace_existing or key not in self:
+                self[key] = value
 
         return self
 
@@ -326,6 +360,26 @@ class HarvestRecord(OrderedDict):
 
         return self
 
+    def serialize(self, target_key: str, keep_other_keys: bool = False) -> 'HarvestRecord':
+        """
+        Converts the record into a serialized string.
+
+        :param target_key: the name of the target key, defaults to None
+        :param keep_other_keys: whether to keep the other keys in the record, defaults to False
+        """
+
+        from json import dumps
+        serialized = {
+            target_key: dumps(self)
+        }
+
+        if not keep_other_keys:
+            self.clear()
+
+        self.update(serialized)
+
+        return self
+
     def split_key(self, source_key: str, target_key: str = None, delimiter: str = ' ') -> 'HarvestRecord':
         """
         Split the value of a key into a list.
@@ -418,7 +472,7 @@ class HarvestRecordSet(List[HarvestRecord]):
 
         return sorted(list(set([key for record in self for key in record.keys()])))
 
-    def add(self, data: (List[dict or HarvestRecord]) or dict or HarvestRecord) -> 'HarvestRecordSet':
+    def add(self, data: (List[dict or HarvestRecord], ) or dict or HarvestRecord) -> 'HarvestRecordSet':
         """
         Add a list of records to the record set.
 
@@ -448,6 +502,10 @@ class HarvestRecordSet(List[HarvestRecord]):
                 self.add(item)
                 for item in data
             ]
+
+        # Other data types (such as strings) can be added as a single item with the key 'item'
+        else:
+            self.add({'item': data})
 
         self.rebuild_indexes()
 
@@ -506,20 +564,6 @@ class HarvestRecordSet(List[HarvestRecord]):
 
         return HarvestRecordSet(data=[record for record in self if record.is_matched_record])
 
-    def modify_records(self, function: str, arguments: dict) -> 'HarvestRecordSet':
-        """
-        Modify records in the record set by calling a function on each record.
-
-        :param function: The name of the function to call
-        :param arguments: The arguments to pass to the function
-        """
-
-        [getattr(record, function)(**arguments) for record in self]
-
-        self.rebuild_indexes()
-
-        return self
-
     def rebuild_indexes(self):
         """
         Rebuild all indexes for the record set.
@@ -574,7 +618,7 @@ class HarvestRecordSet(List[HarvestRecord]):
 
         return self
 
-    def sort_records(self, *keys: str) -> 'HarvestRecordSet':
+    def sort_records(self, keys: List[str]) -> 'HarvestRecordSet':
         """
         Sort the records in the record set by one or more keys.
 
@@ -601,6 +645,35 @@ class HarvestRecordSet(List[HarvestRecord]):
             (record[key] if sorted_keys[key] == 1 else -record[key])
             for key in sorted_keys
         ])
+
+
+
+        return self
+
+    def to_redis(self, key: str) -> 'HarvestRecordSet':
+        """
+        Convert the record set to a Redis-compatible format. This permanently modifies the record set.
+
+        :param key: The key to store the record set under
+        """
+        from json import dumps
+
+        result = [
+            {
+                record[key]: dumps(record)
+                for key, value in record.items()
+            }
+            for record in self
+        ]
+
+        # Remove the original records
+        self.clear()
+
+        # Clear indexes
+        self.indexes.clear()
+
+        # Add the new records
+        self.add(data=result)
 
         return self
 

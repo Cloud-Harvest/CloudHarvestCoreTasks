@@ -12,7 +12,6 @@ a method() function that performs the task's operation. The method() function sh
 from CloudHarvestCorePluginManager.decorators import register_definition
 from typing import Any, List, Literal
 
-from pymongo import MongoClient
 from redis import StrictRedis
 
 from .base import (
@@ -22,8 +21,8 @@ from .base import (
     BaseTaskException,
     TaskStatusCodes
 )
-from user_filters import MongoUserFilter
-
+from .templating import template_object
+from ..user_filters import MongoUserFilter
 
 @register_definition(name='dummy', category='task')
 class DummyTask(BaseTask):
@@ -163,7 +162,7 @@ class FileTask(BaseTask):
 
         # Open the file in the specified mode
         with open(self.abs_path, modes[self.mode]) as file:
-            
+
             # Read operations
             if self.mode == 'read':
                 if self.format == 'config':
@@ -187,10 +186,10 @@ class FileTask(BaseTask):
                 if self.desired_keys:
                     if isinstance(result, dict):
                         self.result = {k: v for k, v in result.items() if k in self.desired_keys}
-                    
+
                     elif isinstance(result, list):
                         self.result = [{k: v for k, v in record.items() if k in self.desired_keys} for record in result]
-                
+
                 # Return the entire result
                 else:
                     self.result = result
@@ -213,7 +212,9 @@ class FileTask(BaseTask):
                     # If the user has provided a template for the output, apply it
                     if self.template:
                         from .templating import template_object
-                        _data = template_object(template=self.template, variables=_data)
+                        _data = template_object(template=self.template,
+                                                variables=_data,
+                                                task_chain_vars=self.task_chain.variables)
 
                     # If no template is provided, use _data as provided
                     else:
@@ -252,7 +253,7 @@ class FileTask(BaseTask):
                     elif self.format == 'csv':
                         if isinstance(_data, list):
                             if all([isinstance(record, dict) for record in _data]):
-                                consolidated_keys = set([key for record in _data for key in record.keys()])
+                                consolidated_keys = set([key for record in _data for key in record.redis_keys()])
                                 use_keys = self.desired_keys or consolidated_keys
 
                                 writer = DictWriter(file, fieldnames=use_keys)
@@ -335,27 +336,35 @@ class HarvestRecordSetTask(BaseTask):
 
         from ..data_model.recordset import HarvestRecordSet, HarvestRecord
         for stage in self.stages:
-            # Record the stage_position of stages completed
-            self.stage_position += 1
-
             # Each dictionary should only contain one key-value pair
             for function, arguments in stage.items():
 
                 # This is a HarvestRecordSet command
                 if hasattr(HarvestRecordSet, function):
-                    getattr(self.data, function)(**arguments or {})
+                    # We don't template RecordSet commands because they are not intended to be used with record-level data
+                    getattr(self.data, function)(**(arguments or {}))
 
-                # This is a HarvestRecord command
+                # This is a HarvestRecord command which must iterate over each record in the record set
                 elif hasattr(HarvestRecord, function):
-                    [
-                        getattr(record, function)(**arguments or {})
-                        for record in self.data
-                    ]
+                    for record in self.data:
+                        # Here, we use record-level templating to allow for dynamic arguments based on the record
+                        from .templating import template_object
+
+                        # We can't used items() here because we do not iterate over the dictionary
+                        templated_stage = template_object(template=self.original_template['stages'][self.stage_position],
+                                                          variables=record,
+                                                          task_chain_vars=self.task_chain.variables)
+
+                        # Execute the function on the record
+                        getattr(record, function)(**(list(templated_stage.values())[0] or {}))
 
                 else:
                     raise AttributeError(f"Neither HarvestRecordSet nor HarvestRecord has a method named '{function}'")
 
                 break
+
+            # Increment the stage_position
+            self.stage_position += 1
 
         self.result = self.data
 
@@ -493,12 +502,95 @@ class ForEachTask(BaseTask):
 
         return self
 
+@register_definition(name='json', category='task')
+class JsonTask(BaseTask):
+    def __init__(self, mode: Literal['serialize', 'deserialize'], data: Any = None, default_type: type = str,
+                 parse_datetimes: bool = False, *args, **kwargs):
+        """
+        Initializes a new instance of the JsonTask class.
+
+        Args:
+            data (Any, optional): The data to load or dump. Defaults to None.
+            mode (Literal['serialize', 'deserialize']): The mode in which to operate. 'load' reads a JSON file, 'dump' writes a JSON file.
+            default_type (type, optional): The default type to use when loading JSON data. Defaults to str.
+            *args: Variable length argument list.
+            **kwargs: Arbitrary keyword arguments.
+        """
+        super().__init__(*args, **kwargs)
+        self.data = data
+        self.mode = mode
+        self.default_type = default_type
+        self.parse_datetimes = parse_datetimes
+
+    def method(self):
+        """
+        Executes the task.
+
+        Returns:
+            JsonTask: The current instance of the JsonTask class.
+        """
+        def do_mode(data: Any):
+            import json
+            if self.mode == 'deserialize':
+                # Make sure the data is a string, otherwise it has already been deserialized
+                if isinstance(data, str):
+                    deserialized = json.loads(data)
+
+                else:
+                    deserialized = data
+
+                if self.parse_datetimes:
+                    def parse_datetime(v: Any):
+                        """
+                        Attempts to parse a string as a datetime object. If the string cannot be parsed, it is returned as-is.
+                        """
+                        from datetime import datetime
+
+                        try:
+                            return datetime.strptime(v, '%Y-%m-%d %H:%M:%S.%f')
+
+                        except Exception as ex:
+                            return v
+
+                    if isinstance(deserialized, dict):
+                        for key, value in deserialized.items():
+                            deserialized[key] = parse_datetime(value)
+
+                    elif isinstance(deserialized, list):
+                        for i, item in enumerate(deserialized):
+                            deserialized[i] = parse_datetime(item)
+
+                    else:
+                        deserialized = parse_datetime(deserialized)
+
+                return deserialized
+
+
+            # Convert the data into a string
+            elif self.mode == 'serialize':
+                # default=str is used to serialization values such as datetime objects
+                # This can lead to inconsistencies in the output, but it is necessary
+
+                return json.dumps(data, default=str)
+
+
+        # Check if self.data is an iterable
+        if isinstance(self.data, (list, tuple)):
+            self.result = [do_mode(d) for d in self.data]
+
+        else:
+            self.result = do_mode(self.data)
+
+        return self
+
+
 @register_definition(name='mongo', category='task')
 class MongoTask(BaseDataTask):
     """
     The MongoTask class is a subclass of the BaseDataTask class. It represents a task that interacts with a MongoDB database.
     """
-    from user_filters import MongoUserFilter
+    from ..user_filters import MongoUserFilter
+    from pymongo import MongoClient
 
     CONNECTION_POOLS = {}
     REQUIRED_CONFIGURATION_KEYS = ['host', 'port', 'database']
@@ -520,9 +612,9 @@ class MongoTask(BaseDataTask):
         self.collection = collection
         self.result_attribute = result_attribute
 
-        if self._db.get('alias'):
+        if self._db.redis_get():
             if self._db['alias'] == 'persistent':
-                from silos.persistent import connect
+                from ..silos.persistent import connect
                 self._connection = connect(database=self._db['database'])
 
             else:
@@ -600,8 +692,9 @@ class MongoTask(BaseDataTask):
         from the result, if applicable.
         """
 
-        # If connected, return existing _connection otherwise connect
+        # If connected, return existing connection otherwise connect
         super().connect()
+
         if self.collection:
             # Note that MongoDb does not return an error if a collection is not found. Instead, MongoDb will faithfully
             # create the new collection name, even if it malformed or incorrect. This is an intentional feature of MongoDb.
@@ -628,84 +721,443 @@ class RedisTask(BaseDataTask):
     """
     The RedisTask class is a subclass of the BaseDataTask class. It represents a task that interacts with a Redis database.
 
-    When `BaseDataTask.arguments` contains a `value` key, the value will be serialized to JSON before being stored in the database.
+    If a Redis command does not accept any of the VALID_READ_KEYS, then that command cannot be used with the RedisTask.
 
-    Similarly, results are deserialized from JSON to Python objects if they are JSON strings.
-
-    Attributes:
-        invalidate_after (int, optional): The time in seconds after which the key will be invalidated.
+    >>> task = RedisTask(
+    >>>     command='get',
+    >>>     arguments={'key': 'my_key'}
+    >>> )
     """
+    from redis import StrictRedis
 
-    REQUIRED_CONFIGURATION_KEYS = ['host', 'port', 'db']
+    # The connection key map is used to map the connection attributes to the appropriate attributes in the subclass.
+    # base_configration_key: The attribute in the BaseDataTask class.
+    # driver_configuration_key: The attribute specific to the data provider driver / module.
+    # Format: (base_configuration_key, driver_configuration_key)
+
+    CONNECTION_KEY_MAP = (
+        ('host', 'host'),
+        ('port', 'port'),
+        ('username', 'username'),
+        ('password', 'password'),
+        ('database', 'db'),
+    )
+
+    # Connection pools are used to store connections to the data provider. This reduces the number of connections to the
+    # data provider and allows us to reuse connections. Override this attribute in subclasses to provide data provider
+    # specific connection pools.
     CONNECTION_POOLS = {}
 
-    def __init__(self, invalidate_after: int = 0, *args, **kwargs):
+    # Default connection pool parameters are used to provide default values for the connection pool.
+    DEFAULT_CONNECTION_POOL_PARAMETERS = {
+        'decode_responses': True
+    }
+
+    # The following keys are used to validate the arguments provided to the RedisTask. If a Redis command does not accept
+    # any of these keys, then that command cannot be used with the RedisTask.
+    VALID_READ_KEYS = ('key', 'keys', 'name', 'pattern')
+
+    def __init__(self, expire: int = None, serialization: bool = False, *args, **kwargs):
+        """
+        Initializes a new instance of the RedisTask class.
+
+        If the alias is 'ephemeral', the connection will be created using the ephemeral connection method. Otherwise, the
+        connection will be created using the host, port, username, password, and database attributes.
+
+        Args
+        expire (int, optional): The expiration time for records in the Redis database. Defaults to None.
+        serialization (bool, optional): When True: data being written will be serialized while data read will be deserialized. Defaults to False.
+
+        """
+
+        # Initialize the BaseDataTask class
         super().__init__(*args, **kwargs)
 
-        self.invalidate_after = invalidate_after
+        self.expire = expire
+        self.serialization = serialization
 
-        if self._db.get('alias'):
-            if self._db['alias'] == 'ephemeral':
-                from silos.ephemeral import connect
-                self._connection = connect(database=self._db['database'])
+        # Validate the RedisTask configuration
+        if not hasattr(self, f'redis_{self.command}'):
+            raise ValueError(f"Invalid command '{self.command}' for RedisTask. Got '{self.command}'.")
 
-            else:
-                raise ValueError(f"Invalid alias '{self._db['alias']}' for RedisTask. Must be 'ephemeral'.")
+        # Make sure that self.alias is 'ephemeral' if it is provided
+        if self.alias and self.alias != 'ephemeral':
+            raise ValueError(f"Invalid alias '{self.alias}' for RedisTask. Must be 'ephemeral'.")
+
+        elif not self.alias and not self.host:
+            raise ValueError(f"Missing required configuration 'host' for RedisTask.")
+
+        # Make sure that the command is a valid Redis connector command
+        if not hasattr(StrictRedis, self.command):
+            raise ValueError(f"Invalid command '{self.command}' for RedisTask. Got '{self.command}'."
+                             f"\nCheck the Redis documentation at https://redis-py.readthedocs.io/en/stable/commands.html.")
 
     @property
     def is_connected(self) -> bool:
-        self._connection.ping()
-        return True
+        try:
+            self.connection.ping()
+            return True
+
+        except Exception:
+            return False
 
     def connect(self) -> StrictRedis:
         """
         Connects to a Redis server. If an existing pool is available, it will be used. Otherwise, a new connection
         pool will be created and stored for future use.
         """
+        from redis import ConnectionPool, StrictRedis
 
         # If already connected, return the existing connection
         if self.is_connected:
-            return self._connection
+            return self.connection
 
-        # Create a connection pool key based on the database configuration
-        from hashlib import md5
-        connection_pool_key = md5(b'-'.join(self._db.values())).hexdigest()
+        # If the alias is 'ephemeral', connect to the Redis database using the ephemeral connection method
+        if self.alias == 'ephemeral':
+            from ..silos.ephemeral import connect
 
-        # If a connection pool exists, use it
+            self.connection = connect(database=self.database)
+            return self.connection
+
+        # Create a connection pool key based on the connection configuration
+        connection_pool_key = self.connection_pool_key
+
+        # If a connection pool exists, get a connection from the pool
         if self.CONNECTION_POOLS.get(connection_pool_key):
-            self._connection = self.CONNECTION_POOLS[connection_pool_key]
+            connection_pool = self.CONNECTION_POOLS[connection_pool_key]
 
         # Otherwise, create a new connection pool
         else:
-            self._connection = self._connection = StrictRedis(**{'max_connections': self.max_pool_size} | self._db)
-            self.CONNECTION_POOLS[connection_pool_key] = self._connection
+            connection_pool = ConnectionPool(
+                **(
+                        self.DEFAULT_CONNECTION_POOL_PARAMETERS |        # Default connection pool parameters
+                        {'max_connections': self.max_pool_size} |        # (super) Maximum number of connections in the pool
+                        self.mapped_connection_configuration             # (super) Connection configuration mapped to the driver
+                )
+            )
+
+            self.CONNECTION_POOLS[connection_pool_key] = connection_pool
+
+        # Assign the connection
+        self.connection = StrictRedis(connection_pool=connection_pool)
+
+        return self.connection
 
     def disconnect(self):
-        self._connection.close()
+        self.connection.close()
 
-    def method(self, *args, **kwargs):
+    def method(self, *args, **kwargs) -> 'RedisTask':
+        """
+        Executes the command on the Redis database, handling pattern or keys iteration if necessary. This is accomplished
+        by checking if the provided 'pattern' or 'keys' arguments are present in the command's signature. If they are not,
+        the command is executed as-is. If they are, the command is executed for each key in the pattern or keys.
+        """
 
-        # If there is an incoming value, serialize it to JSON
-        if self.arguments.get('value'):
-            from json import dumps
-            self.arguments['value'] = dumps(self.arguments['value'], default=str)
+        self.connect()
 
-        result = self._connection.execute_command(self.command, **self.arguments)
-
-        try:
-            # Deserialize the result if it is a JSON string
-            from json import loads
-            result = loads(result)
-
-        except Exception:
-            pass
-
-        if self.invalidate_after:
-            self._connection.expire(self._db['key'], int(self.invalidate_after))
-
-        self.result = result
+        self.result = getattr(self, f'redis_{self.command}')()
 
         return self
+
+    def redis_delete(self) -> dict:
+        """
+        Deletes the records from the Redis database based on a list of 'keys' or a 'pattern'.
+
+        Configuration Example
+        ```yaml
+        - name: delete_redis_keys
+          alias: ephemeral
+          command: delete
+          keys:
+            - key1
+            - key2
+
+        - name: delete_redis_keys
+          alias: ephemeral
+          command: delete
+          pattern: "key*"
+        ```
+        """
+
+        # Retrieve keys based on the pattern or keys provided
+        keys = self.redis_keys()
+
+        delete_count = self.connection.delete(*keys)
+
+        result = {
+            'deleted': delete_count,
+            'keys': keys
+        }
+
+        return result
+
+    def redis_expire(self) -> list:
+        """
+        Sets the expiration time for records in the Redis database based on a list of keys or a pattern.
+
+        Configuration Example
+        ```yaml
+        - name: expire_redis_keys
+          alias: ephemeral
+          command: expire
+          keys:
+            - key1
+            - key2
+        ```
+
+        ```yaml
+        - name: expire_redis_keys
+          alias: ephemeral
+          command: expire
+          pattern: "key*"
+        ```
+        """
+
+        keys = self.redis_keys()
+
+        for key in keys:
+            self.calls += 1
+            self.connection.expire(name=key, time=self.expire)
+
+        self.result = {'keys': keys}
+
+        return keys
+
+    def redis_flush(self):
+        """
+        Removes all records from the Redis database. This action is not recommended and may result in data loss.
+        Instead, make sure to expire records when they are no longer needed.
+
+        Configuration Example
+        ```yaml
+        - name: flush_redis
+          alias: ephemeral
+          command: flush
+        ```
+        """
+
+        self.calls += 1
+
+        delete_count = self.connection.flushall()
+
+        result = {
+            'deleted': delete_count
+        }
+
+        return result
+
+    def redis_get(self) -> list:
+        """
+        Gets the records from the Redis database based on a list of keys or a pattern. Returns a list of records. The
+        return for this function is always a list of dictionaries. '_name' is included in the dictionary to indicate the
+        name of the record.
+
+        Configuration Example
+        ```yaml
+        - name: get_redis_records
+          alias: ephemeral
+          command: get
+          keys:
+            - key1
+            - key2
+        ```
+
+        ```yaml
+        - name: get_redis_records
+          alias: ephemeral
+          command: get
+          pattern: "key*"
+        ```
+        """
+
+        results = []
+
+        # When 'name' and 'keys' are provided, we treat this as an hget() operation
+        if self.arguments.get('name') and self.arguments.get('keys'):
+            name = self.arguments.get('name')
+
+            # When 'keys' is '*', we treat this as an hgetall() operation and retrieve all keys for the 'name'
+            if self.arguments.get('keys') == '*':
+                self.calls += 1
+                result = self.connection.hgetall(name=name)
+
+            # Otherwise, 'keys' is a list and we should only retrieve those keys in question
+            else:
+                keys = self.arguments.get('keys')
+                result = {}
+                for key in keys:
+                    self.calls += 1
+
+                    try:
+                        v = self.connection.hget(name=self.arguments['name'], key=key)
+
+                        if self.serialization:
+                            from json import loads
+                            v = loads(v)
+
+                    except Exception as ex:
+                        v = None
+
+                    result[key] = v
+
+                result['_name'] = name
+                results.append(result)
+
+        # If 'name' and 'keys' is not provided, we will use 'keys' or 'pattern' to retrieve the records
+        else:
+            keys = self.redis_keys()
+
+            results = []
+
+            for key in keys:
+                self.calls += 1
+
+                try:
+                    result = self.connection.get(name=key)
+
+                    if self.serialization:
+                        from json import loads
+                        result = loads(result)
+
+                except Exception as ex:
+                    result = None
+
+                result['_name'] = key
+                results.append(result)
+
+        return results
+
+    def redis_keys(self) -> list:
+        """
+        Gets the keys from the Redis database based on a pattern. If 'keys' are provided, the keys are returned as-is.
+
+        Configuration Example
+        ```yaml
+        - name: get_redis_keys
+          alias: ephemeral
+          command: keys
+          pattern: "key*"
+        ```
+        """
+
+        # Use pattern matching to return a list of keys
+        if self.arguments.get('pattern'):
+            result = self.connection.scan_iter(match=self.arguments['pattern'])
+
+        # If the keys are provided, return the keys
+        elif self.arguments.get('keys'):
+            result = self.arguments.get('keys')
+
+        # Return all keys
+        else:
+            result = self.connection.scan_iter(match='*')
+
+        return result
+
+    def redis_set(self):
+        """
+        Sets the records in the Redis database based on a dictionary of keys and values. How records are added is based
+        on the presence of 'name' and 'key' in the arguments.
+
+        Configuration Example
+        ```yaml
+        - name: set_redis_keys
+          alias: ephemeral
+          command: set
+          data:
+            key1: value1
+            key2: value2
+        ```
+        """
+
+        _STRINGABLE = (str or int or float)
+
+        results = {
+            'added': 0,
+            'errors': 0,
+            'updated': 0
+        }
+
+        def _set(n: str = None, k: str = None, v: _STRINGABLE = None):
+            """
+            Sets the value in the Redis database. Accepts a name, key, and value. If a serialization is required, the
+            value will be serialized before being set. If an expiration time is provided, the expiration time will be set
+            for the record.
+
+            * If 'name' and 'keys' are provided
+                - hset() is used to set the value for each key
+
+                * AND the data is a dictionary
+                    - the data is treated as a mapping of key/value pairs belonging to 'name'.
+
+                * AND the data is a list
+                    - each iteration of the list is treated as a dictionary of key/value pairs belonging to the value
+                      of the 'name' field.
+
+            * If only 'name' and 'value' are provided and the data is a dictionary
+
+
+            """
+            # Serialize the value if necessary
+            if self.serialization and not isinstance(v, _STRINGABLE):
+                from json import dumps
+                v = dumps(v, default=str)
+
+            try:
+                self.calls += 1
+
+                if n and k:
+                    # Use hset() if a name and key are provided
+                    r = self.connection.hset(name=n, key=k, value=v)
+
+                    # If an expiration time is provided, set the expiration time for this record
+                    if self.expire:
+                        self.calls += 1
+                        self.connection.expire(name=n, time=self.expire)
+
+                else:
+                    # Use set() if only a name is provided. Include expiration time (ex) if provided.
+                    r = self.connection.set(name=n, value=v, ex=self.expire)
+
+            except Exception as ex:
+                results['errors'] += 1
+
+            else:
+                return r
+
+        # This is an hset() operation
+        if self.arguments.get('name') and self.arguments.get('key'):
+            # If a dictionary is provided, we treat 'name' as a static value and iterate over the key/value pairs
+            if isinstance(self.data, dict):
+                for key, value in self.data.items():
+                    _set(n=self.arguments['name'], k=key, v=value)
+
+            # If a list is provided, 'name' is treated as a key reference in the data
+            elif isinstance(self.data, list):
+                for item in self.data:
+                    name = item.redis_get()
+                    if isinstance(item, dict):
+                        for key, value in item.items():
+                            _set(n=name, k=key, v=value)
+
+        # When only a 'name' and 'value' are provided, we treat this as a set() operation
+        else:
+            # If a dictionary is provided, we treat 'name' as a dynamic value based on the dictionary key
+            # and the value as the dictionary value
+            if isinstance(self.data, dict):
+                for name, value in self.data.items():
+                    _set(n=name, v=value)
+
+            # If a list is provided, we treat 'name' and 'value' as key references in the data
+            elif isinstance(self.data, list):
+                for item in self.data:
+                    if isinstance(item, dict):
+                        _set(n=item.get(self.arguments['name']),
+                             v=item.get(self.arguments['value']))
+
+            elif isinstance(self.data, _STRINGABLE):
+                # TODO: finish this nonsense
+                pass
 
 @register_definition(name='wait', category='task')
 class WaitTask(BaseTask):

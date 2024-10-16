@@ -21,7 +21,6 @@ from .tasks import (
     DummyTask,
     ErrorTask,
     FileTask,
-    ForEachTask,
     HarvestRecordSetTask,
     JsonTask,
     MongoTask,

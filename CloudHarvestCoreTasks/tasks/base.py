@@ -78,6 +78,7 @@ class BaseTask:
     def __init__(self,
                  name: str,
                  blocking: bool = True,
+                 data: Any = None,
                  description: str = None,
                  on: dict = None,
                  task_chain: 'BaseTaskChain' = None,
@@ -85,7 +86,6 @@ class BaseTask:
                  retry: dict = None,
                  user_filters:dict = None,
                  when: str = None,
-                 with_vars: list[str] = None,
                  **kwargs):
 
         """
@@ -126,6 +126,7 @@ class BaseTask:
         # Assigned attributes
         self.name = name
         self.blocking = blocking
+        self.data = data
         self.description = description
         self.on = on or {}
         self.output = None
@@ -230,7 +231,8 @@ class BaseTask:
                     # Check of the `when` condition is met
                     if self.when and self.task_chain:
                         from .templating import template_object
-                        when_result = True if template_object(template={'result': '{{ ' + self.when + ' }}'}, variables=self.task_chain.variables, task_chain_vars=self.task_chain.variables).get('result') == 'True' else False
+                        when_result = True if template_object(template={'result': '{{ ' + self.when + ' }}'},
+                                                              variables=self.task_chain.variables).get('result') == 'True' else False
 
                     # If `self.when` condition is met or is None, run the method
                     if when_result:
@@ -318,7 +320,6 @@ class BaseTask:
 
         i = 1
 
-        from .factories import task_from_dict
         for d in (self.on.get(directive) or []):
             # If the task is blocking, insert the new task before the next task in the chain
             if self.blocking:
@@ -463,7 +464,6 @@ class BaseDataTask(BaseTask):
     def __init__(self, command: str,
                  arguments: dict = None,
                  alias: Literal['ephemeral', 'persistent'] = None,
-                 data: Any = None,
                  host: str = None,
                  port: int = None,
                  username: str = None,
@@ -491,7 +491,6 @@ class BaseDataTask(BaseTask):
         self.alias = alias
         self.arguments = arguments or {}
         self.command = command
-        self.data = data
         self.database = database
         self.extended_db_configuration = extended_db_configuration or {}
         self.host = host
@@ -572,33 +571,26 @@ class BaseDataTask(BaseTask):
 
         return False
 
+    @property
+    def connection_sha(self) -> str:
+        """
+        Returns the SHA-256 hash of the connection parameters. We use this method to store connections in the connection
+        pool. This allows us to reuse connections and reduce the number of connections to the data provider. Using an
+        SHA-256 hash ensures that the connection key is unique, consistent, and unknowable to end users.
+        """
+
+        from hashlib import sha256
+
+        connection_string = ''.join([self.host, str(self.port), self.username, self.password, self.database])
+
+        return sha256(connection_string.encode()).hexdigest()
+
     def connect(self) -> 'BaseDataTask':
         """
         Connect the Task to the data provider.
 
         This method should be overwritten in subclasses to provide specific functionality. However, super().connect()
         should be called in the subclass method to ensure that the connection is established.
-
-        >>> # If the task is already connected, return the connection
-        >>> if self.is_connected:
-        >>>     return self.connection
-        >>>
-        >>> # Check if there is a connection pool available
-        >>> connection_key = self.connection_pool_key()
-        >>> connection_pool = self.CONNECTION_POOLS.redis_get()
-        >>>
-        >>> if connection_pool:
-        >>>     self.connection = connection_pool.get_connection()
-        >>>     return self.connection
-        >>>
-        >>> else:
-        >>>     # Establish a new connection
-        >>>     self.connection = self._establish_connection()
-        >>>
-        >>>     # Add the connection to the connection pool
-        >>>     self.CONNECTION_POOLS[connection_key] = self.connection
-        >>>
-        >>>     return self.connection
         """
 
         return self
@@ -957,7 +949,7 @@ class BaseTaskChain(List[BaseTask]):
         """
 
         for position, task in enumerate(self.task_templates):
-            if task.redis_get() == task_name:
+            if task.name == task_name:
                 return position
 
     def get_variables_by_names(self, *variable_names) -> dict:
@@ -1079,143 +1071,6 @@ class BaseTaskChain(List[BaseTask]):
 
         return self
 
-    def replace_variable_path_with_value(self,
-                                         original_string: str,
-                                         item: (dict or list or tuple) = None,
-                                         fail_on_unassigned: bool = False) -> Any:
-        """
-        Accepts a path like 'item.key[index].key' and returns the value of that path in the task chain's variables.
-
-        Args:
-            original_string (str): The path to the variable in the task chain's variables.
-            item (dict, list, tuple): When iteration is in effect,
-            fail_on_unassigned (bool): If True, the method will raise an exception if the variable is not assigned.
-        """
-
-        from re import compile, split
-
-        """
-        Regex expression breakdown:
-            (item|var): Matches the literal strings "item" or "var".
-            \.: Matches a literal dot.
-            [^\s]*: Matches zero or more characters that are not whitespace.
-        """
-
-        # If the original string is not a string or does not contain 'var' or 'item', return the original string
-        if not isinstance(original_string, str) or ('var' not in original_string and 'item' not in original_string):
-            return original_string
-
-        pattern = compile('(item|var)\.[^\s]*')
-
-        # Find all the matches in the path
-        matches = [match.group(0) for match in pattern.finditer(original_string)]
-
-        # Determines if the entire string will be replaced by the output. When True, the output will be
-        # a single value. Otherwise, the output will be a string with the replaced values. This allows users to
-        # concatenate strings with variables.
-        replace_string_with_value = (len(matches) == 1 and original_string == matches[0])
-
-        def walk_path(p, obj) -> Any:
-            """
-            Walks the path of the object to retrieve the value at the end of the path.
-            """
-            # Convert the path string into a list of keys and indices
-            path = []
-
-            # Splits the string at either a dot (.) or any substring enclosed in square brackets ([]),
-            # while keeping the delimiters (dot or square brackets) in the result.
-            parts = split(r'(\[.*?\]|\.)', p)
-
-            # The start_index is assigned based on the type of variable (item or var). This is necessary because the
-            # variable identifier (item/var) is not a valid part of the object itself.
-            if parts[0] == 'item':
-                start_index = 2
-
-            elif parts[0] == 'var':
-                start_index = 3
-
-            else:
-                start_index = 0
-
-            for part in parts[start_index:]:
-                if part == '' or part == '.':
-                    continue
-
-                if part.startswith('[') and part.endswith(']'):
-                    path.append(int(part[1:-1]))
-                else:
-                    path.append(part)
-
-            # Traverse the object using the parsed path
-            for p in path:
-                obj = obj[p]
-
-            return obj
-
-        # Prepare the replacement values dictionary
-        replacement_values = {}
-
-        for match in matches:
-            # The type of variable (item, var) and the name of the variable
-            ms = match.split('.')
-
-            var_type = ms[0]
-            var_name = ms[1]
-
-            match var_type:
-                # Use the iterator as the source object
-                case 'item':
-                    replacement_values[match] = walk_path(match, item)
-
-                # Get a component of a task chain variable
-                case 'var':
-                    var = self.variables.get(var_name)
-
-                    if not var:
-                        # From an internal code perspective there may be times when we need to raise errors when a variable
-                        # is not assigned. However, in the context of the task chain, we may want to ignore this error and
-                        # continue. This is especially useful when we are scanning the task chain configurations for
-                        # variables that need to be replaced. We may not have assigned the variable yet.
-                        if fail_on_unassigned:
-                            raise ValueError(f'Variable "{var_name}" is not assigned in the task chain. '
-                                             f'Did you remember to assign in a previous task with "result_as: var.{var}"?')
-
-                        else:
-                            # Normally we will ignore this variable and continue because the variable may not have been
-                            # assigned yet. Configurations may be scanned by this method several times before the variable
-                            # is assigned.
-                            continue
-
-                    # Assign the value to the replacement_values dictionary
-                    replacement_values[match] = walk_path(match, var)
-
-                case _:
-                    # We shouldn't actually see this error, but it is here just in case.
-                    raise ValueError(f'Invalid path: {match}; must begin with "item" or "var".')
-
-        # Perform the replacement
-        if replace_string_with_value:
-            if replacement_values.values():
-                # Since the only value of the original_string is a variable reference, we will return the actual
-                # variable's object.
-                result = list(replacement_values.values())[0]
-
-            # No replacement value was retrieved, so we will return the original string
-            else:
-                result = original_string
-
-        else:
-            # Copy the original string so that we don't mangle the input
-            from copy import copy
-            result = copy(original_string)
-
-            # Replace the variables in the string
-            for key, value in replacement_values.items():
-                result = result.replace(key, str(value))
-
-        return result
-
-
     def run(self) -> 'BaseTaskChain':
         """
         Runs the task chain. This method will block until all tasks in the chain are completed.
@@ -1236,9 +1091,7 @@ class BaseTaskChain(List[BaseTask]):
                 # Instantiate the task from the task configuration
                 try:
                     from .factories import task_from_dict
-                    task = task_from_dict(task_configuration=self.task_templates[self.position],
-                                          task_chain=self,
-                                          template_vars=self.variables)
+                    task = task_from_dict(task_configuration=self.task_templates[self.position], task_chain=self)
 
                 # Break when there are no more tasks to run
                 except IndexError:

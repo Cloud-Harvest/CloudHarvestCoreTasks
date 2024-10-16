@@ -11,9 +11,6 @@ Classes:
 from typing import Dict, List, Literal
 from collections import OrderedDict
 
-from redis.utils import deprecated_function
-from yaml import serialize
-
 
 class HarvestRecord(OrderedDict):
     """

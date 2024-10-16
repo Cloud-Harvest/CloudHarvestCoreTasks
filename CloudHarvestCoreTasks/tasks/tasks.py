@@ -12,8 +12,6 @@ a method() function that performs the task's operation. The method() function sh
 from CloudHarvestCorePluginManager.decorators import register_definition
 from typing import Any, List, Literal
 
-from redis import StrictRedis
-
 from .base import (
     BaseDataTask,
     BaseTask,
@@ -21,7 +19,7 @@ from .base import (
     BaseTaskException,
     TaskStatusCodes
 )
-from .templating import template_object
+
 from ..user_filters import MongoUserFilter
 
 @register_definition(name='dummy', category='task')
@@ -198,52 +196,32 @@ class FileTask(BaseTask):
             else:
 
                 try:
-                    # If the user has not provided data but has provided variable names, use them
-                    if self.with_vars:
-                        _data = self.task_chain.get_variables_by_names(*self.with_vars)
+                    # If the user has specified desired_keys, filter the data to just those keys, if applicable
+                    if self.desired_keys:
+                        from flatten_json import flatten, unflatten
+                        separator = '.'
 
-                        if len(self.with_vars) == 1:
-                            _data = _data.get(self.with_vars[0])
+                        # If the data is a dictionary, flatten it, filter the keys, and unflatten it
+                        if isinstance(self.data, dict):
+                            self.data = unflatten({
+                                k: v for k, v in flatten(self.data.items, separator=separator)()
+                                if k in self.desired_keys
+                            }, separator=separator)
 
-                    # In the event that neither data nor variable names are provided, use an empty dictionary
-                    else:
-                        _data = {}
-
-                    # If the user has provided a template for the output, apply it
-                    if self.template:
-                        from .templating import template_object
-                        _data = template_object(template=self.template,
-                                                variables=_data,
-                                                task_chain_vars=self.task_chain.variables)
-
-                    # If no template is provided, use _data as provided
-                    else:
-                        # If the user has specified desired_keys, filter the data to just those keys, if applicable
-                        if self.desired_keys:
-                            from flatten_json import flatten, unflatten
-                            separator = '.'
-
-                            # If the data is a dictionary, flatten it, filter the keys, and unflatten it
-                            if isinstance(_data, dict):
-                                _data = unflatten({
-                                    k: v for k, v in flatten(_data.items, separator=separator)()
+                        # If the data is a list, flatten each record, filter the keys, and unflatten each record
+                        elif isinstance(self.data, list):
+                            self.data = [
+                                unflatten({
+                                    k: v for k, v in flatten(record, separator=separator).items()
                                     if k in self.desired_keys
-                                }, separator=separator)
-
-                            # If the data is a list, flatten each record, filter the keys, and unflatten each record
-                            elif isinstance(_data, list):
-                                _data = [
-                                    unflatten({
-                                        k: v for k, v in flatten(record, separator=separator).items()
-                                        if k in self.desired_keys
-                                    })
-                                    for record in _data
-                                ]
+                                })
+                                for record in self.data
+                            ]
 
                     if self.format == 'config':
                         config = ConfigParser()
-                        if isinstance(_data, dict):
-                            config.read_dict(_data)
+                        if isinstance(self.data, dict):
+                            config.read_dict(self.data)
 
                             config.write(file)
 
@@ -251,28 +229,28 @@ class FileTask(BaseTask):
                             raise BaseTaskException(f'{self.name}: `FileTask` only supports dictionaries for writes to config files.')
 
                     elif self.format == 'csv':
-                        if isinstance(_data, list):
-                            if all([isinstance(record, dict) for record in _data]):
-                                consolidated_keys = set([key for record in _data for key in record.redis_keys()])
+                        if isinstance(self.data, list):
+                            if all([isinstance(record, dict) for record in self.data]):
+                                consolidated_keys = set([key for record in self.data for key in record.keys()])
                                 use_keys = self.desired_keys or consolidated_keys
 
                                 writer = DictWriter(file, fieldnames=use_keys)
                                 writer.writeheader()
 
-                                writer.writerows(_data)
+                                writer.writerows(self.data)
 
                                 return self
 
                         raise BaseTaskException(f'{self.name}: `FileTask` only supports lists of dictionaries for writes to CSV files.')
 
                     elif self.format == 'json':
-                        json.dump(_data, file, default=str, indent=4)
+                        json.dump(self.data, file, default=str, indent=4)
 
                     elif self.format == 'yaml':
-                        yaml.dump(_data, file)
+                        yaml.dump(self.data, file)
 
                     else:
-                        file.write(str(_data))
+                        file.write(str(self.data))
                 finally:
                     from os.path import exists
                     if not exists(self.abs_path):
@@ -352,8 +330,7 @@ class HarvestRecordSetTask(BaseTask):
 
                         # We can't used items() here because we do not iterate over the dictionary
                         templated_stage = template_object(template=self.original_template['stages'][self.stage_position],
-                                                          variables=record,
-                                                          task_chain_vars=self.task_chain.variables)
+                                                          variables=record)
 
                         # Execute the function on the record
                         getattr(record, function)(**(list(templated_stage.values())[0] or {}))
@@ -411,94 +388,6 @@ class PruneTask(BaseTask):
         self.result = {
             'total_bytes_pruned': total_bytes_pruned
         }
-
-        return self
-
-
-@register_definition(name='for_each', category='task')
-class ForEachTask(BaseTask):
-    """
-    The ForEachTask class is a subclass of the BaseTask class. It represents a task that creates a new task for each item
-    in a list. The task is created by rendering a template with the item as the context.
-
-    Attributes:
-        template (dict): The template for the tasks to be created.
-        insert_tasks_at_position (int): The position at which to insert the tasks.
-        insert_tasks_before_name (str): The name of the task before which to insert the tasks.
-        insert_tasks_after_name (str): The name of the task after which to insert the tasks.
-
-    Methods:
-        method(): Creates a new task for each item in data.
-    """
-
-    def __init__(self,
-                 data: Any,
-                 template: dict,
-                 insert_tasks_at_position: int = None,
-                 insert_tasks_before_name: str = None,
-                 insert_tasks_after_name: str = None,
-                 **kwargs):
-
-        """
-        The ForEachTask class is a subclass of the BaseTask class. It represents a task that creates a new task for each
-        item in a list. The task is created by rendering a template with the item as the context.
-
-        Args:
-            data (Any): The data to iterate over.
-            template (dict): The template for the tasks to be created.
-            insert_tasks_at_position (int, optional): The position at which to insert the tasks. Defaults to None.
-            insert_tasks_before_name (str, optional): The name of the task before which to insert the tasks. Defaults to None.
-            insert_tasks_after_name (str, optional): The name of the task after which to insert the tasks. Defaults to None
-        """
-
-        super().__init__(**kwargs)
-
-        self.data = data
-        self.template = template
-
-        if not isinstance(self.data, (dict, list, str)):
-            raise ValueError(f'The ForEachTask requires data in order to function. Got: {str(type(data))}')
-
-        # convert list of non-dictionaries to list of dictionaries
-        elif not isinstance(self.data[0], dict):
-            self.data = [{'item': item} for item in self.data]
-
-        self.insert_tasks_at_position = insert_tasks_at_position
-        self.insert_tasks_before_name = insert_tasks_before_name
-        self.insert_tasks_after_name = insert_tasks_after_name
-
-    def method(self, *args, **kwargs) -> 'ForEachTask':
-        # Here we use a copy of the original template to prevent mangling caused by repeated or reused variables from
-        # the top-level templating of the task's configuration. This is important because the template is rendered
-        # multiple times with different variables. Although ChainableUndefined could be used to prevent writing missing
-        # variables as empty string, it still would not prevent the mangling of the original template by reused
-        # variable names.
-
-        from .factories import task_from_dict
-        task_configurations = [
-            task_from_dict(task_configuration=self.original_template['template'].copy(),
-                           task_chain=self.task_chain,
-                           template_vars=record)         # we use the record for templating the task configuration because it may be used in task names or file paths
-            for record in self.data
-        ]
-
-        # Reverse the task configurations so they are inserted in the correct order
-        if any([self.insert_tasks_at_position, self.insert_tasks_before_name, self.insert_tasks_after_name]):
-            task_configurations.reverse()
-
-        for task_configuration in task_configurations:
-
-            if self.insert_tasks_at_position:
-                self.task_chain.task_templates.insert(self.insert_tasks_at_position, task_configuration)
-
-            elif self.insert_tasks_before_name:
-                self.task_chain.insert_task_before_name(self.insert_tasks_before_name, task_configuration)
-
-            elif self.insert_tasks_after_name:
-                self.task_chain.insert_task_after_name(self.insert_tasks_after_name, task_configuration)
-
-            else:
-                self.task_chain.task_templates.append(task_configuration)
 
         return self
 
@@ -612,13 +501,13 @@ class MongoTask(BaseDataTask):
         self.collection = collection
         self.result_attribute = result_attribute
 
-        if self._db.redis_get():
-            if self._db['alias'] == 'persistent':
+        if self.alias is not None:
+            if self.alias == 'persistent':
                 from ..silos.persistent import connect
-                self._connection = connect(database=self._db['database'])
+                self._connection = connect(database=self.database)
 
             else:
-                raise ValueError(f"Invalid alias '{self._db['alias']}' for MongoTask. Must be 'persistent'.")
+                raise ValueError(f"Invalid alias '{self.alias}' for MongoTask. Must be 'persistent'.")
 
     @property
     def is_connected(self) -> bool:
@@ -660,8 +549,7 @@ class MongoTask(BaseDataTask):
             return self._connection
 
         # Create a connection pool key based on the database configuration
-        from hashlib import md5
-        connection_pool_key = md5(b'-'.join(self._db.values())).hexdigest()
+        connection_pool_key = self.connection_sha
 
         # If a connection pool exists, use it
         if self.CONNECTION_POOLS.get(connection_pool_key):
@@ -670,7 +558,7 @@ class MongoTask(BaseDataTask):
         # Otherwise, create a new connection pool
         else:
             from pymongo import MongoClient
-            self._connection = MongoClient(**{'maxPoolSize': self.max_pool_size} | self._db)
+            self._connection = MongoClient(**{'maxPoolSize': self.max_pool_size} | self.mapped_connection_configuration)
             self.CONNECTION_POOLS[connection_pool_key] = self._connection
 
         return self._connection
@@ -698,11 +586,11 @@ class MongoTask(BaseDataTask):
         if self.collection:
             # Note that MongoDb does not return an error if a collection is not found. Instead, MongoDb will faithfully
             # create the new collection name, even if it malformed or incorrect. This is an intentional feature of MongoDb.
-            database_object = self._connection[self._db['database']][self.collection]
+            database_object = self._connection[self.database][self.collection]
 
         else:
             # Expose database-level commands
-            database_object = self._connection[self._db['database']]
+            database_object = self._connection[self.database]
 
         # Execute the command on the database or collection
         result = getattr(database_object, self.command)(**self.arguments)
@@ -788,6 +676,7 @@ class RedisTask(BaseDataTask):
             raise ValueError(f"Missing required configuration 'host' for RedisTask.")
 
         # Make sure that the command is a valid Redis connector command
+        from redis import StrictRedis
         if not hasattr(StrictRedis, self.command):
             raise ValueError(f"Invalid command '{self.command}' for RedisTask. Got '{self.command}'."
                              f"\nCheck the Redis documentation at https://redis-py.readthedocs.io/en/stable/commands.html.")
@@ -1135,7 +1024,7 @@ class RedisTask(BaseDataTask):
             # If a list is provided, 'name' is treated as a key reference in the data
             elif isinstance(self.data, list):
                 for item in self.data:
-                    name = item.redis_get()
+                    name = item['name']
                     if isinstance(item, dict):
                         for key, value in item.items():
                             _set(n=name, k=key, v=value)

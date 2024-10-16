@@ -120,7 +120,7 @@ def start_heartbeat(heartbeat_type: Literal['agent', 'api'], database: str = 'ha
         "ip": gethostbyname(getfqdn()),
         "os": platform.system(),
         "plugins": plugins,
-        "version": config.redis_get('version'),
+        "version": config.get('version'),
         "start": start_datetime.isoformat(),
     }
 

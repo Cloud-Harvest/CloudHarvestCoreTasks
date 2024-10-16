@@ -99,7 +99,7 @@ class TestBaseTask(BaseTestCase):
 
     def test_retry(self):
         # Test the retry method
-        from tasks.base import BaseTaskChain
+        from ..CloudHarvestCoreTasks.tasks.base import BaseTaskChain
         task_chain = BaseTaskChain(template={
             'name': 'test_chain',
             'description': 'This is a task_chain.',
@@ -301,76 +301,6 @@ class TestBaseTaskChain(BaseTestCase):
         self.assertEqual(report[0]['data'][-2]['Position'], '')
         self.assertEqual(report[0]['data'][-1]['Position'], 'Total')
 
-class TestBaseTaskChainReplaceVariablePathWithValue(BaseTestCase):
-    def setUp(self):
-        self.task_chain = BaseTaskChain(template={'name': 'TestBaseTaskChainReplaceVariablePathWithValue'})
-        self.task_chain.variables['replace_test'] = {
-            'test_str': 'successful test str replacement',
-            'test_list': [
-                'index 0',
-                'index 1',
-                'index 2'
-            ],
-            'test_nested_dict': {
-                'key1': 'value1',
-                'key2': 'value2'
-            },
-            'test_nested_list_dict': {
-                'key1': 'value1',
-                'key2': 'value2',
-                'key3': [
-                    'index 0',
-                    'index 1',
-                    'index 2'
-                ],
-                'key4': {
-                    'nested_key1': 'nested_value1',
-                    'nested_key2': 'nested_value2',
-                    'nested_key3': [
-                        'index 0'
-                    ]
-                }
-            }
-        }
-
-    def test_replace_variable_path_with_value(self):
-        # Test no replacement
-        self.assertEqual(self.task_chain.replace_variable_path_with_value(original_string='Unchanged text'),
-                         'Unchanged text')
-
-        # Simple string replacement
-        self.assertEqual(self.task_chain.replace_variable_path_with_value(original_string='My string var.replace_test.test_str'),
-                         'My string successful test str replacement')
-
-
-        # Multi-string replacement
-        self.assertEqual(self.task_chain.replace_variable_path_with_value(original_string='My string var.replace_test.test_str var.replace_test.test_nested_list_dict.key3[2]'),
-                         'My string successful test str replacement index 2')
-
-        # Nested string replacement
-        self.assertEqual(self.task_chain.replace_variable_path_with_value(original_string='My string var.replace_test.test_nested_list_dict.key4.nested_key3[0]'),
-                            'My string index 0')
-
-        # Whole object replacement
-        self.assertEqual(self.task_chain.replace_variable_path_with_value(original_string='var.replace_test.test_nested_dict'),
-                            self.task_chain.variables['replace_test']['test_nested_dict'])
-
-        # Reference to unassigned variable
-        self.assertEqual(self.task_chain.replace_variable_path_with_value(original_string='var.unassigned_variable.key1'),
-                         'var.unassigned_variable.key1')
-
-        # Invalid path will raise KeyError
-        self.assertRaises(KeyError,
-                          self.task_chain.replace_variable_path_with_value,
-                          **{'original_string': 'var.replace_test.test_nested_dict.key3'})
-
-        # Testing item iteration
-        items = [{'name': 'John', 'age': 25}, {'name': 'Jane', 'age': 47}]
-
-        for item in items:
-            self.assertEqual(self.task_chain.replace_variable_path_with_value(original_string='My name is item.name', item=item),
-                             f"My name is {item['name']}")
-
 class TestBaseTaskChainOnDirective(BaseTestCase):
     def setUp(self):
         """
@@ -527,7 +457,7 @@ class TestBaseTaskPool(BaseTestCase):
                 }
             ]
         }
-        from tasks.base import BaseTaskChain
+        from ..CloudHarvestCoreTasks.tasks.base import BaseTaskChain
         self.base_task_chain = BaseTaskChain(template=template)
 
     def test_pooling(self):

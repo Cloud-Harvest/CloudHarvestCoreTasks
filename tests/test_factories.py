@@ -92,3 +92,43 @@ class TestReplaceVariablePathWithValue(unittest.TestCase):
             self.assertEqual(replace_variable_path_with_value(original_string='My name is item.name',
                                                               item=item),
                 f"My name is {item['name']}")
+
+    def test_method_and_property_paths(self):
+        # Test var.replace_test.test_nested_dict.keys()
+        self.assertEqual(replace_variable_path_with_value(original_string='var.replace_test.test_nested_dict.keys()',
+                                                          task_chain=self.task_chain),
+                         ['key1', 'key2'])
+
+        # Test var.replace_test.test_list[0].value()
+        self.assertEqual(replace_variable_path_with_value(original_string='var.replace_test.test_list[0].value()',
+                                                          task_chain=self.task_chain),
+                         'index 0')
+
+        # Test var.replace_test.test_nested_dict.values()
+        self.assertEqual(replace_variable_path_with_value(original_string='var.replace_test.test_nested_dict.values()',
+                                                          task_chain=self.task_chain),
+                         ['value1', 'value2'])
+
+
+        # Test nested special values
+        # Test var.replace_test.test_list[0].keys[0] which should return the first key of the first item in the list
+        self.assertEqual(replace_variable_path_with_value(original_string='var.replace_test.test_nested_dict.keys()[0]',
+                                                          task_chain=self.task_chain),
+                         'key1')
+
+        # Test nested special values
+        # Test var.replace_test.test_list[0].keys[0] which should return the first key of the first item in the list
+        self.assertEqual(replace_variable_path_with_value(original_string='var.replace_test.test_nested_dict.keys()[0]',
+                                                          task_chain=self.task_chain),
+                         'key1')
+
+        # Test var.replace_test.test_list[0].keys[0].upper() which should return the first key of the first item in the list
+        self.assertEqual(replace_variable_path_with_value(original_string='var.replace_test.test_nested_dict.keys()[0].upper()',
+                                                          task_chain=self.task_chain),
+                         'KEY1')
+
+        # Test var.replace_test.test_list[0].keys[0] which should return the first key of the first item in the list
+        # TODO: maybe we shouldn't allow methods like __len__ to be called...
+        self.assertEqual(replace_variable_path_with_value(original_string='var.replace_test.test_nested_dict.keys()[0].upper().__len__()',
+                                                          task_chain=self.task_chain),
+                         4)

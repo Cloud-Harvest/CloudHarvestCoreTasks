@@ -1,3 +1,9 @@
+# 0.4.1
+- Completely redesigned how objects are templated variables referenced in task configurations
+- Added the `BaseTask.itemize` directive 
+  - Allows for the iteration of a task over a list of items 
+  - In addition to `var.variable_name`, itemization provides the `item.item_name` for referencing the current item in the iteration.
+
 # 0.4.0
 - Moved MongoDb operations into Tasks since both the Api and Agent will need to interact with the database
 - Moved `BaseCacheTask` and `CacheAggregateTask` to `CloudHarvestCoreTasks` as refactors inheriting `BaseDataTask`

@@ -91,7 +91,8 @@ def task_chain_from_dict(task_chain_registered_class_name: str,
 
 
 def task_from_dict(task_configuration: dict or BaseTask,
-                   task_chain: 'BaseTaskChain' = None) -> BaseTask:
+                   task_chain: 'BaseTaskChain' = None,
+                   item: Any = None) -> BaseTask:
     """
     Instantiates a task based on the task configuration.
 
@@ -114,7 +115,7 @@ def task_from_dict(task_configuration: dict or BaseTask,
     task_class = Registry.find(result_key='cls', category='task', name=class_name)[0]
 
     # Replace string object references with the objects themselves
-    templated_task_configuration = walk_and_replace(obj=task_configuration, task_chain=task_chain)
+    templated_task_configuration = walk_and_replace(obj=task_configuration, task_chain=task_chain, item=item)
 
     # Instantiate the task with the templated configuration and return it
     class_configuration = templated_task_configuration.get(class_name) or {}
@@ -230,7 +231,32 @@ def replace_variable_path_with_value(original_string: str,
 
         # Traverse the object using the parsed path
         for p in path:
-            obj = obj[p]
+
+            # Special functions which can be added at the end of the path
+            if isinstance(p, str) and p.endswith('()'):
+                # TODO: I think it would be valuable if we could include the args/kwargs in the function call in ().
+
+                match p:
+                    case 'value()':
+                        pass    # We'll return this obj
+
+                    case _:
+                        p = p[:-2]
+
+                        # Check if this is a property or method
+                        if hasattr(obj, p):
+                            obj = getattr(obj, p)
+
+                            # If the object is a callable, execute it otherwise return the object
+                            if callable(obj):
+                                obj = obj()
+
+                                # Convert the object to a list if it is a dict_keys or dict_values object
+                                if type(obj) in (type({}.keys()), type({}.values())):
+                                    obj = list(obj)
+
+            else:
+                obj = obj[p]
 
         return obj
 

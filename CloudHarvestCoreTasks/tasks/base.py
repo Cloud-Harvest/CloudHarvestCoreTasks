@@ -24,9 +24,8 @@ from CloudHarvestCorePluginManager.decorators import register_definition
 from datetime import datetime, timezone
 from enum import Enum
 from threading import Thread
-from typing import Any, List, Literal
+from typing import Any, Dict, List, Literal
 from logging import getLogger
-
 
 _log_levels = Literal['debug', 'info', 'warning', 'error', 'critical']
 USER_FILTERS = {
@@ -80,9 +79,10 @@ class BaseTask:
                  blocking: bool = True,
                  data: Any = None,
                  description: str = None,
+                 iterate: dict = None,
                  on: dict = None,
                  task_chain: 'BaseTaskChain' = None,
-                 result_as: str = None,
+                 result_as: (dict or str) = None,
                  retry: dict = None,
                  user_filters:dict = None,
                  when: str = None,
@@ -95,19 +95,38 @@ class BaseTask:
             - Must have a name attribute.
             - Are automatically added to the TaskRegistry.
 
-        Attributes:
+        Arguments:
             name (str): The name of the task.
             blocking (bool): A boolean indicating whether the task is blocking or not. If True, the task will block the task chain until it completes.
             description (str): A brief description of what the task does.
+            iterate (dict): A dictionary
+                >>> iterate = {
+                >>>     'variable': 'var.variable_name',    # The name of the variable to iterate over.
+                >>>     'insert_tasks_before_name': str,    # (optional) The name of the task to insert before.
+                >>>     'insert_tasks_after_name': str,     # (optional) The name of the task to insert after.
+                >>>     'insert_tasks_at_position': str,    # (optional) The position to insert the task at.
+                >>> }
             on (dict): A dictionary of task configurations for the task to run when it completes, errors, is skipped, or starts.
+                >>> on = {
+                >>>     'complete': [TaskConfiguration],
+                >>>     'error': [TaskConfiguration],
+                >>>     'skipped': [TaskConfiguration],
+                >>>     'start': [TaskConfiguration]
+                >>> }
             task_chain (BaseTaskChain): The task chain that this task belongs to, if applicable.
-            with_vars (list[str]): A list of variables that this task uses. These variables are retrieved from the task chain
-                and used in TaskConfiguration which templates this task's class.
-            status (TaskStatusCodes): The current status of the task.
-            out_data (Any): The data that this task produces, if applicable.
-            meta (Any): Any metadata associated with this task.
             retry (dict): A dictionary of retry configurations for the task.
-            result_as (str): The name of the variable to store the result of this task in the task chain's variables.
+                >>> retry = {
+                >>>     'delay_seconds': 1.0,                  # The number of seconds to delay before retrying the task.
+                >>>     'max_attempts': 3,                     # The maximum number
+                >>>     'when_error_like': '.*',               # A regex pattern to match the error message.
+                >>>     'when_error_not_like': '.*',           # A regex pattern to match the error message.
+                >>> }
+            result_as (str or dict): The name of the variable to store the result of this task in the task chain's variables.
+                >>> result_as = 'variable_name'
+                >>> result_as = {
+                >>>     'name': 'variable_name',
+                >>>     'mode': 'append', 'extend', 'merge', 'overwrite'    # The mode to store the result in the variable. 'overwrite' is the default.
+                >>> }
             user_filters (dict): A dictionary of user filters to apply to the data.
                 >>> user_filters = {
                 >>>     'accepted': '*',                        # Regex pattern to match the filters allowed in this Task.
@@ -121,6 +140,7 @@ class BaseTask:
                 >>> }
             when (str): A string representing a conditional argument using Jinja2 templating. If provided, the task
                 will only run if the condition evaluates to True.
+                >>> when: {{ var.variable_name == "value" }}
         """
 
         # Assigned attributes
@@ -128,6 +148,7 @@ class BaseTask:
         self.blocking = blocking
         self.data = data
         self.description = description
+        self.iterate = iterate
         self.on = on or {}
         self.output = None
         self.result_as = result_as
@@ -345,16 +366,20 @@ class BaseTask:
 
         # Store the result in the task chain's variables if a result_as variable is provided
         if self.result_as and self.task_chain:
-            self.task_chain.variables[self.result_as] = self.result
+            self.task_chain.variables[self.result_as.name].write(data=self.result)
 
+        # Apply user filters if the user filter stage is set to 'complete'
         if self.USER_FILTER_STAGE == 'complete':
             self.apply_user_filters()
 
+        # Run the on_complete directive
         self._run_on_directive('complete')
 
-        self.status = TaskStatusCodes.complete
-
+        # Update the end time of the task
         self.end = datetime.now(tz=timezone.utc)
+
+        # Update the status of the task
+        self.status = TaskStatusCodes.complete
 
         return self
 
@@ -677,7 +702,9 @@ class BaseTaskChain(List[BaseTask]):
         self.description = template.get('description')
         self.cache_progress = cache_progress
 
-        self.variables = {}
+        # Variables are stored with their name as the key and the BaseLockableVariable instance as the value.
+        self.variables: Dict[str, Any] = {}
+
         self.task_templates: List[dict or BaseTask] = template.get('tasks', [])
 
         self.status = TaskStatusCodes.initialized
@@ -1091,7 +1118,26 @@ class BaseTaskChain(List[BaseTask]):
                 # Instantiate the task from the task configuration
                 try:
                     from .factories import task_from_dict
-                    task = task_from_dict(task_configuration=self.task_templates[self.position], task_chain=self)
+                    task_template = self.task_templates[self.position]
+
+                    task = task_from_dict(task_configuration=task_template, task_chain=self)
+
+                    if task.iterate:
+                        task.status = TaskStatusCodes.skipped
+                        task.meta['info'] = 'Task was skipped because it was an iterated task.'
+
+                        # Insert the iterated tasks into the task chain's configurations
+                        [
+                            self.task_templates.insert(self.position + 1, iter_task)
+                            for iter_task in self.iterate_task(original_task_configuration=task_template)
+                        ]
+
+                        # Add the parent task to the task chain (it will not be executed)
+                        self.append(task)
+
+                        # Increment the position
+                        self.position += 1
+                        continue
 
                 # Break when there are no more tasks to run
                 except IndexError:
@@ -1133,6 +1179,66 @@ class BaseTaskChain(List[BaseTask]):
                 ephemeral_cache_thread.join(timeout=5)
 
             return self
+
+    def iterate_task(self, original_task_configuration: dict) -> List[dict]:
+        """
+        This generator converts a task_configuration with an 'iterate' directive into a list of task configurations
+        based on the elements of 'iterate.variable'.
+
+        Args:
+            original_task_configuration (dict): The original task configuration with the 'iterate' directive.
+        """
+
+        # Determine how results from the itemized processes will be stored. The default behavior is to override the
+        # variable with the same name as the 'result_as' directive; however, itemized tasks may return results of
+        # different types. The 'result_as' directive provides a way to specify how the results should be stored.
+        result_as = original_task_configuration.get('result_as')
+
+        if result_as:
+            result_as_mode = result_as.get('mode') or 'override' if isinstance(result_as, dict) else 'override'
+
+            # Determine how the results should be stored then initialize the variable accordingly
+            match result_as_mode:
+                case 'append' | 'extend':
+                    self.variables[result_as['name']] = []
+
+                case 'merge':
+                    self.variables[result_as['name']] = {}
+
+                # The default behavior is to override the variable
+                case _:
+                    self.variables[result_as['name']] = None
+
+        # Template the original configuration to get the iterated items. We take this approach to leverage the templating
+        # engine to resolve variables in the iterate directive.
+        from .factories import task_from_dict
+        task = task_from_dict(task_configuration=original_task_configuration, task_chain=self)
+        iter_var = task.iterate.get('variable')
+
+        # We employ reversed() here because we want the order of the tasks to be the same as the order of the iterated
+        # items. This is because the list.insert() operation will insert the new task at the specified position and
+        # shift the existing tasks down the task order. If we iterate in the normal order, the tasks will be performed
+        # in the reverse order of the iterated items.
+        # iter_var = list(reversed(iter_var))
+        for item in reversed(iter_var):
+            from copy import deepcopy
+
+            # Create a deep copy of the original task configuration to avoid mangling the original configuration
+            task_configuration = deepcopy(original_task_configuration)
+
+            class_key = list(task_configuration.keys())[0]
+
+            # Remove iterable configuration from the task
+            task_configuration[class_key].pop('iterate')
+
+            # Update the task's name
+            task_configuration[class_key]['name'] = f'{task_configuration[class_key]["name"]} - {iter_var.index(item) + 1}/{len(iter_var)}'
+
+            # Template the file with the item
+            from .factories import walk_and_replace
+            itemized_task_configuration = walk_and_replace(obj=task_configuration, task_chain=self, item=item)
+
+            yield itemized_task_configuration
 
     def terminate(self) -> 'BaseTaskChain':
         """

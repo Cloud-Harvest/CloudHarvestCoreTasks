@@ -301,6 +301,48 @@ class TestBaseTaskChain(BaseTestCase):
         self.assertEqual(report[0]['data'][-2]['Position'], '')
         self.assertEqual(report[0]['data'][-1]['Position'], 'Total')
 
+class TestBaseTaskChainIterateDirective(BaseTestCase):
+    def setUp(self):
+        self.task_configuration = {
+            'name': 'test_chain',
+            'description': 'This is a task_chain.',
+            'tasks': [
+                {
+                    'dummy': {
+                        'name': 'Dummy Iterative Task',
+                        'description': 'item.value()',
+                        'iterate': {
+                            'variable': 'var.iterate_test',
+                        }
+                    }
+                }
+            ]
+        }
+
+        self.task_chain = task_chain_from_dict(task_chain_registered_class_name='report',
+                                               task_chain=self.task_configuration)
+
+        self.task_chain.variables['iterate_test'] = ['test_1', 'test_2', 'test_3']
+
+    def test_iterative_run(self):
+        self.task_chain.run()
+
+        self.assertEqual(len(self.task_chain), 4)
+        self.assertEqual(str(self.task_chain[0].status), str(TaskStatusCodes.skipped))  # This was the parent task
+        self.assertEqual(str(self.task_chain[1].status), str(TaskStatusCodes.complete))
+        self.assertEqual(str(self.task_chain[2].status), str(TaskStatusCodes.complete))
+        self.assertEqual(str(self.task_chain[3].status), str(TaskStatusCodes.complete))
+
+        # Order checks
+        self.assertEqual(self.task_chain[1].name, 'Dummy Iterative Task - 1/3')
+        self.assertEqual(self.task_chain[2].name, 'Dummy Iterative Task - 2/3')
+        self.assertEqual(self.task_chain[3].name, 'Dummy Iterative Task - 3/3')
+
+        # Description Value Checks (should be equal to the value of the iterated variable)
+        self.assertEqual(self.task_chain[1].description, 'test_1')
+        self.assertEqual(self.task_chain[2].description, 'test_2')
+        self.assertEqual(self.task_chain[3].description, 'test_3')
+
 class TestBaseTaskChainOnDirective(BaseTestCase):
     def setUp(self):
         """

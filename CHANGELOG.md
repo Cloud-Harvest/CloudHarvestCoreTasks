@@ -1,10 +1,10 @@
 # 0.4.1
-- Completely redesigned how objects are templated variables referenced in task configurations
-- Added the `BaseTask.itemize` directive 
+- [#12](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/12) Completely redesigned how objects are templated variables referenced in task configurations
+- [#13](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/13) Added the `BaseTask.itemize` directive 
   - Allows for the iteration of a task over a list of items 
   - In addition to `var.variable_name`, itemization provides the `item.item_name` for referencing the current item in the iteration.
 - Added [`silos`](./CloudHarvestCoreTasks/silos) to record remote data source information in the application
-- Tasks will now record multiple errors in sequence using key `self.meta['Errors']`
+- Tasks will now record multiple errors in sequence using key `self.meta['Errors']` as a list
 - Removed the `()` requirement for variable method references in task configurations such as `var.result.keys()` to `var.result.keys`
 
 # 0.4.0

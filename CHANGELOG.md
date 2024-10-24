@@ -5,6 +5,7 @@
   - In addition to `var.variable_name`, itemization provides the `item.item_name` for referencing the current item in the iteration.
 - Added [`silos`](./CloudHarvestCoreTasks/silos) to record remote data source information in the application
 - Tasks will now record multiple errors in sequence using key `self.meta['Errors']`
+- Removed the `()` requirement for variable method references in task configurations such as `var.result.keys()` to `var.result.keys`
 
 # 0.4.0
 - Moved MongoDb operations into Tasks since both the Api and Agent will need to interact with the database

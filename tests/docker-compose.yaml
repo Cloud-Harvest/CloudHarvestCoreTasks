@@ -17,6 +17,23 @@ services:
       HTTPS_PROXY: "${HTTPS_PROXY}"
       NO_PROXY: "${NO_PROXY}"
 
+  mongo-seed:                       # The service to seed the MongoDB database
+    image: mongo
+    depends_on:                     # Specifies the services that this service depends on
+      - mongo
+    volumes:
+      - ./data:/mongo-seed
+    networks: # Specifies the networks the container should connect to
+      - CloudHarvestCoreTasksTestNetwork
+    command: >
+      /bin/bash -c '
+      sleep 10
+      && mongosh core-tasks-mongo/harvest
+      --username ${MONGO_INITDB_ROOT_USERNAME:-admin}
+      --password ${MONGO_INITDB_ROOT_PASSWORD:-default-harvest-password}
+      --authenticationDatabase admin
+      ./mongo-seed/mongo-seed.js'
+
   redis:
     image: redis:latest
     container_name: core-tasks-redis

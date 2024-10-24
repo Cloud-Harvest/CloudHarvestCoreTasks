@@ -148,7 +148,7 @@ class BaseTask:
         self.blocking = blocking
         self.data = data
         self.description = description
-        self.iterate = iterate
+        self.iterate = iterate or {}
         self.on = on or {}
         self.output = None
         self.result_as = result_as
@@ -161,7 +161,9 @@ class BaseTask:
         self.status = TaskStatusCodes.initialized
         self.original_template = None
         self.result = None
-        self.meta = {}
+        self.meta = {
+            'Errors': []
+        }
         self.start = None
         self.end = None
 
@@ -308,6 +310,17 @@ class BaseTask:
                 else:
                     # If the task was not skipped, call the on_complete() method
                     if str(self.status) != str(TaskStatusCodes.skipped):
+
+                        # If the result is a generator, convert it to a list. We do this at this stage instead of
+                        # inside the on_complete() method to make sure any post-task processing will be handled on the
+                        # entire data result instead against a generator which may not be accessible following the
+                        # completion of self.method(). Additionally, on_complete() can be overwritten so it is possible
+                        # this crucial step may be missed.
+
+                        from types import GeneratorType
+                        if isinstance(self.result, GeneratorType):
+                            self.result = [r for r in self.result]
+
                         self.on_complete()
                         break
 
@@ -398,7 +411,7 @@ class BaseTask:
         self.status = TaskStatusCodes.error
 
         if hasattr(ex, 'args'):
-            self.meta['Error'] = ex.args
+            self.meta['Errors'].append(str(ex.args))
 
         logger.error(f'Error running task {self.name}: {ex}')
 
@@ -486,9 +499,14 @@ class BaseDataTask(BaseTask):
     # specific connection pools.
     CONNECTION_POOLS = {}
 
+    # The required configuration keys are used to validate the configuration of the task. All keys in this tuple must
+    # be provided for the Task to be considered valid. Override this attribute in subclasses to provide data provider
+    # specific configuration keys.
+    REQUIRED_CONFIGURATION_KEYS = ()
+
     def __init__(self, command: str,
                  arguments: dict = None,
-                 alias: Literal['ephemeral', 'persistent'] = None,
+                 silo: str = None,
                  host: str = None,
                  port: int = None,
                  username: str = None,
@@ -503,9 +521,19 @@ class BaseDataTask(BaseTask):
         provider. Specific keys are identified in the REQUIRED_CONFIGURATION_KEYS attribute which is overridden in
         subclasses.
 
+        Typically, 'silo' or the host configuration is required. If 'silo' is provided, the configuration is retrieved
+        from the stored Silos dictionary. 'silo' always takes precedence over the host configuration.
+
         Args:
             command (str): The command to run on the data provider.
             arguments (dict, optional): Arguments to pass to the command.
+            silo (str, optional): The name of the silo to use for the task. Defaults to None.
+            host (str, optional): The host address of the data provider. Defaults to None.
+            port (int, optional): The port number of the data provider. Defaults to None.
+            username (str, optional): The username for accessing the data provider. Defaults to None.
+            password (str, optional): The password for accessing the data provider. Defaults to None.
+            database (str or int, optional): The database name or number of the data provider. Defaults to None.
+            extended_db_configuration (dict, optional): Extended configuration for the data provider. Defaults to None.
             max_pool_size (int, optional): The maximum number of connections to allow in the connection pool. Defaults to 10.
         """
 
@@ -513,7 +541,7 @@ class BaseDataTask(BaseTask):
         super().__init__(*args, **kwargs)
 
         # Assigned attributes
-        self.alias = alias
+        self.silo = silo
         self.arguments = arguments or {}
         self.command = command
         self.database = database
@@ -528,9 +556,8 @@ class BaseDataTask(BaseTask):
         self.connection = None
         self.calls = 0
 
-        # Verify that the alias is valid
-        if self.alias and self.alias not in ('ephemeral', 'persistent'):
-            raise ValueError(f'Alias must be either "ephemeral" or "persistent". Got: "{self.alias}"')
+        # Validate the configuration of the task
+        self.validate_configuration()
 
     def __enter__(self):
         return self
@@ -539,28 +566,22 @@ class BaseDataTask(BaseTask):
         return None
 
     @property
-    def connection_pool_key(self) -> str:
+    def base_command_part(self):
         """
-        Constructs a connection pool key in the form of a URL-like address.
-        The key consists of the username, password SHA, hostname, port, and database.
-
-        We use this key to store connection pools and return a pool based on the connection parameters. This allows us to
-        reuse connections and reduce the number of connections to the data provider.
+        Extracts the actual command from 'self.command' and returns it while preserving the path of the original command.
         """
 
-        if self.alias:
-            return self.alias
+        result = self.command
 
-        from hashlib import sha256
+        if '.' in self.command:
+            # Extract the command from the string
+            result = self.command.split('.')[0]
 
-        # Compute the SHA-256 hash of the password
-        password_sha = sha256(self.password.encode()).hexdigest()
+        elif '[' and ']' in self.command:
+            # Extract the command from the string
+            result = self.command.split('[')[0]
 
-        # Construct the URL-like address
-        connection_pool_key = f"{self.username}:{password_sha}@{self.host}:{self.port}/{self.database}"
-
-        return connection_pool_key
-
+        return result
     @property
     def mapped_connection_configuration(self, include_null_values: bool = False) -> dict:
         """
@@ -596,19 +617,24 @@ class BaseDataTask(BaseTask):
 
         return False
 
-    @property
-    def connection_sha(self) -> str:
+    def connection_pool_key(self) -> str:
         """
-        Returns the SHA-256 hash of the connection parameters. We use this method to store connections in the connection
-        pool. This allows us to reuse connections and reduce the number of connections to the data provider. Using an
-        SHA-256 hash ensures that the connection key is unique, consistent, and unknowable to end users.
+        Constructs a connection pool key in the form of a URL-like address.
+        The key consists of the username, password SHA, hostname, port, and database.
+
+        We use this key to store connection pools and return a pool based on the connection parameters. This allows us to
+        reuse connections and reduce the number of connections to the data provider.
         """
+
+        if self.silo:
+            return self.silo
 
         from hashlib import sha256
 
-        connection_string = ''.join([self.host, str(self.port), self.username, self.password, self.database])
+        # Construct the URL-like address
+        connection_pool_key = sha256( f"{self.username}:{self.password}@{self.host}:{self.port}/{self.database}".encode()).hexdigest()
 
-        return sha256(connection_string.encode()).hexdigest()
+        return connection_pool_key
 
     def connect(self) -> 'BaseDataTask':
         """
@@ -636,6 +662,49 @@ class BaseDataTask(BaseTask):
 
         return self
 
+    def validate_configuration(self):
+        """
+        Validates the configuration of the task.
+        """
+
+        # Retrieve the configuration from the Silos dictionary if it is provided
+        if self.silo:
+            from ..silos import get_one_silo
+            for key, value in get_one_silo(self.silo).to_dict().items():
+                setattr(self, key, value)
+
+        # Validate that all minimum configuration keys are provided
+        if not all([getattr(self, key) for key in self.REQUIRED_CONFIGURATION_KEYS]):
+            raise ValueError(f"Missing required configuration for MongoTask: {self.REQUIRED_CONFIGURATION_KEYS}")
+
+    def walk_result_command_path(self, result: Any) -> Any:
+        """
+        Walks the command path and returns the result, if applicable.
+
+        >>> # The Task Configuration supplies the command 'find.row_count'. row_count is a property of the find command.
+        >>> self.command = 'find.row_count'
+        >>> # The find command returns CursorType() which is stored in the variable 'result'.
+        >>> result = CursorType()
+        >>> # The walk_result_command_path() method will walk the command path and return CursorType().row_count.
+        >>> self.walk_result_command_path(result)
+        >>> # The final result is returned.
+        >>> 10
+        """
+
+        if '.' in self.command or ('[' and ']') in self.command:
+            # Walk the command path and return the result, if applicable
+            self.task_chain.variables[self.base_command_part] = result
+
+            # Walks the command path and returns the result. This allows commands such as MongoDb's 'find.row_count'.
+            from .factories import replace_variable_path_with_value
+            result: Any = replace_variable_path_with_value(original_string=f'var.{self.command}',
+                                                           task_chain=self.task_chain,
+                                                           fail_on_unassigned=True)
+
+            # Removes the command from the variables
+            self.task_chain.variables.pop(self.base_command_part)
+
+        return result
 
 @register_definition(name='chain', category='chain')
 class BaseTaskChain(List[BaseTask]):
@@ -1124,7 +1193,7 @@ class BaseTaskChain(List[BaseTask]):
 
                     if task.iterate:
                         task.status = TaskStatusCodes.skipped
-                        task.meta['info'] = 'Task was skipped because it was an iterated task.'
+                        task.meta['Info'] = 'Task was skipped because it was an iterated task.'
 
                         # Insert the iterated tasks into the task chain's configurations
                         [

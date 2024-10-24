@@ -310,7 +310,7 @@ class TestBaseTaskChainIterateDirective(BaseTestCase):
                 {
                     'dummy': {
                         'name': 'Dummy Iterative Task',
-                        'description': 'item.value()',
+                        'description': 'item.value',
                         'iterate': {
                             'variable': 'var.iterate_test',
                         }

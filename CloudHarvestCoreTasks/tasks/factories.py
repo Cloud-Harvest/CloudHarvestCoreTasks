@@ -233,15 +233,16 @@ def replace_variable_path_with_value(original_string: str,
         for p in path:
 
             # Special functions which can be added at the end of the path
-            if isinstance(p, str) and p.endswith('()'):
+            if isinstance(p, str):  # and p.endswith('()'):
                 # TODO: I think it would be valuable if we could include the args/kwargs in the function call in ().
 
                 match p:
-                    case 'value()':
+                    case 'value':  # ()':
                         pass    # We'll return this obj
 
                     case _:
-                        p = p[:-2]
+                        # Remove the () from the end of the string
+                        # p = p[:-2]
 
                         # Check if this is a property or method
                         if hasattr(obj, p):
@@ -254,6 +255,15 @@ def replace_variable_path_with_value(original_string: str,
                                 # Convert the object to a list if it is a dict_keys or dict_values object
                                 if type(obj) in (type({}.keys()), type({}.values())):
                                     obj = list(obj)
+
+                        # If the object is a dict, check that p is a key in the dict
+                        elif isinstance(obj, dict):
+                            obj = obj[p]
+
+                        # If the object is a list, check that p is an int and within the bounds of the list
+                        elif isinstance(obj, list) and isinstance(p, int):
+                            obj = obj[p]
+
 
             else:
                 obj = obj[p]

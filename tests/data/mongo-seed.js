@@ -1,4 +1,6 @@
 // seed.js
+
+// Setup the harvest-api user
 db = db.getSiblingDB('harvest');
 if (db.getUser("harvest-api") == null) {
     db.createUser(
@@ -10,6 +12,7 @@ if (db.getUser("harvest-api") == null) {
     );
 }
 
+// Setup the admin user
 db = db.getSiblingDB('admin');
 if (db.getUser("admin") == null) {
     db.createUser(
@@ -21,8 +24,10 @@ if (db.getUser("admin") == null) {
     );
 }
 
+// Connect to the harvest database
 db = db.getSiblingDB('harvest');
 
+// Define the documents to be inserted
 const documents = [
     {
         name: { family: "Doe", given: "John" },
@@ -136,4 +141,8 @@ const documents = [
     }
 ];
 
+// Drop and re-create the collection
+db.users.drop()
+
+// Insert the documents
 db.users.insertMany(documents);

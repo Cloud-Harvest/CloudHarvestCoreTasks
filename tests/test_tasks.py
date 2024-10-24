@@ -307,9 +307,17 @@ class TestJsonTask(unittest.TestCase):
         self.assertEqual(task.result, self.test_deserialized_data)
 
 class TestMongoTask(unittest.TestCase):
+    def setUp(self):
+        self.database_connection_config = {
+            'host': 'localhost',
+            'port': 44444,
+            'username': 'admin',
+            'password': 'default-harvest-password',
+            'database': 'harvest'
+        }
+
     def test_init(self):
         from ..CloudHarvestCoreTasks.tasks import MongoTask
-        from ..CloudHarvestCoreTasks.tasks.base import  BaseTaskException
 
         # Assert that the task is not created if the database parameters are missing
         self.assertRaises(ValueError,
@@ -331,6 +339,61 @@ class TestMongoTask(unittest.TestCase):
 
         self.assertTrue(mongo_task)
 
+    def test_method_find(self):
+        task_chain_configuration = {
+            'name': 'test_chain',
+            'tasks': [
+                {
+                    'mongo': {
+                        'name': 'find test',
+                        'collection': 'users',
+                        'result_as': 'mongo_result',
+                        'command': 'find',
+                        'arguments': {
+                            'filter': {}
+                        },
+
+                    } | self.database_connection_config,
+                }
+            ]
+        }
+
+        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
+        task_chain = task_chain_from_dict(task_chain_registered_class_name='report',
+                                          task_chain=task_chain_configuration)
+        task_chain.run()
+
+        self.assertEqual(len(task_chain.result['data']), 10)
+
+    def test_method_subcommand(self):
+        """
+        This test checks if commands like 'find.explain()' return the expected result.
+        """
+
+        task_chain_configuration = {
+            'name': 'test_chain',
+            'tasks': [
+                {
+                    'mongo': {
+                        'name': 'find.explain test',
+                        'collection': 'users',
+                        'result_as': 'mongo_result',
+                        'command': 'find.explain',
+                        'arguments': {
+                            'filter': {}
+                        },
+
+                    } | self.database_connection_config,
+                }
+            ]
+        }
+
+        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
+        task_chain = task_chain_from_dict(task_chain_registered_class_name='report',
+                                          task_chain=task_chain_configuration)
+        task_chain.run()
+
+        self.assertIn('command', task_chain.result['data'].keys())
 
 class TestRedisTask(unittest.TestCase):
     @classmethod
@@ -570,7 +633,6 @@ class TestPruneTask(unittest.TestCase):
         # Check that the task chain did not result in error
         self.assertIsNone(self.task_chain.result.get('error'))
         self.assertEqual(str(self.task_chain.status), str(TaskStatusCodes.complete))
-
 
 class TestWaitTask(unittest.TestCase):
     def setUp(self):

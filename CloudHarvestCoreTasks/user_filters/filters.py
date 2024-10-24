@@ -100,7 +100,7 @@ class MongoUserFilter(BaseUserFilter):
         """
         matches = pre_syntax['matches']
 
-        from data_model.matching import HarvestMatchSet
+        from ..data_model.matching import HarvestMatchSet
         # Convert the matches into HarvestMatchSet instances
         if len(matches) == 1:
             result = HarvestMatchSet(matches=matches[0]).as_mongo_filter()
@@ -123,7 +123,7 @@ class HarvestRecordSetUserFilter(BaseUserFilter):
     This class converts user filters to HarvestRecordSet query syntax.
     """
 
-    from data_model.recordset import HarvestRecordSet
+    from ..data_model.recordset import HarvestRecordSet
     def __init__(self, recordset: HarvestRecordSet = None, *args, **kwargs):
         """
         Arguments:
@@ -161,11 +161,17 @@ class HarvestRecordSetUserFilter(BaseUserFilter):
 
         else:
             # Set the headers
-            result = recordset.modify_records(function='remove_keys_not_in', arguments={'keys': headers})
+            result = recordset
+
+            # Strip the headers not in the user filter
+            [
+                record.remove_keys_not_in(headers)
+                for record in result
+            ]
 
             # Sort the records
             if pre_syntax['sort']:
-                result = result.sort_records(pre_syntax['sort'])
+                result = recordset.sort_records(pre_syntax['sort'])
 
         return result
 
@@ -246,7 +252,7 @@ class SqlUserFilters(BaseUserFilter):
         Returns:
             tuple: A tuple containing the SQL WHERE clause condition and parameters.
         """
-        from data_model.matching import HarvestMatchSet
+        from ..data_model.matching import HarvestMatchSet
         # Convert the matches into HarvestMatchSet instances
         clauses = []
         parameters = {}

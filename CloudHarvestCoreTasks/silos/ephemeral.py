@@ -20,15 +20,15 @@ logger = getLogger('harvest')
 
 
 _CLIENTS = {}
-_DATABASE_NAME_MAPPING = ('agent', 'api', 'chains', 'tokens')
+DATABASE_NAME_MAPPING = ('agent', 'api', 'chains', 'tokens')
 
-def connect(database: str, *args, **kwargs) -> StrictRedis:
+def connect(database: str or int, *args, **kwargs) -> StrictRedis:
     """
     Connects to the Redis cache using the provided configuration, returning a StrictRedis object. If the client
     already exists, it will return the existing client object.
 
     Args:
-        database (str): The name of the database to connect to.
+        database (str or int): The name of the database to connect to.
         *args: Additional positional arguments for the ConnectionPool.
         **kwargs: Additional keyword arguments for the ConnectionPool.
 
@@ -36,19 +36,26 @@ def connect(database: str, *args, **kwargs) -> StrictRedis:
         StrictRedis: A StrictRedis instance connected to the specified database.
     """
 
-    if _CLIENTS.get(database):
-        return _CLIENTS.get(database)
+    # Check if a connection pool already exists for the specified database
+    existing_connection_pool = _CLIENTS.get(database) or _CLIENTS.get(DATABASE_NAME_MAPPING.index(database))
 
+    if existing_connection_pool:
+        return StrictRedis(connection_pool=existing_connection_pool)
+
+    # Create a new connection pool for the specified database
     default_configuration = {
-        'db': kwargs.get('db') or _DATABASE_NAME_MAPPING.index(database),
+        'db': kwargs.get('db') or DATABASE_NAME_MAPPING.index(database),
         'max_connections': 50,
         'decode_responses': True
     }
 
     _pool = ConnectionPool(*args, **default_configuration | kwargs)
-    _CLIENTS[database] = StrictRedis(connection_pool=_pool)
 
-    return _CLIENTS[database]
+    _CLIENTS[database] = _pool
+
+    connection = StrictRedis(connection_pool=_pool)
+
+    return connection
 
 def is_connected(database: str) -> bool:
     """

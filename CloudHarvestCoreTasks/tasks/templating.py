@@ -50,13 +50,13 @@ def template_object(template: Any, variables: dict = None) -> dict:
     try:
         # Render the template with the provided variables (or an empty dictionary if no variables were provided)
         from json import loads
-        result = loads(environment.get_template('template').render(**variables or {}))
+        rendered = environment.get_template('template').render(**variables or {})
+        result = loads(rendered)
 
     except Exception as e:
         logger.warning(f'Error rendering template: {e}')
 
-    finally:
-        return result
+    return result
 
 def list_filters() -> dict:
     """

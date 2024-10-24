@@ -68,7 +68,7 @@ mongo:
     limit: 0
     skip: 0
   db:
-      alias: persistent                 # The alias key is used to route the task to the appropriate backend using a connection pool.
+      alias: persistent                 # The silo key is used to route the task to the appropriate backend using a connection pool.
       database: my_database
   collection: my_collection
 ```

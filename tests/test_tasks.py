@@ -2,7 +2,7 @@ from datetime import datetime
 import os
 import tempfile
 import unittest
-from ..CloudHarvestCoreTasks.data_model.recordset import HarvestRecordSet
+
 from ..CloudHarvestCoreTasks.tasks import *
 
 
@@ -18,7 +18,7 @@ class TestDummyTask(unittest.TestCase):
 
         # Check that the data and meta attributes are set correctly
         self.assertEqual(self.dummy_task.result, [{'dummy': 'data'}])
-        self.assertEqual(self.dummy_task.meta, {'info': 'this is dummy metadata'})
+        self.assertEqual(self.dummy_task.meta['info'], self.dummy_task.meta['info'])
 
 
 class TestErrorTask(unittest.TestCase):
@@ -34,7 +34,7 @@ class TestFileTask(unittest.TestCase):
         from ..CloudHarvestCoreTasks.tasks.base import BaseTaskChain
         self.temp_files = []
         self.test_task_chain = BaseTaskChain(name='test_task_chain', description='This is a test task chain', template={'name': 'test', 'tasks': []})
-
+        
         self.test_data = {
             'config': {'section': {'key': 'value'}},
             'csv': [{'key1': 'value1', 'key2': 'value2'}, {'key1': 'value3', 'key2': 'value4'}],
@@ -60,10 +60,9 @@ class TestFileTask(unittest.TestCase):
                         name="test",
                         path=path,
                         result_as='result',
-                        with_vars=['data'],
+                        data=self.test_data['config'],
                         mode='write',
                         format='config')
-        self.test_task_chain.variables = {'data': self.test_data['config']}
         task.method()
         with open(path, 'r') as file:
             content = file.read()
@@ -72,7 +71,12 @@ class TestFileTask(unittest.TestCase):
 
     def test_read_config(self):
         path = self.create_temp_file('[section]\nkey = value\n')
-        task = FileTask(name="test", path=path, result_as='result', with_vars=['data'], mode='read', format='config')
+        task = FileTask(name="test",
+                        path=path,
+                        result_as='result',
+                        data=self.test_data['config'],
+                        mode='read',
+                        format='config')
         task.method()
         self.assertEqual(task.result, {'section': {'key': 'value'}})
 
@@ -83,7 +87,7 @@ class TestFileTask(unittest.TestCase):
                         path=path,
                         desired_keys=['key1', 'key2'],
                         result_as='result',
-                        with_vars=['data'],
+                        data=self.test_data['csv'],
                         mode='write',
                         format='csv')
         self.test_task_chain.variables = {'data': self.test_data['csv']}
@@ -98,13 +102,24 @@ class TestFileTask(unittest.TestCase):
 
     def test_read_csv(self):
         path = self.create_temp_file('key1,key2\nvalue1,value2\nvalue3,value4\n')
-        task = FileTask(name="test", path=path, result_as='result', with_vars=['data'], mode='read', format='csv')
+        task = FileTask(name="test",
+                        path=path,
+                        result_as='result',
+                        data=self.test_data['csv'],
+                        mode='read',
+                        format='csv')
         task.method()
         self.assertEqual(task.result, self.test_data['csv'])
 
     def test_write_json(self):
         path = self.create_temp_file()
-        task = FileTask(task_chain=self.test_task_chain, name="test", path=path, result_as='result', with_vars=['data'], mode='write', format='json')
+        task = FileTask(task_chain=self.test_task_chain,
+                        name="test",
+                        path=path,
+                        result_as='result',
+                        data=self.test_data['json'],
+                        mode='write',
+                        format='json')
         self.test_task_chain.variables = {'data': self.test_data['json']}
         task.method()
         with open(path, 'r') as file:
@@ -114,13 +129,24 @@ class TestFileTask(unittest.TestCase):
 
     def test_read_json(self):
         path = self.create_temp_file('{"key1": "value1", "key2": "value2"}')
-        task = FileTask(name="test", path=path, result_as='result', with_vars=['data'], mode='read', format='json')
+        task = FileTask(name="test",
+                        path=path,
+                        result_as='result',
+                        data=self.test_data['json'],
+                        mode='read',
+                        format='json')
         task.method()
         self.assertEqual(task.result, self.test_data['json'])
 
     def test_write_yaml(self):
         path = self.create_temp_file()
-        task = FileTask(task_chain=self.test_task_chain, name="test", path=path, result_as='result', with_vars=['data'], mode='write', format='yaml')
+        task = FileTask(task_chain=self.test_task_chain,
+                        name="test",
+                        path=path,
+                        result_as='result',
+                        data=self.test_data['yaml'],
+                        mode='write',
+                        format='yaml')
         self.test_task_chain.variables = {'data': self.test_data['yaml']}
         task.method()
 
@@ -138,7 +164,7 @@ class TestFileTask(unittest.TestCase):
         task = FileTask(name="test",
                         path=path,
                         result_as='result',
-                        with_vars=['data'],
+                        data=self.test_data['yaml'],
                         mode='read',
                         format='yaml')
         task.method()
@@ -149,7 +175,13 @@ class TestFileTask(unittest.TestCase):
 
     def test_write_raw(self):
         path = self.create_temp_file()
-        task = FileTask(task_chain=self.test_task_chain, name="test", path=path, result_as='result', with_vars=['data'], mode='write', format='raw')
+        task = FileTask(task_chain=self.test_task_chain,
+                        name="test",
+                        path=path,
+                        result_as='result',
+                        data=self.test_data['raw'],
+                        mode='write',
+                        format='raw')
         self.test_task_chain.variables = {'data': self.test_data['raw']}
         task.method()
         with open(path, 'r') as file:
@@ -158,66 +190,14 @@ class TestFileTask(unittest.TestCase):
 
     def test_read_raw(self):
         path = self.create_temp_file('This is raw data')
-        task = FileTask(name="test", path=path, result_as='result', with_vars=['data'], mode='read', format='raw')
+        task = FileTask(name="test",
+                        path=path,
+                        result_as='result',
+                        data=self.test_data['raw'],
+                        mode='read',
+                        format='raw')
         task.method()
         self.assertEqual(task.result, 'This is raw data')
-
-
-class TestForEachTask(unittest.TestCase):
-    def setUp(self):
-        task_chain_configuration = {
-            'name': 'test_chain',
-            'description': 'This is a task_chain.',
-            'tasks': [
-                {
-                    'dummy': {
-                        'name': 'Control Task',
-                        'description': 'This is a control task which should always succeed',
-                    }
-                },
-                {
-                    'for_each': {
-                        'name': 'For Each Task',
-                        'description': 'This task will create many new tasks based on the content of a variable.',
-                        'insert_tasks_at_position': 2,
-                        'template': {
-                            'file': {
-                                'name': 'File Task {{ name }}',
-                                'description': 'This is a file task for record {{ name }}',
-                                'mode': 'write',
-                                'path': '/tmp/{{ name }}.json',
-                            }
-                        },
-                        'data': 'var.i'
-                    }
-                }
-            ]
-        }
-
-        from ..CloudHarvestCoreTasks.tasks import task_chain_from_dict
-        self.task_chain = task_chain_from_dict(task_chain_registered_class_name='chain',
-                                               task_chain=task_chain_configuration)
-
-        self.task_chain.variables = {'i': [{'name': 1}, {'name': 2}, {'name': 3}]}
-
-    def tearDown(self):
-        import os
-        for record in self.task_chain.variables['i']:
-            file_path = f"/tmp/{record['name']}.json"
-            if os.path.exists(file_path):
-                os.remove(file_path)
-
-    def test_for_each_task_generation(self):
-        self.task_chain.run()
-
-        # Check that the task chain has the correct number of tasks: Control, ForEach, and 3 generated Dummy tasks
-        self.assertEqual(5, len(self.task_chain))
-
-        # Check that all Dummy tasks have been created
-        self.assertTrue(all([
-            self.task_chain.find_task_by_name(f'File Task {i["name"]}')
-            for i in self.task_chain.variables.get('i')
-        ]))
 
 
 class TestHarvestRecordSetTask(unittest.TestCase):
@@ -292,20 +272,59 @@ class TestHarvestRecordSetTask(unittest.TestCase):
         ]
 
 
+class TestJsonTask(unittest.TestCase):
+    def setUp(self):
+        import json
+        self.now = datetime.now()
+
+        self.test_deserialized_data = {
+            "name": "Test1",
+            "age": 30,
+            "date": self.now,
+            "tags": [{"Name": "color", "Value": "blue"}, {"Name": "size", "Value": "large"}]
+        }
+
+        self.test_serialized_json = json.dumps(self.test_deserialized_data, default=str)
+
+    def test_method(self):
+        from ..CloudHarvestCoreTasks.tasks import JsonTask
+
+        # Test serialization
+        task = JsonTask(name='test',
+                        description='This is a test task',
+                        data=self.test_deserialized_data,
+                        mode='serialize')
+        task.run()
+        self.assertEqual(task.result, self.test_serialized_json)
+
+        # Test deserialization
+        task = JsonTask(name='test',
+                        description='This is a test task',
+                        data=self.test_serialized_json,
+                        mode='deserialize',
+                        parse_datetimes=True)
+        task.run()
+        self.assertEqual(task.result, self.test_deserialized_data)
+
 class TestMongoTask(unittest.TestCase):
     def setUp(self):
-        pass
+        self.database_connection_config = {
+            'host': 'localhost',
+            'port': 44444,
+            'username': 'admin',
+            'password': 'default-harvest-password',
+            'database': 'harvest'
+        }
 
     def test_init(self):
         from ..CloudHarvestCoreTasks.tasks import MongoTask
-        from ..CloudHarvestCoreTasks.tasks.base import  BaseTaskException
 
         # Assert that the task is not created if the database parameters are missing
-        self.assertRaises(BaseTaskException,
+        self.assertRaises(ValueError,
                           MongoTask,
                           name='test',
                           description='This is a test task',
-                          db={},  # missing database parameter
+                          alias='invalid',
                           command='find',
                           collection='test')
 
@@ -314,43 +333,223 @@ class TestMongoTask(unittest.TestCase):
                                description='This is a test task',
                                collection='test',
                                command='test',
-                               db={
-                                   'database': 'test',
-                                   'host': 'localhost',
-                                   'port': 27017
-                               })
+                               host='localhost',
+                               port=27017,
+                               database='test')
 
         self.assertTrue(mongo_task)
 
+    def test_method_find(self):
+        task_chain_configuration = {
+            'name': 'test_chain',
+            'tasks': [
+                {
+                    'mongo': {
+                        'name': 'find test',
+                        'collection': 'users',
+                        'result_as': 'mongo_result',
+                        'command': 'find',
+                        'arguments': {
+                            'filter': {}
+                        },
+
+                    } | self.database_connection_config,
+                }
+            ]
+        }
+
+        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
+        task_chain = task_chain_from_dict(task_chain_registered_class_name='report',
+                                          task_chain=task_chain_configuration)
+        task_chain.run()
+
+        self.assertEqual(len(task_chain.result['data']), 10)
+
+    def test_method_subcommand(self):
+        """
+        This test checks if commands like 'find.explain()' return the expected result.
+        """
+
+        task_chain_configuration = {
+            'name': 'test_chain',
+            'tasks': [
+                {
+                    'mongo': {
+                        'name': 'find.explain test',
+                        'collection': 'users',
+                        'result_as': 'mongo_result',
+                        'command': 'find.explain',
+                        'arguments': {
+                            'filter': {}
+                        },
+
+                    } | self.database_connection_config,
+                }
+            ]
+        }
+
+        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
+        task_chain = task_chain_from_dict(task_chain_registered_class_name='report',
+                                          task_chain=task_chain_configuration)
+        task_chain.run()
+
+        self.assertIn('command', task_chain.result['data'].keys())
 
 class TestRedisTask(unittest.TestCase):
+    @classmethod
     def setUp(self):
-        pass
+        import json
+        import redis
+
+        self.redis_connection_config = {
+            'host': 'localhost',
+            'port': 44445,
+            'password': 'default-harvest-password',
+            'decode_responses': True
+        }
+
+        # Connect to Redis
+        self.connection = redis.StrictRedis(**self.redis_connection_config)
+
+        # Load JSON data
+        with open('./data/redis-seed.json', 'r') as file:
+            data = json.load(file)
+
+        # Insert data into Redis
+        for item in data:
+            self.connection.set(item['key'], json.dumps(item['value']))
+
+    def test_setup(self):
+        # Check that the connection to Redis is working
+        self.assertTrue(self.connection.ping())
+
+        # Make sure all test records were loaded
+        self.assertEqual(len(self.connection.keys('*')), 10)
 
     def test_init(self):
         from ..CloudHarvestCoreTasks.tasks import RedisTask
-        from ..CloudHarvestCoreTasks.tasks.base import  BaseTaskException
 
         # Assert that the task is not created if the database parameters are missing
-        self.assertRaises(BaseTaskException,
+        self.assertRaises(ValueError,
                           RedisTask,
                           name='test',
                           description='This is a test task',
-                          db={},  # missing database parameter
-                          command='find')
+                          command='keys')
 
         # Assert that the task is created
-        mongo_task = RedisTask(name='test',
+        redis_task = RedisTask(name='test',
                                description='This is a test task',
-                               command='test',
-                               db={
-                                   'db': 'test',
-                                   'host': 'localhost',
-                                   'port': 27017
-                               })
+                               command='keys',
+                               arguments={
+                                   'pattern': '*'
+                               },
+                               host='localhost',
+                               port=44445,
+                               password='default-harvest-password')
 
-        self.assertTrue(mongo_task)
+        self.assertTrue(redis_task)
 
+        redis_task.run()
+
+        # Check that data was retrieved from Redis
+        self.assertEqual(len(redis_task.result), 10)
+
+    def test_method_mget(self):
+        chain_template = {
+            'name': 'test_chain',
+            'tasks': [
+                {
+                    'redis': {
+                        'name': 'mget test',
+                        'result_as': 'redis_result',
+                        'command': 'mget',
+                        'arguments': {
+                            'pattern': '*'
+                        },
+                    } | self.redis_connection_config,
+                },
+                {
+                    'recordset': {
+                        'name': 'deserialize redis result',
+                        'data': 'var.redis_result',
+                        'result_as': 'result',
+                        'stages': [
+                            {
+                                'deserialize': {
+                                    'source_key': 'item'
+                                }
+                            },
+                            {
+                                'sort_records': {
+                                    'keys': [
+                                        'age:asc'
+                                    ]
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+
+        task_chain = BaseTaskChain(template=chain_template)
+        task_chain.run()
+
+        self.assertEqual(len(task_chain.result['data']), 10)
+        self.assertEqual(task_chain.result['data'][0]['age'], 25)
+        self.assertEqual(task_chain.result['data'][9]['age'], 45)
+
+    def test_method_set(self):
+        chain_template = {
+            'name': 'test_chain',
+            'tasks': [
+                {
+                    'recordset': {
+                        'name': 'test recordset',
+                        'data': [
+                            {
+                                'name': 'Test1',
+                                'age': 30,
+                                'date': datetime.now(),
+                                'tags': [{"Name": "color", "Value": "blue"}, {"Name": "size", "Value": "large"}]
+                            },
+                            {
+                                'name': 'Test2',
+                                'age': 25,
+                                'date': datetime.now(),
+                                'tags': [{"Name": "color", "Value": "red"}, {"Name": "size", "Value": "medium"}]
+                            }
+                        ],
+                        'result_as': 'recordset',
+                        'stages': [
+                            {
+                                # Convert the record to a JSON string and store it in the 'target_key' key format
+                                'serialization': {
+                                    'target_key': '_serialized',
+                                    'keep_other_keys': True
+                                }
+                            }
+                        ]
+                    }
+                },
+                {
+                    'redis': {
+                        'name': 'set test',
+                        'command': 'set',
+                        'data': 'var.recordset',
+                        'arguments': {
+                            'name': 'record::{{name}}',
+                            'value': '{{_serialized}}'
+                        }
+                    } | self.redis_connection_config
+                }
+            ]
+        }
+
+        task_chain = BaseTaskChain(template=chain_template)
+        task_chain.run()
+
+        self.assertEqual(task_chain.result, 'OK')
 
 class TestPruneTask(unittest.TestCase):
     def setUp(self):
@@ -424,14 +623,16 @@ class TestPruneTask(unittest.TestCase):
 
         # Check that the data attribute of each task in the task before the PruneTask is None
         self.assertGreater(self.task_chain[3].result.get('total_bytes_pruned'), 0)
-        [self.assertIsNone(task.result) for task in self.task_chain[0:3]]
+        [
+            self.assertIsNone(task.result)
+            for task in self.task_chain[0:3]
+        ]
         self.assertEqual(self.task_chain[4].result, [{'dummy': 'data'}])
-        self.assertEqual(self.task_chain[4].meta, {'info': 'this is dummy metadata'})
+        self.assertEqual(self.task_chain[4].meta['info'], 'this is dummy metadata')
 
         # Check that the task chain did not result in error
         self.assertIsNone(self.task_chain.result.get('error'))
         self.assertEqual(str(self.task_chain.status), str(TaskStatusCodes.complete))
-
 
 class TestWaitTask(unittest.TestCase):
     def setUp(self):

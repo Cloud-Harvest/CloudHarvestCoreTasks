@@ -24,9 +24,8 @@ from CloudHarvestCorePluginManager.decorators import register_definition
 from datetime import datetime, timezone
 from enum import Enum
 from threading import Thread
-from typing import List, Literal
+from typing import Any, Dict, List, Literal
 from logging import getLogger
-
 
 _log_levels = Literal['debug', 'info', 'warning', 'error', 'critical']
 USER_FILTERS = {
@@ -78,14 +77,15 @@ class BaseTask:
     def __init__(self,
                  name: str,
                  blocking: bool = True,
+                 data: Any = None,
                  description: str = None,
+                 iterate: dict = None,
                  on: dict = None,
                  task_chain: 'BaseTaskChain' = None,
-                 result_as: str = None,
+                 result_as: (dict or str) = None,
                  retry: dict = None,
                  user_filters:dict = None,
                  when: str = None,
-                 with_vars: list[str] = None,
                  **kwargs):
 
         """
@@ -95,19 +95,38 @@ class BaseTask:
             - Must have a name attribute.
             - Are automatically added to the TaskRegistry.
 
-        Attributes:
+        Arguments:
             name (str): The name of the task.
             blocking (bool): A boolean indicating whether the task is blocking or not. If True, the task will block the task chain until it completes.
             description (str): A brief description of what the task does.
+            iterate (dict): A dictionary
+                >>> iterate = {
+                >>>     'variable': 'var.variable_name',    # The name of the variable to iterate over.
+                >>>     'insert_tasks_before_name': str,    # (optional) The name of the task to insert before.
+                >>>     'insert_tasks_after_name': str,     # (optional) The name of the task to insert after.
+                >>>     'insert_tasks_at_position': str,    # (optional) The position to insert the task at.
+                >>> }
             on (dict): A dictionary of task configurations for the task to run when it completes, errors, is skipped, or starts.
+                >>> on = {
+                >>>     'complete': [TaskConfiguration],
+                >>>     'error': [TaskConfiguration],
+                >>>     'skipped': [TaskConfiguration],
+                >>>     'start': [TaskConfiguration]
+                >>> }
             task_chain (BaseTaskChain): The task chain that this task belongs to, if applicable.
-            with_vars (list[str]): A list of variables that this task uses. These variables are retrieved from the task chain
-                and used in TaskConfiguration which templates this task's class.
-            status (TaskStatusCodes): The current status of the task.
-            out_data (Any): The data that this task produces, if applicable.
-            meta (Any): Any metadata associated with this task.
             retry (dict): A dictionary of retry configurations for the task.
-            result_as (str): The name of the variable to store the result of this task in the task chain's variables.
+                >>> retry = {
+                >>>     'delay_seconds': 1.0,                  # The number of seconds to delay before retrying the task.
+                >>>     'max_attempts': 3,                     # The maximum number
+                >>>     'when_error_like': '.*',               # A regex pattern to match the error message.
+                >>>     'when_error_not_like': '.*',           # A regex pattern to match the error message.
+                >>> }
+            result_as (str or dict): The name of the variable to store the result of this task in the task chain's variables.
+                >>> result_as = 'variable_name'
+                >>> result_as = {
+                >>>     'name': 'variable_name',
+                >>>     'mode': 'append', 'extend', 'merge', 'overwrite'    # The mode to store the result in the variable. 'overwrite' is the default.
+                >>> }
             user_filters (dict): A dictionary of user filters to apply to the data.
                 >>> user_filters = {
                 >>>     'accepted': '*',                        # Regex pattern to match the filters allowed in this Task.
@@ -121,26 +140,30 @@ class BaseTask:
                 >>> }
             when (str): A string representing a conditional argument using Jinja2 templating. If provided, the task
                 will only run if the condition evaluates to True.
+                >>> when: {{ var.variable_name == "value" }}
         """
 
         # Assigned attributes
         self.name = name
         self.blocking = blocking
+        self.data = data
         self.description = description
+        self.iterate = iterate or {}
         self.on = on or {}
         self.output = None
         self.result_as = result_as
         self.retry = retry or {}
         self.task_chain = task_chain
         self.when = when
-        self.with_vars = with_vars
 
         # Programmatic attributes
         self.attempts = 0
         self.status = TaskStatusCodes.initialized
         self.original_template = None
         self.result = None
-        self.meta = None
+        self.meta = {
+            'Errors': []
+        }
         self.start = None
         self.end = None
 
@@ -187,7 +210,7 @@ class BaseTask:
         with HarvestRecordSetUserFilter(recordset=self.result, **self.user_filters) as user_filter:
             self.result = user_filter.apply()
 
-    def method(self):
+    def method(self, *args, **kwargs) -> 'BaseTask':
         """
         This method should be overwritten in subclasses to provide specific functionality.
         """
@@ -231,7 +254,8 @@ class BaseTask:
                     # Check of the `when` condition is met
                     if self.when and self.task_chain:
                         from .templating import template_object
-                        when_result = True if template_object(template={'result': '{{ ' + self.when + ' }}'}, variables=self.task_chain.variables).get('result') == 'True' else False
+                        when_result = True if template_object(template={'result': '{{ ' + self.when + ' }}'},
+                                                              variables=self.task_chain.variables).get('result') == 'True' else False
 
                     # If `self.when` condition is met or is None, run the method
                     if when_result:
@@ -242,9 +266,9 @@ class BaseTask:
                         self.on_skipped()
 
                 except Exception as ex:
-
-                    # If the `retry` directive is provided, check if the task should be retried
-                    if isinstance(self.retry, dict):
+                    # If the `retry` directive is provided, check if the task should be retried. We include isinstance()
+                    # to ensure that the retry directive is a dictionary.
+                    if self.retry and isinstance(self.retry, dict):
                         from re import findall, IGNORECASE
 
                         # Collect the retry conditions
@@ -257,7 +281,7 @@ class BaseTask:
                             not findall(self.retry.get('when_error_not_like') or '.*', str(ex.args), flags=IGNORECASE)
                             if self.retry.get('when_error_not_like') else True,
 
-                            # CHeck if the number of attempts is less than the maximum number of attempts
+                            # Check if the number of attempts is less than the maximum number of attempts
                             self.attempts < max_attempts,
 
                             # Check if the task is not terminating
@@ -286,12 +310,34 @@ class BaseTask:
                 else:
                     # If the task was not skipped, call the on_complete() method
                     if str(self.status) != str(TaskStatusCodes.skipped):
+
+                        # If the result is a generator, convert it to a list. We do this at this stage instead of
+                        # inside the on_complete() method to make sure any post-task processing will be handled on the
+                        # entire data result instead against a generator which may not be accessible following the
+                        # completion of self.method(). Additionally, on_complete() can be overwritten so it is possible
+                        # this crucial step may be missed.
+
+                        from types import GeneratorType
+                        if isinstance(self.result, GeneratorType):
+                            self.result = [r for r in self.result]
+
                         self.on_complete()
                         break
 
 
         except Exception as ex:
             raise BaseTaskException(f'Top level error while running task {self.name}: {ex}')
+
+        finally:
+            # Update the metadata with the task's status, duration, and other information
+            self.meta.update(
+                {
+                    'attempts': self.attempts,
+                    'count': len(self.result) if hasattr(self, '__len__') else 1,
+                    'duration': self.duration,
+                    'status': self.status.__str__(),
+                }
+            )
 
         return self
 
@@ -308,7 +354,6 @@ class BaseTask:
 
         i = 1
 
-        from .factories import task_from_dict
         for d in (self.on.get(directive) or []):
             # If the task is blocking, insert the new task before the next task in the chain
             if self.blocking:
@@ -334,16 +379,20 @@ class BaseTask:
 
         # Store the result in the task chain's variables if a result_as variable is provided
         if self.result_as and self.task_chain:
-            self.task_chain.variables[self.result_as] = self.result
+            self.task_chain.variables[self.result_as.name].write(data=self.result)
 
+        # Apply user filters if the user filter stage is set to 'complete'
         if self.USER_FILTER_STAGE == 'complete':
             self.apply_user_filters()
 
+        # Run the on_complete directive
         self._run_on_directive('complete')
 
-        self.status = TaskStatusCodes.complete
-
+        # Update the end time of the task
         self.end = datetime.now(tz=timezone.utc)
+
+        # Update the status of the task
+        self.status = TaskStatusCodes.complete
 
         return self
 
@@ -362,7 +411,7 @@ class BaseTask:
         self.status = TaskStatusCodes.error
 
         if hasattr(ex, 'args'):
-            self.meta = ex.args
+            self.meta['Errors'].append(str(ex.args))
 
         logger.error(f'Error running task {self.name}: {ex}')
 
@@ -433,11 +482,37 @@ class BaseDataTask(BaseTask):
     provide specific functionality.
     """
 
-    REQUIRED_CONFIGURATION_KEYS = []
+    # The connection key map is used to map the connection attributes to the appropriate attributes in the subclass.
+    # base_configration_key: The attribute in the BaseDataTask class.
+    # driver_configuration_key: The attribute specific to the data provider driver / module.
+    # Format: (base_configuration_key, driver_configuration_key)
+    CONNECTION_KEY_MAP = (
+        ('host', 'host'),
+        ('port', 'port'),
+        ('username', 'username'),
+        ('password', 'password'),
+        ('database', 'database')
+    )
+
+    # Connection pools are used to store connections to the data provider. This reduces the number of connections to the
+    # data provider and allows us to reuse connections. Override this attribute in subclasses to provide data provider
+    # specific connection pools.
+    CONNECTION_POOLS = {}
+
+    # The required configuration keys are used to validate the configuration of the task. All keys in this tuple must
+    # be provided for the Task to be considered valid. Override this attribute in subclasses to provide data provider
+    # specific configuration keys.
+    REQUIRED_CONFIGURATION_KEYS = ()
 
     def __init__(self, command: str,
-                 db: dict,
                  arguments: dict = None,
+                 silo: str = None,
+                 host: str = None,
+                 port: int = None,
+                 username: str = None,
+                 password: str = None,
+                 database: str or int = None,
+                 extended_db_configuration: dict = None,
                  max_pool_size: int = 10,
                  *args, **kwargs):
         """
@@ -446,36 +521,43 @@ class BaseDataTask(BaseTask):
         provider. Specific keys are identified in the REQUIRED_CONFIGURATION_KEYS attribute which is overridden in
         subclasses.
 
+        Typically, 'silo' or the host configuration is required. If 'silo' is provided, the configuration is retrieved
+        from the stored Silos dictionary. 'silo' always takes precedence over the host configuration.
+
         Args:
             command (str): The command to run on the data provider.
-            db (dict): The configuration for the data provider. The connection configuration is driver-specific
-                       *except* when the 'alias' key is provided. In this case, the 'alias' key should be set to 'ephemeral'
-                       or 'persistent' to connect to the appropriate data provider. Connections made using the 'alias' key
-                       will leverage a Connection Pool if supported by the underlying data provider.
             arguments (dict, optional): Arguments to pass to the command.
+            silo (str, optional): The name of the silo to use for the task. Defaults to None.
+            host (str, optional): The host address of the data provider. Defaults to None.
+            port (int, optional): The port number of the data provider. Defaults to None.
+            username (str, optional): The username for accessing the data provider. Defaults to None.
+            password (str, optional): The password for accessing the data provider. Defaults to None.
+            database (str or int, optional): The database name or number of the data provider. Defaults to None.
+            extended_db_configuration (dict, optional): Extended configuration for the data provider. Defaults to None.
             max_pool_size (int, optional): The maximum number of connections to allow in the connection pool. Defaults to 10.
         """
 
+        # Initialize the BaseTask class
         super().__init__(*args, **kwargs)
 
-        self._connection = None
-        self._db = db or {}
-
-        self.command = command
+        # Assigned attributes
+        self.silo = silo
         self.arguments = arguments or {}
+        self.command = command
+        self.database = database
+        self.extended_db_configuration = extended_db_configuration or {}
+        self.host = host
         self.max_pool_size = max_pool_size
+        self.password = password
+        self.port = port
+        self.username = username
 
-        # Check if the configuration dictionary contains the required keys for the subclass data provider.
-        # If the configuration dictionary contains an 'alias' key, check that 'alias' is either 'ephemeral' or 'persistent'.
-        if db.get('alias'):
-            if db['alias'] not in ('ephemeral', 'persistent'):
-                raise BaseTaskException(f'Invalid alias value: {db["alias"]}. Must be "ephemeral" or "persistent".')
+        # Programmatic attributes
+        self.connection = None
+        self.calls = 0
 
-        # Check if the configuration dictionary contains the required keys for the subclass data provider.
-        else:
-            missing_keys = [key for key in self.REQUIRED_CONFIGURATION_KEYS if key not in db.keys()]
-            if missing_keys:
-                raise BaseTaskException(f'Missing required configuration keys: {", ".join(missing_keys)}')
+        # Validate the configuration of the task
+        self.validate_configuration()
 
     def __enter__(self):
         return self
@@ -484,16 +566,77 @@ class BaseDataTask(BaseTask):
         return None
 
     @property
+    def base_command_part(self):
+        """
+        Extracts the actual command from 'self.command' and returns it while preserving the path of the original command.
+        """
+
+        result = self.command
+
+        if '.' in self.command:
+            # Extract the command from the string
+            result = self.command.split('.')[0]
+
+        elif '[' and ']' in self.command:
+            # Extract the command from the string
+            result = self.command.split('[')[0]
+
+        return result
+    @property
+    def mapped_connection_configuration(self, include_null_values: bool = False) -> dict:
+        """
+        Maps the connection keys to the appropriate attributes. Update CONNECTION_KEY_MAP in subclasses to include
+        driver-specific keys. Returns None if there is an error.
+        """
+        result = None
+
+        try:
+            result = self.extended_db_configuration | {
+                driver_configuration_key: getattr(self, base_configuration_key)
+                for base_configuration_key, driver_configuration_key in self.CONNECTION_KEY_MAP
+                if getattr(self, base_configuration_key) or include_null_values
+            }
+
+        finally:
+            return result
+
+    @property
     def is_connected(self) -> bool:
         """
         Returns a boolean indicating whether the task is connected to the data provider.
 
         This method should be overwritten in subclasses to provide specific functionality.
+
+        >>> try:
+        >>>     # Your connection test here.
+        >>>     return True
+        >>>
+        >>> except Exception:
+        >>>     return False
         """
 
         return False
 
-    def connect(self):
+    def connection_pool_key(self) -> str:
+        """
+        Constructs a connection pool key in the form of a URL-like address.
+        The key consists of the username, password SHA, hostname, port, and database.
+
+        We use this key to store connection pools and return a pool based on the connection parameters. This allows us to
+        reuse connections and reduce the number of connections to the data provider.
+        """
+
+        if self.silo:
+            return self.silo
+
+        from hashlib import sha256
+
+        # Construct the URL-like address
+        connection_pool_key = sha256( f"{self.username}:{self.password}@{self.host}:{self.port}/{self.database}".encode()).hexdigest()
+
+        return connection_pool_key
+
+    def connect(self) -> 'BaseDataTask':
         """
         Connect the Task to the data provider.
 
@@ -501,19 +644,67 @@ class BaseDataTask(BaseTask):
         should be called in the subclass method to ensure that the connection is established.
         """
 
-        # If the task is already connected, return the connection
-        if self.is_connected:
-            return self._connection
+        return self
 
-    def disconnect(self):
+    def disconnect(self) -> 'BaseDataTask':
         """
         Disconnect the task from the data provider.
 
         This method should be overwritten in subclasses to provide specific functionality.
+
+        >>> # If the task is connected, disconnect it
+        >>> if self.connection:
+        >>>     try:
+        >>>         self.connection.close()
+        >>>     except Exception as ex:
+        >>>         logger.error(f'Error closing connection: {ex}')
         """
 
-        pass
+        return self
 
+    def validate_configuration(self):
+        """
+        Validates the configuration of the task.
+        """
+
+        # Retrieve the configuration from the Silos dictionary if it is provided
+        if self.silo:
+            from ..silos import get_one_silo
+            for key, value in get_one_silo(self.silo).to_dict().items():
+                setattr(self, key, value)
+
+        # Validate that all minimum configuration keys are provided
+        if not all([getattr(self, key) for key in self.REQUIRED_CONFIGURATION_KEYS]):
+            raise ValueError(f"Missing required configuration for MongoTask: {self.REQUIRED_CONFIGURATION_KEYS}")
+
+    def walk_result_command_path(self, result: Any) -> Any:
+        """
+        Walks the command path and returns the result, if applicable.
+
+        >>> # The Task Configuration supplies the command 'find.row_count'. row_count is a property of the find command.
+        >>> self.command = 'find.row_count'
+        >>> # The find command returns CursorType() which is stored in the variable 'result'.
+        >>> result = CursorType()
+        >>> # The walk_result_command_path() method will walk the command path and return CursorType().row_count.
+        >>> self.walk_result_command_path(result)
+        >>> # The final result is returned.
+        >>> 10
+        """
+
+        if '.' in self.command or ('[' and ']') in self.command:
+            # Walk the command path and return the result, if applicable
+            self.task_chain.variables[self.base_command_part] = result
+
+            # Walks the command path and returns the result. This allows commands such as MongoDb's 'find.row_count'.
+            from .factories import replace_variable_path_with_value
+            result: Any = replace_variable_path_with_value(original_string=f'var.{self.command}',
+                                                           task_chain=self.task_chain,
+                                                           fail_on_unassigned=True)
+
+            # Removes the command from the variables
+            self.task_chain.variables.pop(self.base_command_part)
+
+        return result
 
 @register_definition(name='chain', category='chain')
 class BaseTaskChain(List[BaseTask]):
@@ -580,7 +771,9 @@ class BaseTaskChain(List[BaseTask]):
         self.description = template.get('description')
         self.cache_progress = cache_progress
 
-        self.variables = {}
+        # Variables are stored with their name as the key and the BaseLockableVariable instance as the value.
+        self.variables: Dict[str, Any] = {}
+
         self.task_templates: List[dict or BaseTask] = template.get('tasks', [])
 
         self.status = TaskStatusCodes.initialized
@@ -852,7 +1045,7 @@ class BaseTaskChain(List[BaseTask]):
         """
 
         for position, task in enumerate(self.task_templates):
-            if task.get('name') == task_name:
+            if task.name == task_name:
                 return position
 
     def get_variables_by_names(self, *variable_names) -> dict:
@@ -994,9 +1187,26 @@ class BaseTaskChain(List[BaseTask]):
                 # Instantiate the task from the task configuration
                 try:
                     from .factories import task_from_dict
-                    task = task_from_dict(task_configuration=self.task_templates[self.position],
-                                          task_chain=self,
-                                          template_vars=self.variables)
+                    task_template = self.task_templates[self.position]
+
+                    task = task_from_dict(task_configuration=task_template, task_chain=self)
+
+                    if task.iterate:
+                        task.status = TaskStatusCodes.skipped
+                        task.meta['Info'] = 'Task was skipped because it was an iterated task.'
+
+                        # Insert the iterated tasks into the task chain's configurations
+                        [
+                            self.task_templates.insert(self.position + 1, iter_task)
+                            for iter_task in self.iterate_task(original_task_configuration=task_template)
+                        ]
+
+                        # Add the parent task to the task chain (it will not be executed)
+                        self.append(task)
+
+                        # Increment the position
+                        self.position += 1
+                        continue
 
                 # Break when there are no more tasks to run
                 except IndexError:
@@ -1038,6 +1248,66 @@ class BaseTaskChain(List[BaseTask]):
                 ephemeral_cache_thread.join(timeout=5)
 
             return self
+
+    def iterate_task(self, original_task_configuration: dict) -> List[dict]:
+        """
+        This generator converts a task_configuration with an 'iterate' directive into a list of task configurations
+        based on the elements of 'iterate.variable'.
+
+        Args:
+            original_task_configuration (dict): The original task configuration with the 'iterate' directive.
+        """
+
+        # Determine how results from the itemized processes will be stored. The default behavior is to override the
+        # variable with the same name as the 'result_as' directive; however, itemized tasks may return results of
+        # different types. The 'result_as' directive provides a way to specify how the results should be stored.
+        result_as = original_task_configuration.get('result_as')
+
+        if result_as:
+            result_as_mode = result_as.get('mode') or 'override' if isinstance(result_as, dict) else 'override'
+
+            # Determine how the results should be stored then initialize the variable accordingly
+            match result_as_mode:
+                case 'append' | 'extend':
+                    self.variables[result_as['name']] = []
+
+                case 'merge':
+                    self.variables[result_as['name']] = {}
+
+                # The default behavior is to override the variable
+                case _:
+                    self.variables[result_as['name']] = None
+
+        # Template the original configuration to get the iterated items. We take this approach to leverage the templating
+        # engine to resolve variables in the iterate directive.
+        from .factories import task_from_dict
+        task = task_from_dict(task_configuration=original_task_configuration, task_chain=self)
+        iter_var = task.iterate.get('variable')
+
+        # We employ reversed() here because we want the order of the tasks to be the same as the order of the iterated
+        # items. This is because the list.insert() operation will insert the new task at the specified position and
+        # shift the existing tasks down the task order. If we iterate in the normal order, the tasks will be performed
+        # in the reverse order of the iterated items.
+        # iter_var = list(reversed(iter_var))
+        for item in reversed(iter_var):
+            from copy import deepcopy
+
+            # Create a deep copy of the original task configuration to avoid mangling the original configuration
+            task_configuration = deepcopy(original_task_configuration)
+
+            class_key = list(task_configuration.keys())[0]
+
+            # Remove iterable configuration from the task
+            task_configuration[class_key].pop('iterate')
+
+            # Update the task's name
+            task_configuration[class_key]['name'] = f'{task_configuration[class_key]["name"]} - {iter_var.index(item) + 1}/{len(iter_var)}'
+
+            # Template the file with the item
+            from .factories import walk_and_replace
+            itemized_task_configuration = walk_and_replace(obj=task_configuration, task_chain=self, item=item)
+
+            yield itemized_task_configuration
 
     def terminate(self) -> 'BaseTaskChain':
         """

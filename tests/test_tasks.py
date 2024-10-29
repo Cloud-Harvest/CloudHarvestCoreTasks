@@ -396,160 +396,86 @@ class TestMongoTask(unittest.TestCase):
         self.assertIn('command', task_chain.result['data'].keys())
 
 class TestRedisTask(unittest.TestCase):
-    @classmethod
-    def setUp(self):
-        import json
-        import redis
 
-        self.redis_connection_config = {
+    @classmethod
+    def setUpClass(cls):
+        from redis import StrictRedis
+        cls.redis_connection_config = {
             'host': 'localhost',
             'port': 44445,
             'password': 'default-harvest-password',
             'decode_responses': True
         }
 
-        # Connect to Redis
-        self.connection = redis.StrictRedis(**self.redis_connection_config)
+        cls.connection = StrictRedis(**cls.redis_connection_config)
 
-        # Load JSON data
-        with open('./data/redis-seed.json', 'r') as file:
-            data = json.load(file)
+    def setUp(self):
+        self.redis_task = RedisTask(name='redis test',
+                                    command='get',
+                                    arguments={'key': 'test_key'},
+                                    host='localhost',
+                                    port=44445,
+                                    password='default-harvest-password')
+        self.redis_task.connection = self.connection
 
-        # Insert data into Redis
-        for item in data:
-            self.connection.set(item['key'], json.dumps(item['value']))
+    def tearDown(self):
+        self.connection.flushall()
 
-    def test_setup(self):
-        # Check that the connection to Redis is working
-        self.assertTrue(self.connection.ping())
+    def test_redis_delete(self):
+        self.connection.set('key1', 'value1')
+        self.connection.set('key2', 'value2')
+        self.redis_task.command = 'delete'
+        self.redis_task.arguments = {'keys': ['key1', 'key2']}
 
-        # Make sure all test records were loaded
-        self.assertEqual(len(self.connection.keys('*')), 10)
+        result = self.redis_task.redis_delete()
+        self.assertEqual(result['deleted'], 2)
+        self.assertEqual(result['keys'], ['key1', 'key2'])
 
-    def test_init(self):
-        from ..CloudHarvestCoreTasks.tasks import RedisTask
+    def test_redis_expire(self):
+        self.connection.set('key1', 'value1')
+        self.connection.set('key2', 'value2')
+        self.redis_task.command = 'expire'
+        self.redis_task.arguments = {'expire': 3600, 'keys': ['key1', 'key2']}
 
-        # Assert that the task is not created if the database parameters are missing
-        self.assertRaises(ValueError,
-                          RedisTask,
-                          name='test',
-                          description='This is a test task',
-                          command='keys')
+        result = self.redis_task.redis_expire()
+        self.assertEqual(result, ['key1', 'key2'])
+        self.assertTrue(self.connection.ttl('key1') > 0)
+        self.assertTrue(self.connection.ttl('key2') > 0)
 
-        # Assert that the task is created
-        redis_task = RedisTask(name='test',
-                               description='This is a test task',
-                               command='keys',
-                               arguments={
-                                   'pattern': '*'
-                               },
-                               host='localhost',
-                               port=44445,
-                               password='default-harvest-password')
+    def test_redis_flushall(self):
+        self.connection.set('key1', 'value1')
+        self.redis_task.command = 'flushall'
 
-        self.assertTrue(redis_task)
+        result = self.redis_task.redis_flushall()
+        self.assertTrue(result['deleted'])
+        self.assertEqual(self.connection.keys('*'), [])
 
-        redis_task.run()
+    def test_redis_get(self):
+        self.connection.set('test_key', 'test_value')
+        self.redis_task.command = 'get'
+        self.redis_task.arguments = {'name': 'test_key'}
 
-        # Check that data was retrieved from Redis
-        self.assertEqual(len(redis_task.result), 10)
+        result = self.redis_task.redis_get()
+        self.assertEqual(result, [{'test_key': 'test_value'}])
 
-    def test_method_mget(self):
-        chain_template = {
-            'name': 'test_chain',
-            'tasks': [
-                {
-                    'redis': {
-                        'name': 'mget test',
-                        'result_as': 'redis_result',
-                        'command': 'mget',
-                        'arguments': {
-                            'pattern': '*'
-                        },
-                    } | self.redis_connection_config,
-                },
-                {
-                    'recordset': {
-                        'name': 'deserialize redis result',
-                        'data': 'var.redis_result',
-                        'result_as': 'result',
-                        'stages': [
-                            {
-                                'deserialize': {
-                                    'source_key': 'item'
-                                }
-                            },
-                            {
-                                'sort_records': {
-                                    'keys': [
-                                        'age:asc'
-                                    ]
-                                }
-                            }
-                        ]
-                    }
-                }
-            ]
-        }
+    def test_redis_keys(self):
+        self.connection.set('key1', 'value1')
+        self.connection.set('key2', 'value2')
+        self.redis_task.command = 'keys'
+        self.redis_task.arguments = {'pattern': 'key*'}
 
-        task_chain = BaseTaskChain(template=chain_template)
-        task_chain.run()
+        result = self.redis_task.redis_keys()
+        self.assertEqual(set(result), {'key1', 'key2'})
 
-        self.assertEqual(len(task_chain.result['data']), 10)
-        self.assertEqual(task_chain.result['data'][0]['age'], 25)
-        self.assertEqual(task_chain.result['data'][9]['age'], 45)
+    def test_redis_set(self):
+        self.redis_task.command = 'set'
+        self.redis_task.arguments = {'name': 'test_key', 'value': 'test_value'}
 
-    def test_method_set(self):
-        chain_template = {
-            'name': 'test_chain',
-            'tasks': [
-                {
-                    'recordset': {
-                        'name': 'test recordset',
-                        'data': [
-                            {
-                                'name': 'Test1',
-                                'age': 30,
-                                'date': datetime.now(),
-                                'tags': [{"Name": "color", "Value": "blue"}, {"Name": "size", "Value": "large"}]
-                            },
-                            {
-                                'name': 'Test2',
-                                'age': 25,
-                                'date': datetime.now(),
-                                'tags': [{"Name": "color", "Value": "red"}, {"Name": "size", "Value": "medium"}]
-                            }
-                        ],
-                        'result_as': 'recordset',
-                        'stages': [
-                            {
-                                # Convert the record to a JSON string and store it in the 'target_key' key format
-                                'serialization': {
-                                    'target_key': '_serialized',
-                                    'keep_other_keys': True
-                                }
-                            }
-                        ]
-                    }
-                },
-                {
-                    'redis': {
-                        'name': 'set test',
-                        'command': 'set',
-                        'data': 'var.recordset',
-                        'arguments': {
-                            'name': 'record::{{name}}',
-                            'value': '{{_serialized}}'
-                        }
-                    } | self.redis_connection_config
-                }
-            ]
-        }
-
-        task_chain = BaseTaskChain(template=chain_template)
-        task_chain.run()
-
-        self.assertEqual(task_chain.result, 'OK')
+        result = self.redis_task.redis_set()
+        self.assertEqual(result['added'], 1)
+        self.assertEqual(result['errors'], 0)
+        self.assertEqual(result['updated'], 0)
+        self.assertEqual(self.connection.get('test_key'), 'test_value')
 
 class TestPruneTask(unittest.TestCase):
     def setUp(self):

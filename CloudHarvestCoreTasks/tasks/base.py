@@ -669,8 +669,8 @@ class BaseDataTask(BaseTask):
 
         # Retrieve the configuration from the Silos dictionary if it is provided
         if self.silo:
-            from ..silos import get_one_silo
-            for key, value in get_one_silo(self.silo).to_dict().items():
+            from ..silos import get_silo
+            for key, value in get_silo(name=self.silo).__dict__().items():
                 setattr(self, key, value)
 
         # Validate that all minimum configuration keys are provided

@@ -17,10 +17,9 @@ from .base import (
     BaseDataTask,
     BaseTask,
     BaseTaskChain,
-    BaseTaskException,
     TaskStatusCodes
 )
-from .exceptions import FileTaskException, MongoTaskException
+from .exceptions import *
 
 from ..user_filters import MongoUserFilter
 
@@ -756,7 +755,7 @@ class RedisTask(BaseDataTask):
         self.connect()
 
         result = self.walk_result_command_path(
-            getattr(self, f'redis_{self.base_command_part}')(**self.arguments)
+            getattr(self, f'redis_{self.base_command_part}')()
         )
 
         self.result = result

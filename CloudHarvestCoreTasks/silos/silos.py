@@ -1,15 +1,18 @@
 """
 This module contains the Silo class. A silo is a storage location for data which can be retrieved using CloudHarvest.
 """
+from redis import StrictRedis
 
-class Silo:
+_SILOS = {}
+
+
+class BaseSilo:
     """
     This class is used to define a Silo. A Silo is a storage location for data which can be retrieved using CloudHarvest.
     Silos are accessible via the CloudHarvestPluginManager and the report syntax where the `silo` directive parameter
     is available.
 
-    This class does not provide any connection or storage functionality. It is a definition only used to complete the
-    configuration of a reporting task which must access the silo in question.
+    Silos manage connection pools to resources and provide heartbeat checks, if necessary.
     """
 
     def __init__(self,
@@ -20,6 +23,7 @@ class Silo:
                  username: str = None,
                  password: str = None,
                  database:str = None,
+                 heartbeat: dict = None,
                  **additional_database_arguments):
 
         self.name = name
@@ -30,6 +34,10 @@ class Silo:
         self.password = password
         self.database = database
         self.additional_database_arguments = additional_database_arguments or {}
+
+        self.pool = None
+        self.heartbeat = None
+        self.heartbeat_thread = None
 
     def __dict__(self):
         return {
@@ -42,24 +50,168 @@ class Silo:
             'database': self.database
         } | self.additional_database_arguments
 
-_SILOS = {}
+    @property
+    def is_connected(self) -> bool:
+        """
+        Checks if the Silo is connected and returns a boolean value.
+        """
 
-def add_silo(**kwargs):
+        raise NotImplementedError
+
+    def connect(self):
+        """
+        Connects to the Silo and returns a connection object.
+        """
+        raise NotImplementedError
+
+
+class MongoBaseSilo(BaseSilo):
+    from pymongo import MongoClient
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    @property
+    def is_connected(self) -> bool:
+        """
+        Checks if the MongoDB database is connected and returns a boolean value.
+
+        Args:
+            database (str): The name of the database to check the connection for.
+
+        Returns:
+            bool: True if the MongoDB database is connected, False otherwise.
+        """
+
+
+
+        if self.pool:
+            try:
+                self.pool.server_info()
+                return True
+
+            except Exception:
+                return False
+
+        else:
+            return False
+
+    def connect(self) -> MongoClient:
+        """
+        Connects to the MongoDB database using the provided configuration, returning a MongoClient object. If the client
+        already exists, it will return the existing client object.
+
+        Returns:
+            MongoClient: A MongoClient instance connected to the specified database.
+        """
+
+        # Already connected
+        if self.is_connected:
+            return self.pool
+
+        # Prepare the configuration
+        default_configuration = {
+            'maxPoolSize': 50,
+        }
+
+        config = default_configuration | self.__dict__()
+
+        # Create the client object
+        from pymongo import MongoClient
+        self.pool = MongoClient(**config)
+
+        # Test that the connection works
+        if self.is_connected:
+            return self.pool
+
+        else:
+            raise ConnectionError(f'Could not connect to the MongoDB database {self.name}.')
+
+
+class RedisBaseSilo(BaseSilo):
+    from redis import StrictRedis
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    @property
+    def is_connected(self) -> bool:
+        """
+        Checks if the Redis cache is connected and returns a boolean value.
+
+        Returns:
+            bool: True if the Redis cache is connected, False otherwise.
+        """
+
+        if self.pool:
+            try:
+                StrictRedis(connection_pool=self.pool).ping()
+                return True
+
+            except Exception:
+                return False
+
+        else:
+            return False
+
+    def connect(self) -> StrictRedis:
+        """
+        Connects to the Redis cache using the provided configuration, returning a StrictRedis object. If the client
+        already exists, it will return the existing client object.
+
+        Returns:
+            StrictRedis: A StrictRedis instance connected to the specified database.
+        """
+
+        # Check if a connection pool already exists for the specified database
+        if self.is_connected:
+            return StrictRedis(connection_pool=self.pool)
+
+        # Create a new connection pool for the specified database
+        default_configuration = {
+            'db': self.database,
+            'max_connections': 50,
+            'decode_responses': True
+        }
+
+        config = default_configuration | self.__dict__()
+
+        from redis import ConnectionPool
+        self.pool = ConnectionPool(**config)
+
+        connection = StrictRedis(connection_pool=self.pool)
+
+        return connection
+
+
+def add_silo(name: str, engine: str, **kwargs) -> BaseSilo:
     """
     Add a silo to the silo registry.
 
-    :param silo: The silo to add.
-    """
-    silo = Silo(**kwargs)
+    Arguments
+    name (str): The name of the silo.
+    engine (str): The engine to use for the silo.
 
-    if silo.name is not None:
-        _SILOS[silo.name] = silo
+    """
+
+    match kwargs.get('engine'):
+        case 'mongo':
+            silo = MongoBaseSilo(**kwargs)
+
+        case _:
+            raise NotImplementedError(f'Unknown silo engine: {engine} for silo {name}')
+
+    _SILOS[name] = silo
+
+    return silo
+
 
 def clear_silos():
     """
     Clear all silos from the silo registry.
     """
     _SILOS.clear()
+
 
 def drop_silo(name: str):
     """
@@ -70,7 +222,8 @@ def drop_silo(name: str):
     if name in _SILOS:
         _SILOS.pop(name)
 
-def get_silo(name: str) -> Silo:
+
+def get_silo(name: str) -> BaseSilo:
     """
     Retrieve a silo by name.
 

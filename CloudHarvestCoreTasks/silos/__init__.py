@@ -9,5 +9,5 @@ from .silos import (
     clear_silos,
     drop_silo,
     get_silo,
-    Silo
+    BaseSilo
 )

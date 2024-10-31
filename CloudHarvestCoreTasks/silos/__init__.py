@@ -8,5 +8,6 @@ from .silos import (
     add_silo,
     clear_silos,
     drop_silo,
-    get_silo
+    get_silo,
+    Silo
 )

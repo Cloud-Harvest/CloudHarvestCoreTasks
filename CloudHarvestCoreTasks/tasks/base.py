@@ -671,7 +671,11 @@ class BaseDataTask(BaseTask):
         if self.silo:
             from ..silos import get_silo
             for key, value in get_silo(name=self.silo).__dict__().items():
-                setattr(self, key, value)
+                if hasattr(self, key):
+                    setattr(self, key, value)
+
+                else:
+                    self.extended_db_configuration[key] = value
 
         # Validate that all minimum configuration keys are provided
         if not all([getattr(self, key) for key in self.REQUIRED_CONFIGURATION_KEYS]):

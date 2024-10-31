@@ -17,10 +17,9 @@ from .base import (
     BaseDataTask,
     BaseTask,
     BaseTaskChain,
-    BaseTaskException,
     TaskStatusCodes
 )
-from .exceptions import FileTaskException, MongoTaskException
+from .exceptions import *
 
 from ..user_filters import MongoUserFilter
 
@@ -756,7 +755,7 @@ class RedisTask(BaseDataTask):
         self.connect()
 
         result = self.walk_result_command_path(
-            getattr(self, f'redis_{self.base_command_part}')(**self.arguments)
+            getattr(self, f'redis_{self.base_command_part}')()
         )
 
         self.result = result
@@ -845,7 +844,7 @@ class RedisTask(BaseDataTask):
 
         for key in keys:
             self.calls += 1
-            self.connection.expire(name=key, time=self.expire)
+            self.connection.expire(name=key, time=self.arguments['expire'])
 
         self.result = {'keys': keys}
 
@@ -1229,6 +1228,9 @@ class RedisTask(BaseDataTask):
             from json import loads
             return loads(v)
 
+        else:
+            return v
+
     def serialize(self, v: Any) -> Any:
         """
         Serializes the value if indicated by the task configuration.
@@ -1240,6 +1242,9 @@ class RedisTask(BaseDataTask):
         if self.serialization and not isinstance(v, self.VALID_REDIS_TYPES):
             from json import dumps
             return dumps(v, default=str)
+
+        else:
+            return v
 
 @register_definition(name='wait', category='task')
 class WaitTask(BaseTask):

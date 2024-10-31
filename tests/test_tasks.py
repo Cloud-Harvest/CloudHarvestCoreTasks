@@ -396,160 +396,232 @@ class TestMongoTask(unittest.TestCase):
         self.assertIn('command', task_chain.result['data'].keys())
 
 class TestRedisTask(unittest.TestCase):
-    @classmethod
-    def setUp(self):
-        import json
-        import redis
 
-        self.redis_connection_config = {
+    @classmethod
+    def setUpClass(cls):
+        from redis import StrictRedis
+        cls.redis_connection_config = {
             'host': 'localhost',
             'port': 44445,
             'password': 'default-harvest-password',
             'decode_responses': True
         }
 
-        # Connect to Redis
-        self.connection = redis.StrictRedis(**self.redis_connection_config)
+        cls.connection = StrictRedis(**cls.redis_connection_config)
 
-        # Load JSON data
-        with open('./data/redis-seed.json', 'r') as file:
-            data = json.load(file)
+    def tearDown(self):
+        self.connection.flushall()
 
-        # Insert data into Redis
-        for item in data:
-            self.connection.set(item['key'], json.dumps(item['value']))
+    def test_redis_delete(self):
+        self.connection.set('key1', 'value1')
+        self.connection.set('key2', 'value2')
 
-    def test_setup(self):
-        # Check that the connection to Redis is working
-        self.assertTrue(self.connection.ping())
-
-        # Make sure all test records were loaded
-        self.assertEqual(len(self.connection.keys('*')), 10)
-
-    def test_init(self):
-        from ..CloudHarvestCoreTasks.tasks import RedisTask
-
-        # Assert that the task is not created if the database parameters are missing
-        self.assertRaises(ValueError,
-                          RedisTask,
-                          name='test',
-                          description='This is a test task',
-                          command='keys')
-
-        # Assert that the task is created
-        redis_task = RedisTask(name='test',
-                               description='This is a test task',
-                               command='keys',
-                               arguments={
-                                   'pattern': '*'
-                               },
-                               host='localhost',
-                               port=44445,
-                               password='default-harvest-password')
-
-        self.assertTrue(redis_task)
-
-        redis_task.run()
-
-        # Check that data was retrieved from Redis
-        self.assertEqual(len(redis_task.result), 10)
-
-    def test_method_mget(self):
-        chain_template = {
+        task_chain_configuration = {
             'name': 'test_chain',
             'tasks': [
                 {
                     'redis': {
-                        'name': 'mget test',
-                        'result_as': 'redis_result',
-                        'command': 'mget',
-                        'arguments': {
-                            'pattern': '*'
-                        },
+                        'name': 'delete test',
+                        'command': 'delete',
+                        'arguments': {'keys': ['key1', 'key2']},
                     } | self.redis_connection_config,
-                },
-                {
-                    'recordset': {
-                        'name': 'deserialize redis result',
-                        'data': 'var.redis_result',
-                        'result_as': 'result',
-                        'stages': [
-                            {
-                                'deserialize': {
-                                    'source_key': 'item'
-                                }
-                            },
-                            {
-                                'sort_records': {
-                                    'keys': [
-                                        'age:asc'
-                                    ]
-                                }
-                            }
-                        ]
-                    }
                 }
             ]
         }
 
-        task_chain = BaseTaskChain(template=chain_template)
+        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
+        task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=task_chain_configuration)
         task_chain.run()
 
-        self.assertEqual(len(task_chain.result['data']), 10)
-        self.assertEqual(task_chain.result['data'][0]['age'], 25)
-        self.assertEqual(task_chain.result['data'][9]['age'], 45)
+        result = task_chain.result
+        self.assertEqual(result['data']['deleted'], 2)
+        self.assertEqual(result['data']['keys'], ['key1', 'key2'])
 
-    def test_method_set(self):
-        chain_template = {
+    def test_redis_expire(self):
+        self.connection.set('key1', 'value1')
+        self.connection.set('key2', 'value2')
+
+        task_chain_configuration = {
             'name': 'test_chain',
             'tasks': [
                 {
-                    'recordset': {
-                        'name': 'test recordset',
-                        'data': [
-                            {
-                                'name': 'Test1',
-                                'age': 30,
-                                'date': datetime.now(),
-                                'tags': [{"Name": "color", "Value": "blue"}, {"Name": "size", "Value": "large"}]
-                            },
-                            {
-                                'name': 'Test2',
-                                'age': 25,
-                                'date': datetime.now(),
-                                'tags': [{"Name": "color", "Value": "red"}, {"Name": "size", "Value": "medium"}]
-                            }
-                        ],
-                        'result_as': 'recordset',
-                        'stages': [
-                            {
-                                # Convert the record to a JSON string and store it in the 'target_key' key format
-                                'serialization': {
-                                    'target_key': '_serialized',
-                                    'keep_other_keys': True
-                                }
-                            }
-                        ]
-                    }
-                },
+                    'redis': {
+                        'name': 'expire test',
+                        'command': 'expire',
+                        'arguments': {'expire': 3600, 'keys': ['key1', 'key2']},
+                    } | self.redis_connection_config,
+                }
+            ]
+        }
+
+        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
+        task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=task_chain_configuration)
+        task_chain.run()
+
+        result = task_chain.result
+        self.assertEqual(result['data'], ['key1', 'key2'])
+        self.assertTrue(self.connection.ttl('key1') > 0)
+        self.assertTrue(self.connection.ttl('key2') > 0)
+
+    def test_redis_flushall(self):
+        self.connection.set('key1', 'value1')
+
+        task_chain_configuration = {
+            'name': 'test_chain',
+            'tasks': [
+                {
+                    'redis': {
+                        'name': 'flushall test',
+                        'command': 'flushall',
+                    } | self.redis_connection_config,
+                }
+            ]
+        }
+
+        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
+        task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=task_chain_configuration)
+        task_chain.run()
+
+        result = task_chain.result
+        self.assertTrue(result['data']['deleted'])
+        self.assertEqual(self.connection.keys('*'), [])
+
+    def test_redis_get(self):
+        self.connection.set('test_key', 'test_value')
+
+        task_chain_configuration = {
+            'name': 'test_chain',
+            'tasks': [
+                {
+                    'redis': {
+                        'name': 'get test',
+                        'command': 'get',
+                        'arguments': {'name': 'test_key'},
+                    } | self.redis_connection_config,
+                }
+            ]
+        }
+
+        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
+        task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=task_chain_configuration)
+        task_chain.run()
+
+        result = task_chain.result
+        self.assertEqual(result['data'], [{'test_key': 'test_value'}])
+
+    def test_redis_keys(self):
+        self.connection.set('key1', 'value1')
+        self.connection.set('key2', 'value2')
+
+        task_chain_configuration = {
+            'name': 'test_chain',
+            'tasks': [
+                {
+                    'redis': {
+                        'name': 'keys test',
+                        'command': 'keys',
+                        'arguments': {'pattern': 'key*'},
+                    } | self.redis_connection_config,
+                }
+            ]
+        }
+
+        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
+        task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=task_chain_configuration)
+        task_chain.run()
+
+        result = task_chain.result
+        self.assertEqual(set(result['data']), {'key1', 'key2'})
+
+    def test_redis_set(self):
+        task_chain_configuration = {
+            'name': 'test_chain',
+            'tasks': [
                 {
                     'redis': {
                         'name': 'set test',
                         'command': 'set',
-                        'data': 'var.recordset',
                         'arguments': {
-                            'name': 'record::{{name}}',
-                            'value': '{{_serialized}}'
-                        }
-                    } | self.redis_connection_config
+                            'name': 'test_key',
+                            'value': 'test_value'
+                        },
+                    } | self.redis_connection_config,
                 }
             ]
         }
 
-        task_chain = BaseTaskChain(template=chain_template)
+        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
+        task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=task_chain_configuration)
         task_chain.run()
 
-        self.assertEqual(task_chain.result, 'OK')
+        result = task_chain.result
+        self.assertEqual(result['data']['added'], 1)
+        self.assertEqual(result['data']['errors'], 0)
+        self.assertEqual(result['data']['updated'], 0)
+        self.assertEqual(self.connection.get('test_key'), 'test_value')
+
+    def test_redis_serialize_set(self):
+        nested_dict = {'key1': {'subkey1': 'value1', 'subkey2': 'value2'}}
+        task_chain_configuration = {
+            'name': 'test_chain',
+            'tasks': [
+                {
+                    'redis': {
+                        'name': 'serialize set test',
+                        'command': 'set',
+                        'serialization': True,
+                        'arguments': {
+                            'name': 'test_key',
+                            'value': nested_dict
+                        },
+                    } | self.redis_connection_config,
+                }
+            ]
+        }
+
+        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
+        task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=task_chain_configuration)
+        task_chain.run()
+
+        result = task_chain.result
+        serialized_value = self.connection.get('test_key')
+        self.assertEqual(result['data']['added'], 1)
+        self.assertEqual(serialized_value, '{"key1": {"subkey1": "value1", "subkey2": "value2"}}')
+
+    def test_redis_set_dict(self):
+        dict_to_set = {'field1': 'value1', 'field2': 'value2'}
+        task_chain_configuration = {
+            'name': 'test_chain',
+            'tasks': [
+                {
+                    'redis': {
+                        'name': 'set dict test',
+                        'command': 'set',
+                        'data': 'var.dict_to_set',
+                        'arguments': {
+                            'name': 'test_hash',
+                            'keys': [
+                                'field1',
+                                'field2'
+                            ]
+                        },
+                    } | self.redis_connection_config,
+                }
+            ]
+        }
+
+        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
+        task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=task_chain_configuration)
+        task_chain.variables['dict_to_set'] = dict_to_set
+
+        task_chain.run()
+
+        result = task_chain.result
+        self.assertEqual(result['data']['added'], 1)
+        self.assertEqual(result['data']['errors'], 0)
+        self.assertEqual(result['data']['updated'], 0)
+        self.assertEqual(self.connection.hget('test_hash', 'field1'), 'value1')
+        self.assertEqual(self.connection.hget('test_hash', 'field2'), 'value2')
 
 class TestPruneTask(unittest.TestCase):
     def setUp(self):

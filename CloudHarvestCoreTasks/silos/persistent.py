@@ -10,63 +10,12 @@ invalidated in the near future.
 
 from datetime import datetime, timezone
 from logging import getLogger
-from pymongo import MongoClient
 from bson import ObjectId
+from .silos import get_silo
 
 logger = getLogger('harvest')
 
 _CLIENTS = {}
-
-
-def connect(database: str = 'harvest', *args, **kwargs) -> MongoClient:
-    """
-    Connects to the MongoDB database using the provided configuration, returning a MongoClient object. If the client
-    already exists, it will return the existing client object.
-
-    Args:
-        database (str, optional): The name of the database to connect to. Defaults to 'harvest'.
-        *args: Additional positional arguments for the MongoClient.
-        **kwargs: Additional keyword arguments for the MongoClient.
-
-    Returns:
-        MongoClient: A MongoClient instance connected to the specified database.
-    """
-
-    if _CLIENTS.get(database):
-        return _CLIENTS.get(database)
-
-    default_configuration = {
-        'maxPoolSize': 50,
-    }
-
-    _pool = MongoClient(*args, **default_configuration | kwargs)
-    _CLIENTS[database] = _pool
-
-    return _CLIENTS[database]
-
-def is_connected(database: str) -> bool:
-    """
-    Checks if the MongoDB database is connected and returns a boolean value.
-
-    Args:
-        database (str): The name of the database to check the connection for.
-
-    Returns:
-        bool: True if the MongoDB database is connected, False otherwise.
-    """
-
-    if _CLIENTS.get(database):
-        client = connect(database)
-
-        try:
-            client.server_info()
-            return True
-
-        except Exception:
-            return False
-
-    else:
-        return False
 
 
 # Persistent Silo data record operations and parameters
@@ -87,27 +36,50 @@ _required_meta_fields = (
 )
 
 
-def set_pstar(**kwargs) -> ObjectId:
+def set_pstar(silo_name: str, **kwargs) -> ObjectId:
     """
     A PSTAR is a concept in Harvest where objects are stored on five dimensions: Platform, Service, Type, Account, and
     Region. This function writes a PSTAR record to the persistent silo.
 
-    ['harvest'][platform.service.type]
-    :param Platform: the cloud provider this database was retrieved from (ie AWS, Azure, Google)
-    :param Service: the provider's service (ie "RDS", "EC2")
-    :param Type: service's object classification (ie RDS "instance" or EC2 "event")
-    :param Account: a unique identifier indicating the account or environment level for this service
-    :param Region: the geographic region name for the objects retrieved from the underlying API call
-    :param Count: number of records retrieved in the data collection job
-    :param StartTime: when the data collection job was started
-    :param EndTime: when the data collection job completed
-    :param ApiVersion: version of this software
-    :param Module: metadata of the collector used to collect the data
-    :param Errors: provides and error messages
-    :return:
+    Parameters
+    silo_name (str): the name of the silo to write the record to
+    Platform (str): the cloud provider this database was retrieved from (ie AWS, Azure, Google)
+    Service (str): the provider's service (ie "RDS", "EC2")
+    Type (str): service's object classification (ie RDS "instance" or EC2 "event")
+    Account (str): a unique identifier indicating the account or environment level for this service
+    Region (str): the geographic region name for the objects retrieved from the underlying API call
+    Count (int): number of records retrieved in the data collection job
+    StartTime (datetime): when the data collection job was started
+    EndTime (datetime): when the data collection job completed
+    ApiVersion (str): version of this software
+    Module (dict): metadata of the collector used to collect the data
+    Errors (list): provides any error messages
+
+    Returns
+    ObjectId: ObjectId of the inserted/updated record
+
+    Example
+    >>> kwargs = {
+    >>>     'Platform': 'AWS',
+    >>>     'Service': 'RDS',
+    >>>     'Type': 'instance',
+    >>>     'Account': '123456789012',
+    >>>     'Region': 'us-west-2',
+    >>>     'Count': 10,
+    >>>     'StartTime': datetime(2023, 10, 1, 12, 0, 0),
+    >>>     'EndTime': datetime(2023, 10, 1, 12, 30, 0),
+    >>>     'ApiVersion': '1.0.0',
+    >>>     'Module': {
+    >>>         'Name': 'harvest_module',
+    >>>         'Version': '1.0.0',
+    >>>         'Repository': 'https://github.com/example/repo',
+    >>>         'FilterCriteria': ['criteria1', 'criteria2']
+    >>>     },
+    >>>     'Errors': []
+    >>> }
     """
 
-    client = connect()
+    client = get_silo(silo_name).connect()
 
     # no need to replicate this logic everywhere
     kwargs['duration'] = duration_in_seconds(a=kwargs['EndTime'], b=kwargs['StartTime'])
@@ -203,11 +175,12 @@ def prepare_record(record: dict, meta_extra_fields: tuple = ()) -> tuple:
     return result
 
 
-def write_records(records: list) -> list:
+def write_records(silo_name: str, records: list) -> list:
     """
     Writes a list of records to the persistent silo.
 
     Args:
+        silo_name (str): The name of the silo to write the records to.
         records (list): A list of records to write to the cache.
 
     Returns:
@@ -239,7 +212,7 @@ def write_records(records: list) -> list:
         bulk_records['meta'].append(meta_replace)
 
     # perform bulk writes by collection but always do 'meta' last
-    client = connect()
+    client = get_silo(silo_name).connect()
 
     updated_records = [
         client['harvest'][collection].bulk_write(bulk_records[collection])
@@ -302,16 +275,17 @@ def get_unique_filter(record: dict, flat_record: dict) -> dict:
         for field in (record.get('Harvest', {}).get('Module', {}).get('FilterCriteria') or [])
     }
 
-def deactivate_records(collection_name: str, record_ids: list) -> dict:
+def deactivate_records(silo_name: str, collection_name: str, record_ids: list) -> dict:
     """
     Deactivate records in the cache by setting the Harvest.Active field to False and adding a DeactivatedOn date.
 
     Args:
+        silo_name (str): The name of the silo in which to deactivate the records
         collection_name (str): The name of the collection in which to deactivate the records.
         record_ids (list): A list of record IDs to deactivate.
     """
 
-    client = connect()
+    client = get_silo(silo_name).connect()
 
     collection = client['harvest'][collection_name]
 
@@ -340,11 +314,12 @@ def deactivate_records(collection_name: str, record_ids: list) -> dict:
     }
 
 
-def add_indexes(indexes: dict):
+def add_indexes(silo_name: str, indexes: dict):
     """
     Create an index in the backend cache.
 
     Args:
+        silo_name (str): The name of the silo in which to create the indexes.
         indexes (dict): A dictionary containing the indexes to create.
 
     Returns:
@@ -352,7 +327,7 @@ def add_indexes(indexes: dict):
     """
 
     # Get the connection
-    client = connect()
+    client = get_silo(silo_name).connect()
 
     # Identify databases
     for database in indexes.keys():

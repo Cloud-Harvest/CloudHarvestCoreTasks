@@ -670,12 +670,13 @@ class BaseDataTask(BaseTask):
         # Retrieve the configuration from the Silos dictionary if it is provided
         if self.silo:
             from ..silos import get_silo
-            for key, value in get_silo(name=self.silo).__dict__().items():
-                if hasattr(self, key):
-                    setattr(self, key, value)
+            silo = get_silo(self.silo)
 
-                else:
-                    self.extended_db_configuration[key] = value
+            if silo:
+                self.connection = silo.connect()
+
+            else:
+                raise ValueError(f"Could not find Silo: {self.silo}")
 
         # Validate that all minimum configuration keys are provided
         if not all([getattr(self, key) for key in self.REQUIRED_CONFIGURATION_KEYS]):

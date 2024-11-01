@@ -1,7 +1,7 @@
 """
 This module contains the Silo class. A silo is a storage location for data which can be retrieved using CloudHarvest.
 """
-from redis import StrictRedis
+from CloudHarvestCorePluginManager.decorators import register_definition
 
 _SILOS = {}
 
@@ -23,7 +23,6 @@ class BaseSilo:
                  username: str = None,
                  password: str = None,
                  database:str = None,
-                 heartbeat: dict = None,
                  **additional_database_arguments):
 
         self.name = name
@@ -36,8 +35,6 @@ class BaseSilo:
         self.additional_database_arguments = additional_database_arguments or {}
 
         self.pool = None
-        self.heartbeat = None
-        self.heartbeat_thread = None
 
     def __dict__(self):
         return {
@@ -49,6 +46,14 @@ class BaseSilo:
             'password': self.password,
             'database': self.database
         } | self.additional_database_arguments
+
+    @property
+    def log_prefix(self):
+        """
+        Returns a string that can be used as a prefix for log messages.
+        """
+
+        return f'{self.name}@{self.host}:{self.port}:{self.database}'
 
     @property
     def is_connected(self) -> bool:
@@ -64,8 +69,8 @@ class BaseSilo:
         """
         raise NotImplementedError
 
-
-class MongoBaseSilo(BaseSilo):
+@register_definition('silo', 'mongo_silo')
+class MongoSilo(BaseSilo):
     from pymongo import MongoClient
 
     def __init__(self, **kwargs):
@@ -76,14 +81,9 @@ class MongoBaseSilo(BaseSilo):
         """
         Checks if the MongoDB database is connected and returns a boolean value.
 
-        Args:
-            database (str): The name of the database to check the connection for.
-
         Returns:
             bool: True if the MongoDB database is connected, False otherwise.
         """
-
-
 
         if self.pool:
             try:
@@ -127,8 +127,8 @@ class MongoBaseSilo(BaseSilo):
         else:
             raise ConnectionError(f'Could not connect to the MongoDB database {self.name}.')
 
-
-class RedisBaseSilo(BaseSilo):
+@register_definition('silo', 'redis_silo')
+class RedisSilo(BaseSilo):
     from redis import StrictRedis
 
     def __init__(self, **kwargs):
@@ -145,6 +145,7 @@ class RedisBaseSilo(BaseSilo):
 
         if self.pool:
             try:
+                from redis import StrictRedis
                 StrictRedis(connection_pool=self.pool).ping()
                 return True
 
@@ -165,6 +166,7 @@ class RedisBaseSilo(BaseSilo):
 
         # Check if a connection pool already exists for the specified database
         if self.is_connected:
+            from redis import StrictRedis
             return StrictRedis(connection_pool=self.pool)
 
         # Create a new connection pool for the specified database
@@ -179,6 +181,7 @@ class RedisBaseSilo(BaseSilo):
         from redis import ConnectionPool
         self.pool = ConnectionPool(**config)
 
+        from redis import StrictRedis
         connection = StrictRedis(connection_pool=self.pool)
 
         return connection
@@ -191,16 +194,25 @@ def add_silo(name: str, engine: str, **kwargs) -> BaseSilo:
     Arguments
     name (str): The name of the silo.
     engine (str): The engine to use for the silo.
-
     """
 
-    match kwargs.get('engine'):
-        case 'mongo':
-            silo = MongoBaseSilo(**kwargs)
+    # We use the Registry here in case there are plugins which support silo engines not defined in the CoreTasks repo.
+    from CloudHarvestCorePluginManager.registry import Registry
 
-        case _:
-            raise NotImplementedError(f'Unknown silo engine: {engine} for silo {name}')
+    # Define the class name
+    class_name = f'{engine.title()}_silo'
 
+    # Retrieve the class name
+    silo_class = Registry.find(result_key='cls', name=class_name, category='silo')
+
+    # Raise an error if the class is not found
+    if not silo_class:
+        raise NotImplementedError(f'Unknown silo engine: {engine} for silo {name}')
+
+    # Create the silo object
+    silo = silo_class[0](**kwargs)
+
+    # Add the silo to the top-level _SILOS dictionary
     _SILOS[name] = silo
 
     return silo

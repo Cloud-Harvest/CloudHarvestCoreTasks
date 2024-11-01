@@ -4,12 +4,13 @@ are used to access data for the report. This module provides the ability to add,
 CloudHarvest Silo registry.
 """
 
+from .heartbeat import Heartbeat
+
 from .silos import (
     add_silo,
     clear_silos,
     drop_silo,
     get_silo,
-    start_heartbeat_on_silo,
     BaseSilo,
     MongoSilo,
     RedisSilo

@@ -1337,7 +1337,7 @@ class BaseTaskChain(List[BaseTask]):
             Updates the job cache with the task chain's progress.
             """
 
-            from silos.ephemeral import connect
+            from silos import get_silo
 
             while True:
                 cache_entry = {
@@ -1348,7 +1348,7 @@ class BaseTaskChain(List[BaseTask]):
                               } | self.detailed_progress
 
                 try:
-                    client = connect(database='chains')
+                    client = get_silo('harvest-jobs').connect()
 
                     client.hset(name=self.id, mapping=cache_entry)
 

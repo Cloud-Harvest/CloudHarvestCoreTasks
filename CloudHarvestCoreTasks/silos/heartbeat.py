@@ -10,7 +10,6 @@ class Heartbeat:
     """
     The Heartbeat class is used to manage the heartbeat process for a node in the CloudHarvest system. The heartbeat
     """
-    from threading import Thread
     from typing import Literal
 
     def __init__(self, silo_name: str, node_type: Literal['agent', 'api'], version: str, heartbeat_check_rate: float = 1.0):

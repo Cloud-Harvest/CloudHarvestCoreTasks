@@ -9,6 +9,7 @@ from .silos import (
     clear_silos,
     drop_silo,
     get_silo,
+    start_heartbeat_on_silo,
     BaseSilo,
     MongoSilo,
     RedisSilo

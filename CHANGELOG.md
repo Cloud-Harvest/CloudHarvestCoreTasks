@@ -6,6 +6,8 @@
 - Added [`silos`](./CloudHarvestCoreTasks/silos) to record remote data source information in the application
 - Tasks will now record multiple errors in sequence using key `self.meta['Errors']` as a list
 - Removed the `()` requirement for variable method references in task configurations such as `var.result.keys()` to `var.result.keys`
+- Added the `Heartbeat` object for monitoring the health of the application
+- Added `add_indexes` to `BaseSilo` to add indexes to a database, where supported
 
 # 0.4.0
 - Moved MongoDb operations into Tasks since both the Api and Agent will need to interact with the database

@@ -310,49 +310,6 @@ def deactivate_records(silo_name: str, collection_name: str, record_ids: list) -
     }
 
 
-def add_indexes(silo_name: str, indexes: dict):
-    """
-    Create an index in the backend cache.
-
-    Args:
-        silo_name (str): The name of the silo in which to create the indexes.
-        indexes (dict): A dictionary containing the indexes to create.
-
-    Returns:
-        None
-    """
-
-    # Get the connection
-    client = get_silo(silo_name).connect()
-
-    # Identify databases
-    for database in indexes.keys():
-
-        # Identify collections
-        for collection in indexes['harvest'].keys():
-
-            # Identify indexes
-            for index in indexes['harvest'][collection]:
-
-                # Add single-field indexes defined as a list of strings
-                if isinstance(index, (str, list)):
-                    client['harvest'][collection].create_index(keys=index)
-                    logger.debug(f'{client.log_prefix}: added index: {database}.{collection}.{str(index)}')
-
-                # Add complex indexes defined as a dictionary
-                elif isinstance(index, dict):
-
-                    # pymongo is very picky and demands a list[tuple())
-                    keys = [(i['field'], i.get('sort', 1)) for i in index.get('keys', [])]
-
-                    client['harvest'][collection].create_index(keys=keys, **index['options'])
-
-                    logger.debug(f'{client.log_prefix}: added index: {database}.{collection}.{str(index)}')
-
-                else:
-                    logger.error(f'unexpected type for index `{index}`: {str(type(index))}')
-
-
 def check_harvest_metadata(flat_record: dict) -> bool:
     """
     Check if the record contains the required Harvest metadata fields.

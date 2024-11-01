@@ -1,11 +1,8 @@
 """
-The persistent silo is a cache that is stored in a persistent storage. For Harvest, this means the MongoDb backend
-database which supports the persisted storage of retrieved data. We call this a cache because we expect the data to be
-invalidated at some point in the future (ie by the destruction of a cloud resource which was previously collected).
-
-Furthermore, we anticipate that some historical data will be stored in this cache for a period until it is no longer
-required. This is in contrast to the Redis cache which is used for temporary storage of data that is expected to be
-invalidated in the near future.
+This module contains methods used to validate and record data in the persistent silo. The persistent silo is a MongoDB
+database that stores data collected by Harvest. The data is stored in collections based on the Platform, Service, and
+Type such as `aws.rds.instances` or `aws.ec2.instances`. Each record in the silo is uniquely identified by the
+`Harvest.UniqueIdentifier` field, which is a combination of the `Module.FilterCriteria` values.
 """
 
 from datetime import datetime, timezone
@@ -148,8 +145,7 @@ def prepare_record(record: dict, meta_extra_fields: tuple = ()) -> tuple:
     unique_filter = get_unique_filter(record=record, flat_record=flat_record)
 
     if not unique_filter:
-        from .exceptions import PersistentCacheException
-        raise PersistentCacheException('UniqueFilter not found in record', record)
+        raise ValueError('UniqueFilter not found in record', record)
 
     record['Harvest']['UniqueIdentifier'] = unique_filter
 

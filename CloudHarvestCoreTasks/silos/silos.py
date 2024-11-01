@@ -264,7 +264,7 @@ def add_silo(name: str, **kwargs) -> BaseSilo:
         raise NotImplementedError(f'Unknown silo engine: {engine} for silo {name}')
 
     # Create the silo object
-    silo = silo_class[0](**kwargs)
+    silo = silo_class[0](name=name, **kwargs)
 
     # Add the silo to the top-level _SILOS dictionary
     _SILOS[name] = silo

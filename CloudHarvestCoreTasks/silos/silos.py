@@ -240,14 +240,15 @@ class RedisSilo(BaseSilo):
         return connection
 
 
-def add_silo(name: str, engine: str, **kwargs) -> BaseSilo:
+def add_silo(name: str, **kwargs) -> BaseSilo:
     """
     Add a silo to the silo registry.
 
     Arguments
     name (str): The name of the silo.
-    engine (str): The engine to use for the silo.
     """
+
+    engine = kwargs['engine']
 
     # We use the Registry here in case there are plugins which support silo engines not defined in the CoreTasks repo.
     from CloudHarvestCorePluginManager.registry import Registry

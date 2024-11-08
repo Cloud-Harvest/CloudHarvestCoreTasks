@@ -18,6 +18,8 @@ class BaseSilo:
     Silos manage connection pools to resources and provide heartbeat checks, if necessary.
     """
 
+    from typing import Any
+
     def __init__(self,
                  name: str,
                  host: str,
@@ -79,6 +81,38 @@ class BaseSilo:
         Connects to the Silo and returns a connection object.
         """
         raise NotImplementedError
+
+    @staticmethod
+    def call_with_only_valid_kwargs(callable_obj: Any, **kwargs) -> Any:
+        """
+        Calls an object with only the valid kwargs for the object. This method was implemented because the contents of
+        the kwargs dictionary are not always valid for the callable object. This method filters out the invalid kwargs
+        before calling the object. Specifically, this helps remove invalid keyes such as 'name' and 'engine' from the
+        kwargs dictionary before calling the MongoClient or (Redis) ConnectionPool objects, but it can be used for any
+        callable object.
+
+        Args:
+            callable_obj (function or method): The callable to inspect.
+            kwargs (dict): The kwargs to pass to the callable.
+
+        Returns:
+            tuple: A tuple of valid kwargs for the callable.
+        """
+        from inspect import signature, Parameter
+
+        sig = signature(callable_obj)
+        valid_args = tuple(
+            param.name for param in sig.parameters.values()
+            if param.kind in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY)
+        )
+
+        kwargs_less_invalid = {
+            k: v
+            for k, v in kwargs.items()
+            if k in valid_args
+        }
+
+        return callable_obj(**kwargs_less_invalid)
 
 
 @register_definition('silo', 'mongo_silo')
@@ -171,7 +205,7 @@ class MongoSilo(BaseSilo):
 
         # Create the client object
         from pymongo import MongoClient
-        self.pool = MongoClient(**config)
+        self.pool: MongoClient = self.call_with_only_valid_kwargs(MongoClient, **config)
 
         # Test that the connection works
         if self.is_connected:
@@ -232,7 +266,7 @@ class RedisSilo(BaseSilo):
         config = default_configuration | self.__dict__()
 
         from redis import ConnectionPool
-        self.pool = ConnectionPool(**config)
+        self.pool: ConnectionPool = self.call_with_only_valid_kwargs(ConnectionPool, **config)
 
         from redis import StrictRedis
         connection = StrictRedis(connection_pool=self.pool)

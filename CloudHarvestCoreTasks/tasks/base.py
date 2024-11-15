@@ -743,7 +743,6 @@ class BaseTaskChain(List[BaseTask]):
 
     def __init__(self,
                  template: dict,
-                 cache_progress: bool = False,
                  user_filters: dict = None,
                  variables: dict = None,
                  *args, **kwargs):
@@ -771,7 +770,6 @@ class BaseTaskChain(List[BaseTask]):
 
         self.name = template['name']
         self.description = template.get('description')
-        self.cache_progress = cache_progress
 
         # Variables are stored with their name as the key.
         # Starting variables can be added using the variables parameter.
@@ -792,6 +790,8 @@ class BaseTaskChain(List[BaseTask]):
         self.user_filters = USER_FILTERS | (user_filters or {})
 
         self.meta = {}
+
+        self.reporting_thread = self.update_task_chain_cache_thread()
 
     def __enter__(self) -> 'BaseTaskChain':
         """
@@ -1176,9 +1176,6 @@ class BaseTaskChain(List[BaseTask]):
             BaseTaskChain: The instance of the task chain.
         """
 
-        # Kick off the Ephemeral Silo thread if the cache_progress flag is set
-        ephemeral_cache_thread = self.update_task_chain_cache_thread() if self.cache_progress else None
-
         try:
             self.on_start()
             self.position = 0
@@ -1244,8 +1241,12 @@ class BaseTaskChain(List[BaseTask]):
         finally:
             self.on_complete()
 
-            if ephemeral_cache_thread:
-                ephemeral_cache_thread.join(timeout=5)
+            if self.reporting_thread:
+                try:
+                    self.reporting_thread.join(timeout=5)
+
+                except TimeoutError:
+                    pass
 
             return self
 
@@ -1322,25 +1323,28 @@ class BaseTaskChain(List[BaseTask]):
 
         return self
 
-    def update_task_chain_cache_thread(self) -> Thread:
+    def update_task_chain_cache_thread(self) -> Thread or None:
         """
         This method is responsible for updating the job cache with the task chain's progress.
         """
+
+        from ..silos import get_silo
+
+        # We only report status to harvest-jobs. If the silo is not available, we return None.
+        if not get_silo('harvest-jobs'):
+            return None
 
         def update_task_chain_cache():
             """
             Updates the job cache with the task chain's progress.
             """
-
-            from ..silos import get_silo
-
             while True:
                 cache_entry = {
-                                  'id': self.id,
-                                  'status': self.status.__str__(),
-                                  'start': self.start,
-                                  'end': self.end,
-                              } | self.detailed_progress()
+                    'id': self.id,
+                    'status': self.status.__str__(),
+                    'start': self.start,
+                    'end': self.end
+                } | self.detailed_progress()
 
                 try:
                     client = get_silo('harvest-jobs').connect()

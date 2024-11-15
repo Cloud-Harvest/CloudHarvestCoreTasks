@@ -20,6 +20,7 @@ class TestTaskConfiguration(BaseTestCase):
     def setUp(self):
         # Create a dummy task and add it to the registry
         self.task_configuration = {
+            'chain': {
                 'name': 'test_chain',
                 'description': 'This is a task_chain.',
                 'tasks': [
@@ -48,9 +49,9 @@ class TestTaskConfiguration(BaseTestCase):
                     }
                 ]
             }
-
+        }
         from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
-        self.base_task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=self.task_configuration)
+        self.base_task_chain = task_chain_from_dict(template=self.task_configuration)
 
     def test_instantiate(self):
         # Test the instantiate method
@@ -193,6 +194,72 @@ class TestBaseTask(BaseTestCase):
         self.assertEqual(str(self.base_task.status), str(TaskStatusCodes.terminating))
 
 
+class TestBaseHarvestTaskChain(BaseTestCase):
+    def setUp(self):
+        # Create a test silo for the task chain
+        from ..CloudHarvestCoreTasks.silos import add_silo
+        add_silo(name='harvest-core',
+                 engine='mongo',
+                 host='localhost',
+                 port=44444,
+                 username='admin',
+                 password='default-harvest-password',
+                 database='harvest',
+                 authSource='admin')
+
+        # Create a dummy task and add it to the task chain
+        self.task_configuration = {
+            'harvest': {
+                'name': 'Data Collection Task Chain',
+                'platform': 'mongo',
+                'service': 'users',
+                'account': 'test',
+                'region': 'us-east-1',
+                'description': 'Test data collection task chain',
+                'destination_silo': 'mongo_test',
+                'silo': 'harvest-core',
+                'unique_filter_keys': ['name.family', 'name.given'],
+                'tasks': [
+                    {
+                        # This task will retrieve data from a MongoDB database
+                        'mongo': {
+                            'name': 'Remote data request',
+                            'description': 'Retrieves data from a MongoDB database',
+                            'result_as': 'recordset',
+                            'silo': 'mongo_test',
+                            'collection': 'users',
+                            'command': 'find',
+                            'arguments': {}
+                        },
+                        # This task will modify the data using recordset operations
+                        'recordset': {
+                            'name': 'Modify data',
+                            'description': 'Modifies the data using recordset operations',
+                            'data': 'var.recordset',
+                            'result_as': 'result',
+                            'stages': [
+                                {
+                                    "rename_key": {
+                                        "old_key": "tags",
+                                        "new_key": "Tags",
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+
+        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
+        self.base_task_chain = task_chain_from_dict(task_chain_registered_class_name='harvest', template=self.task_configuration)
+
+    def test_run(self):
+        # Test the run method of the BaseHarvestTaskChain class
+        self.base_task_chain.run()
+        self.assertEqual(str(str(self.base_task_chain.status)), str(TaskStatusCodes.complete))
+
+
 class TestBaseTaskChain(BaseTestCase):
     """
     Unit tests for the BaseTaskChain class.
@@ -204,6 +271,7 @@ class TestBaseTaskChain(BaseTestCase):
         """
         # Create a dummy task and add it to the task chain
         self.task_configuration = {
+            'chain': {
                 'name': 'test_chain',
                 'description': 'This is a task_chain.',
                 'tasks': [
@@ -222,15 +290,17 @@ class TestBaseTaskChain(BaseTestCase):
                     },
                     {
                         'dummy': {
-                            'name': 'dummy replacement task: var.replace_test.test_str',    # assert 'dummy replacement task: successful test str replacement'
-                            'description': 'This is a dummy task: var.replace_test.test_nested_list_dict.key4.nested_key3[0]', # assert 'This is a dummy task: index 0'
+                            'name': 'dummy replacement task: var.replace_test.test_str',
+                            # assert 'dummy replacement task: successful test str replacement'
+                            'description': 'This is a dummy task: var.replace_test.test_nested_list_dict.key4.nested_key3[0]',
+                            # assert 'This is a dummy task: index 0'
                         }
                     }
                 ]
             }
-
+        }
         from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
-        self.base_task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=self.task_configuration)
+        self.base_task_chain = task_chain_from_dict(template=self.task_configuration)
 
     def test_init(self):
         """
@@ -244,7 +314,7 @@ class TestBaseTaskChain(BaseTestCase):
         self.assertEqual(self.base_task_chain.position, 0)
         self.assertEqual(self.base_task_chain.start, None)
         self.assertEqual(self.base_task_chain.end, None)
-        self.assertEqual(self.base_task_chain.result.get('meta'), None)
+        self.assertEqual(self.base_task_chain.result.get('meta'), {})
 
     async def test_run(self):
         """
@@ -304,23 +374,24 @@ class TestBaseTaskChain(BaseTestCase):
 class TestBaseTaskChainIterateDirective(BaseTestCase):
     def setUp(self):
         self.task_configuration = {
-            'name': 'test_chain',
-            'description': 'This is a task_chain.',
-            'tasks': [
-                {
-                    'dummy': {
-                        'name': 'Dummy Iterative Task',
-                        'description': 'item.value',
-                        'iterate': {
-                            'variable': 'var.iterate_test',
+            'chain': {
+                'name': 'test_chain',
+                'description': 'This is a task_chain.',
+                'tasks': [
+                    {
+                        'dummy': {
+                            'name': 'Dummy Iterative Task',
+                            'description': 'item.value',
+                            'iterate': {
+                                'variable': 'var.iterate_test',
+                            }
                         }
                     }
-                }
-            ]
+                ]
+            }
         }
-
         self.task_chain = task_chain_from_dict(task_chain_registered_class_name='report',
-                                               task_chain=self.task_configuration)
+                                               template=self.task_configuration)
 
         self.task_chain.variables['iterate_test'] = ['test_1', 'test_2', 'test_3']
 
@@ -350,6 +421,7 @@ class TestBaseTaskChainOnDirective(BaseTestCase):
         """
         # Create a dummy task and add it to the task chain
         self.task_configuration = {
+            'chain': {
                 'name': 'test_chain',
                 'description': 'This is a task_chain.',
                 'tasks': [
@@ -368,8 +440,8 @@ class TestBaseTaskChainOnDirective(BaseTestCase):
                                     {
                                         'dummy': {
                                             'name': 'dummy_task',
-                                                'description': 'This is a dummy task which runs when the previous task completes.'
-                                            }
+                                            'description': 'This is a dummy task which runs when the previous task completes.'
+                                        }
                                     }
                                 ]
                             }
@@ -382,7 +454,7 @@ class TestBaseTaskChainOnDirective(BaseTestCase):
                             'on':
                                 {
                                     'error': [
-                                            {
+                                        {
                                             'dummy': {
                                                 'name': 'dummy_task',
                                                 'description': 'This is a dummy task which runs when the previous task errors.'
@@ -410,10 +482,10 @@ class TestBaseTaskChainOnDirective(BaseTestCase):
                         }
                     }
                 ]
+            }
         }
-
         from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
-        self.base_task_chain = task_chain_from_dict(task_chain_registered_class_name='chain', task_chain=self.task_configuration)
+        self.base_task_chain = task_chain_from_dict(task_chain_registered_class_name='chain', template=self.task_configuration)
 
     def test_on_directives(self):
         self.base_task_chain.run()

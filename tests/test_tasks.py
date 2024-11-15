@@ -341,26 +341,27 @@ class TestMongoTask(unittest.TestCase):
 
     def test_method_find(self):
         task_chain_configuration = {
-            'name': 'test_chain',
-            'tasks': [
-                {
-                    'mongo': {
-                        'name': 'find test',
-                        'collection': 'users',
-                        'result_as': 'mongo_result',
-                        'command': 'find',
-                        'arguments': {
-                            'filter': {}
-                        },
+            'report': {
+                'name': 'test_chain',
+                'tasks': [
+                    {
+                        'mongo': {
+                            'name': 'find test',
+                            'collection': 'users',
+                            'result_as': 'mongo_result',
+                            'command': 'find',
+                            'arguments': {
+                                'filter': {}
+                            },
 
-                    } | self.database_connection_config,
-                }
-            ]
+                        } | self.database_connection_config,
+                    }
+                ]
+            }
         }
 
         from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
-        task_chain = task_chain_from_dict(task_chain_registered_class_name='report',
-                                          task_chain=task_chain_configuration)
+        task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
         self.assertEqual(len(task_chain.result['data']), 10)
@@ -371,26 +372,27 @@ class TestMongoTask(unittest.TestCase):
         """
 
         task_chain_configuration = {
-            'name': 'test_chain',
-            'tasks': [
-                {
-                    'mongo': {
-                        'name': 'find.explain test',
-                        'collection': 'users',
-                        'result_as': 'mongo_result',
-                        'command': 'find.explain',
-                        'arguments': {
-                            'filter': {}
-                        },
+            'chain': {
+                'name': 'test_chain',
+                'tasks': [
+                    {
+                        'mongo': {
+                                     'name': 'find.explain test',
+                                     'collection': 'users',
+                                     'result_as': 'mongo_result',
+                                     'command': 'find.explain',
+                                     'arguments': {
+                                         'filter': {}
+                                     },
 
-                    } | self.database_connection_config,
-                }
-            ]
+                                 } | self.database_connection_config,
+                    }
+                ]
+            }
         }
 
         from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
-        task_chain = task_chain_from_dict(task_chain_registered_class_name='report',
-                                          task_chain=task_chain_configuration)
+        task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
         self.assertIn('command', task_chain.result['data'].keys())
@@ -417,20 +419,21 @@ class TestRedisTask(unittest.TestCase):
         self.connection.set('key2', 'value2')
 
         task_chain_configuration = {
-            'name': 'test_chain',
-            'tasks': [
-                {
-                    'redis': {
-                        'name': 'delete test',
-                        'command': 'delete',
-                        'arguments': {'keys': ['key1', 'key2']},
-                    } | self.redis_connection_config,
-                }
-            ]
+            'chain': {
+                'name': 'test_chain',
+                'tasks': [
+                    {
+                        'redis': {
+                                     'name': 'delete test',
+                                     'command': 'delete',
+                                     'arguments': {'keys': ['key1', 'key2']},
+                                 } | self.redis_connection_config,
+                    }
+                ]
+            }
         }
-
         from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
-        task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=task_chain_configuration)
+        task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
         result = task_chain.result
@@ -442,20 +445,21 @@ class TestRedisTask(unittest.TestCase):
         self.connection.set('key2', 'value2')
 
         task_chain_configuration = {
-            'name': 'test_chain',
-            'tasks': [
-                {
-                    'redis': {
-                        'name': 'expire test',
-                        'command': 'expire',
-                        'arguments': {'expire': 3600, 'keys': ['key1', 'key2']},
-                    } | self.redis_connection_config,
-                }
-            ]
+            'chain': {
+                'name': 'test_chain',
+                'tasks': [
+                    {
+                        'redis': {
+                                     'name': 'expire test',
+                                     'command': 'expire',
+                                     'arguments': {'expire': 3600, 'keys': ['key1', 'key2']},
+                                 } | self.redis_connection_config,
+                    }
+                ]
+            }
         }
-
         from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
-        task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=task_chain_configuration)
+        task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
         result = task_chain.result
@@ -467,19 +471,20 @@ class TestRedisTask(unittest.TestCase):
         self.connection.set('key1', 'value1')
 
         task_chain_configuration = {
-            'name': 'test_chain',
-            'tasks': [
-                {
-                    'redis': {
-                        'name': 'flushall test',
-                        'command': 'flushall',
-                    } | self.redis_connection_config,
-                }
-            ]
+            'chain': {
+                'name': 'test_chain',
+                'tasks': [
+                    {
+                        'redis': {
+                                     'name': 'flushall test',
+                                     'command': 'flushall',
+                                 } | self.redis_connection_config,
+                    }
+                ]
+            }
         }
-
         from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
-        task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=task_chain_configuration)
+        task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
         result = task_chain.result
@@ -490,20 +495,21 @@ class TestRedisTask(unittest.TestCase):
         self.connection.set('test_key', 'test_value')
 
         task_chain_configuration = {
-            'name': 'test_chain',
-            'tasks': [
-                {
-                    'redis': {
-                        'name': 'get test',
-                        'command': 'get',
-                        'arguments': {'name': 'test_key'},
-                    } | self.redis_connection_config,
-                }
-            ]
+            'chain': {
+                'name': 'test_chain',
+                'tasks': [
+                    {
+                        'redis': {
+                                     'name': 'get test',
+                                     'command': 'get',
+                                     'arguments': {'name': 'test_key'},
+                                 } | self.redis_connection_config,
+                    }
+                ]
+            }
         }
-
         from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
-        task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=task_chain_configuration)
+        task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
         result = task_chain.result
@@ -514,20 +520,21 @@ class TestRedisTask(unittest.TestCase):
         self.connection.set('key2', 'value2')
 
         task_chain_configuration = {
-            'name': 'test_chain',
-            'tasks': [
-                {
-                    'redis': {
-                        'name': 'keys test',
-                        'command': 'keys',
-                        'arguments': {'pattern': 'key*'},
-                    } | self.redis_connection_config,
-                }
-            ]
+            'chain': {
+                'name': 'test_chain',
+                'tasks': [
+                    {
+                        'redis': {
+                                     'name': 'keys test',
+                                     'command': 'keys',
+                                     'arguments': {'pattern': 'key*'},
+                                 } | self.redis_connection_config,
+                    }
+                ]
+            }
         }
-
         from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
-        task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=task_chain_configuration)
+        task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
         result = task_chain.result
@@ -535,23 +542,24 @@ class TestRedisTask(unittest.TestCase):
 
     def test_redis_set(self):
         task_chain_configuration = {
-            'name': 'test_chain',
-            'tasks': [
-                {
-                    'redis': {
-                        'name': 'set test',
-                        'command': 'set',
-                        'arguments': {
-                            'name': 'test_key',
-                            'value': 'test_value'
-                        },
-                    } | self.redis_connection_config,
-                }
-            ]
+            'chain': {
+                'name': 'test_chain',
+                'tasks': [
+                    {
+                        'redis': {
+                                     'name': 'set test',
+                                     'command': 'set',
+                                     'arguments': {
+                                         'name': 'test_key',
+                                         'value': 'test_value'
+                                     },
+                                 } | self.redis_connection_config,
+                    }
+                ]
+            }
         }
-
         from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
-        task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=task_chain_configuration)
+        task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
         result = task_chain.result
@@ -563,24 +571,25 @@ class TestRedisTask(unittest.TestCase):
     def test_redis_serialize_set(self):
         nested_dict = {'key1': {'subkey1': 'value1', 'subkey2': 'value2'}}
         task_chain_configuration = {
-            'name': 'test_chain',
-            'tasks': [
-                {
-                    'redis': {
-                        'name': 'serialize set test',
-                        'command': 'set',
-                        'serialization': True,
-                        'arguments': {
-                            'name': 'test_key',
-                            'value': nested_dict
-                        },
-                    } | self.redis_connection_config,
-                }
-            ]
+            'chain': {
+                'name': 'test_chain',
+                'tasks': [
+                    {
+                        'redis': {
+                                     'name': 'serialize set test',
+                                     'command': 'set',
+                                     'serialization': True,
+                                     'arguments': {
+                                         'name': 'test_key',
+                                         'value': nested_dict
+                                     },
+                                 } | self.redis_connection_config,
+                    }
+                ]
+            }
         }
-
         from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
-        task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=task_chain_configuration)
+        task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
         result = task_chain.result
@@ -591,27 +600,28 @@ class TestRedisTask(unittest.TestCase):
     def test_redis_set_dict(self):
         dict_to_set = {'field1': 'value1', 'field2': 'value2'}
         task_chain_configuration = {
-            'name': 'test_chain',
-            'tasks': [
-                {
-                    'redis': {
-                        'name': 'set dict test',
-                        'command': 'set',
-                        'data': 'var.dict_to_set',
-                        'arguments': {
-                            'name': 'test_hash',
-                            'keys': [
-                                'field1',
-                                'field2'
-                            ]
-                        },
-                    } | self.redis_connection_config,
-                }
-            ]
+            'chain': {
+                'name': 'test_chain',
+                'tasks': [
+                    {
+                        'redis': {
+                                     'name': 'set dict test',
+                                     'command': 'set',
+                                     'data': 'var.dict_to_set',
+                                     'arguments': {
+                                         'name': 'test_hash',
+                                         'keys': [
+                                             'field1',
+                                             'field2'
+                                         ]
+                                     },
+                                 } | self.redis_connection_config,
+                    }
+                ]
+            }
         }
-
         from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
-        task_chain = task_chain_from_dict(task_chain_registered_class_name='report', task_chain=task_chain_configuration)
+        task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.variables['dict_to_set'] = dict_to_set
 
         task_chain.run()
@@ -631,6 +641,7 @@ class TestPruneTask(unittest.TestCase):
 
         # Create a dummy task and add it to the task chain
         self.task_configuration = {
+            'chain': {
                 'name': 'test_chain',
                 'description': 'This is a task_chain.',
                 'tasks': [
@@ -661,11 +672,12 @@ class TestPruneTask(unittest.TestCase):
                     }
                 ]
             }
+        }
 
     def test_run_prune_all_at_end(self):
         from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
         self.task_chain = task_chain_from_dict(task_chain_registered_class_name='report',
-                                               task_chain=self.task_configuration)
+                                               template=self.task_configuration)
 
         # run the task chain
         self.task_chain.run()
@@ -679,7 +691,7 @@ class TestPruneTask(unittest.TestCase):
         self.assertEqual(str(self.task_chain.status), str(TaskStatusCodes.complete))
 
     def test_run_prune_all_at_near_end(self):
-        self.task_configuration['tasks'].append({
+        self.task_configuration['chain']['tasks'].append({
             'dummy': {
                 'name': 'dummy_task-4',
                 'description': 'This is a dummy task after a prune',
@@ -688,7 +700,7 @@ class TestPruneTask(unittest.TestCase):
 
         from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
         self.task_chain = task_chain_from_dict(task_chain_registered_class_name='report',
-                                               task_chain=self.task_configuration)
+                                               template=self.task_configuration)
 
         # run the task chain
         self.task_chain.run()

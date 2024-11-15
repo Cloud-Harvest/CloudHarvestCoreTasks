@@ -43,14 +43,14 @@ class BaseSilo:
 
     def __dict__(self):
         return {
-            'name': self.name,
             'host': self.host,
             'port': self.port,
             'engine': self.engine,
             'username': self.username,
             'password': self.password,
-            'database': self.database
-        } | self.extended_db_configuration
+            'database': self.database,
+            'extended_db_configuration': self.extended_db_configuration
+        }
 
     @property
     def log_prefix(self):

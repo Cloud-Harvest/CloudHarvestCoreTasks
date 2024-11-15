@@ -179,6 +179,14 @@ class BaseTask:
         return ((self.end or datetime.now(tz=timezone.utc)) - self.start).total_seconds() if self.start else -1
 
     @property
+    def errors(self) -> List[str]:
+        """
+        Returns a list of errors that occurred during the task.
+        """
+
+        return self.meta.get('Errors')
+
+    @property
     def position(self) -> int:
         """
         Returns the position of the task in the task chain. Position is determined by the order in which the task was
@@ -1457,10 +1465,10 @@ class BaseHarvestTaskChain(BaseTaskChain):
         self.mode = mode
         self.destination_silo = destination_silo
         self.unique_identifier_keys = [unique_identifier_keys] if isinstance(unique_identifier_keys, str) else unique_identifier_keys
-        self.extra_metadata_fields = [extra_matadata_fields] if isinstance(extra_matadata_fields, str) else extra_matadata_fields
+        self.extra_metadata_fields = [extra_matadata_fields] if isinstance(extra_matadata_fields, str) else extra_matadata_fields or []
 
         # Computed attributes
-        self.replacement_collection_name = f'{self.platform}.{self.service}.{self.type}'
+        self.replacement_collection_name = f'{self.platform}_{self.service}_{self.type}'
 
         # Insert a HarvestTask template into the end of the task chain
         template = {

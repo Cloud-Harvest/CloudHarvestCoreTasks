@@ -377,15 +377,14 @@ class TestMongoTask(unittest.TestCase):
                 'tasks': [
                     {
                         'mongo': {
-                                     'name': 'find.explain test',
-                                     'collection': 'users',
-                                     'result_as': 'mongo_result',
-                                     'command': 'find.explain',
-                                     'arguments': {
-                                         'filter': {}
-                                     },
-
-                                 } | self.database_connection_config,
+                            'name': 'find.explain test',
+                            'collection': 'users',
+                            'result_as': 'mongo_result',
+                            'command': 'find.explain',
+                            'arguments': {
+                                'filter': {}
+                            }
+                         } | self.database_connection_config
                     }
                 ]
             }
@@ -396,6 +395,38 @@ class TestMongoTask(unittest.TestCase):
         task_chain.run()
 
         self.assertIn('command', task_chain.result['data'].keys())
+
+    def test_connection_from_silo(self):
+        from ..CloudHarvestCoreTasks.silos import add_silo
+
+        add_silo(name='test_silo', **self.database_connection_config | {'engine': 'mongo'})
+
+        task_chain_configuration = {
+            'report': {
+                'name': 'test_chain',
+                'tasks': [
+                    {
+                        'mongo': {
+                            'name': 'find test',
+                            'collection': 'users',
+                            'result_as': 'mongo_result',
+                            'silo': 'test_silo',
+                            'command': 'find',
+                            'arguments': {
+                                'filter': {}
+                            },
+                        }
+                    }
+                ]
+            }
+        }
+
+        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
+        task_chain = task_chain_from_dict(template=task_chain_configuration)
+        task_chain.run()
+
+        self.assertFalse(task_chain.errors)
+        self.assertEqual(len(task_chain.result['data']), 10)
 
 class TestRedisTask(unittest.TestCase):
 

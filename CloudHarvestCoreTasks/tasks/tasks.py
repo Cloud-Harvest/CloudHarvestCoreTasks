@@ -866,7 +866,7 @@ class MongoTask(BaseDataTask):
             self.connection.server_info()
             return True
 
-        except Exception:
+        except Exception as ex:
             return False
 
     def apply_user_filters(self) -> 'BaseTask':

@@ -184,8 +184,8 @@ def replace_variable_path_with_value(original_string: str,
         [^\s]*: Matches zero or more characters that are not whitespace.
     """
 
-    # If the original string is not a string or does not contain 'var' or 'item', return the original string
-    if not isinstance(original_string, str) or ('var' not in original_string and 'item' not in original_string):
+    # If the original string is not a string or does not start with 'var' or 'item', return the original string
+    if not isinstance(original_string, str) or not any([f'{prefix}.' in original_string for prefix in ('item', 'var')]):
         return original_string
 
     pattern = compile('(item|var)\.[^\s]*')
@@ -284,6 +284,10 @@ def replace_variable_path_with_value(original_string: str,
             # Use the iterator as the source object
             case 'item':
                 replacement_values[match] = walk_path(match, item)
+
+            case 'task':
+                if task_chain:
+                    replacement_values[match] = walk_path(match, task_chain)
 
             # Get a component of a task chain variable
             case 'var':

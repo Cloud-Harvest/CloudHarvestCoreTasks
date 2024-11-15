@@ -376,7 +376,7 @@ class BaseTask:
 
         # Store the result in the task chain's variables if a result_as variable is provided
         if self.result_as and self.task_chain:
-            self.task_chain.variables[self.result_as.name].write(data=self.result)
+            self.task_chain.variables[self.result_as] = self.result
 
         # Apply user filters if the user filter stage is set to 'complete'
         if self.USER_FILTER_STAGE == 'complete':
@@ -553,6 +553,13 @@ class BaseDataTask(BaseTask):
         self.connection = None
         self.calls = 0
 
+        if silo:
+            from ..silos import get_silo
+            silo = get_silo(silo)
+
+            for key, value in silo.__dict__().items():
+                setattr(self, key, value)
+
         # Validate the configuration of the task
         self.validate_configuration()
 
@@ -663,20 +670,6 @@ class BaseDataTask(BaseTask):
         """
         Validates the configuration of the task.
         """
-
-        # Retrieve the configuration from the Silos dictionary if it is provided
-        if self.silo:
-            from ..silos import get_silo
-            silo = get_silo(self.silo)
-
-            if silo:
-                self.connection = silo.connect()
-
-                for key, value in silo.__dict__().items():
-                    setattr(self, key, value)
-
-            else:
-                raise ValueError(f"Could not find Silo: {self.silo}")
 
         # Validate that all minimum configuration keys are provided
         if not all([getattr(self, key) for key in self.REQUIRED_CONFIGURATION_KEYS]):

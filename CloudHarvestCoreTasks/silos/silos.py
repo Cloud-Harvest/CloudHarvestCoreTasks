@@ -28,7 +28,7 @@ class BaseSilo:
                  username: str = None,
                  password: str = None,
                  database:str = None,
-                 **additional_database_arguments):
+                 **extended_db_configuration):
 
         self.name = name
         self.host = host
@@ -37,7 +37,7 @@ class BaseSilo:
         self.username = username
         self.password = password
         self.database = database
-        self.additional_database_arguments = additional_database_arguments or {}
+        self.extended_db_configuration = extended_db_configuration or {}
 
         self.pool = None
 
@@ -50,7 +50,7 @@ class BaseSilo:
             'username': self.username,
             'password': self.password,
             'database': self.database
-        } | self.additional_database_arguments
+        } | self.extended_db_configuration
 
     @property
     def log_prefix(self):

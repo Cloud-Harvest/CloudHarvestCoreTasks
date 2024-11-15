@@ -1,3 +1,8 @@
+# 0.4.2
+- Added `BaseHarvestTaskChain` and `HarvestRecordUpdateTask` to upload data collected from other sources to a persistent silo
+- `BaseTaskChain` now accepts starting `variables` which become available to all tasks in the chain
+- `additional_database_arguments` have been renamed to `extended_db_configuration` for Silos and DataTasks
+
 # 0.4.1
 - [#12](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/12) Completely redesigned how objects are templated variables referenced in task configurations
 - [#13](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/13) Added the `BaseTask.itemize` directive 
@@ -8,6 +13,7 @@
 - Removed the `()` requirement for variable method references in task configurations such as `var.result.keys()` to `var.result.keys`
 - Added the `Heartbeat` object for monitoring the health of the application
 - Added `add_indexes` to `BaseSilo` to add indexes to a database, where supported
+- Updated to CloudHarvestCorePluginManager 0.1.5
 
 # 0.4.0
 - Moved MongoDb operations into Tasks since both the Api and Agent will need to interact with the database

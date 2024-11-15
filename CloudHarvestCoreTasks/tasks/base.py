@@ -672,6 +672,9 @@ class BaseDataTask(BaseTask):
             if silo:
                 self.connection = silo.connect()
 
+                for key, value in silo.__dict__().items():
+                    setattr(self, key, value)
+
             else:
                 raise ValueError(f"Could not find Silo: {self.silo}")
 
@@ -820,6 +823,22 @@ class BaseTaskChain(List[BaseTask]):
         """
 
         return None
+
+    @property
+    def errors(self) -> List[dict]:
+        """
+        Returns a list of errors that occurred during the task chain.
+        """
+
+        errors = []
+        for task in self:
+            if task.meta.get('Errors'):
+                errors.append({f'{self.index(task)}-{task.name}': task.meta['Errors']})
+
+        if self.meta.get('Errors'):
+            errors.append({'TaskChain': self.meta['Errors']})
+
+        return errors
 
     @property
     def percent(self) -> float:

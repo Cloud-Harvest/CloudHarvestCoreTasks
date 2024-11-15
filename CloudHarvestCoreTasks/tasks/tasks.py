@@ -13,6 +13,8 @@ from CloudHarvestCorePluginManager.decorators import register_definition
 from logging import getLogger
 from typing import Any, List, Literal
 
+from pymongo import MongoClient
+
 from .base import (
     BaseDataTask,
     BaseTask,
@@ -464,15 +466,8 @@ class HarvestRecordUpdateTask(BaseTask):
             except Exception as ex:
                 raise ValueError(f'{self.name}: Unable to connect to the {silo_name} silo. {str(ex)}')
 
-        # Separate data from the previous task's result
-        if self.data.get('data') and self.data.chain_result.get('meta'):
-            data = self.data['data']
-
-        else:
-            data = self.data
-
         # Attach metadata to the records
-        data = self.attach_metadata_to_records(data=data, metadata=self.build_metadata())
+        data = self.attach_metadata_to_records(data=self.data, metadata=self.build_metadata())
 
         # Bulk Replace the records in the destination silo and the metadata in the metadata silo
         unique_filters = self.replace_bulk_records(data=data)
@@ -482,7 +477,7 @@ class HarvestRecordUpdateTask(BaseTask):
 
         self.result = {
             'RecordsProcessed': len(data),
-            'UniqueFilters': len(unique_filters),
+            'UniqueIdentifiers': len(unique_filters),
             'DeactivationResults': deactivation_results
         }
 
@@ -491,7 +486,7 @@ class HarvestRecordUpdateTask(BaseTask):
     @staticmethod
     def attach_metadata_to_records(data: List[dict], metadata: dict) -> List[dict]:
         """
-        This method attaches metadata to the records in the data list. It also generates the UniqueFilter for each record.
+        This method attaches metadata to the records in the data list. It also generates the UniqueIdentifier for each record.
 
         Arguments:
             data (List[dict]): The list of records to attach metadata to.
@@ -499,11 +494,12 @@ class HarvestRecordUpdateTask(BaseTask):
         """
 
         for record in data:
-            # Attach existing metadata to the record
-            record = record | {'Harvest': metadata}
-
             # Generate this record's unique filter
-            record['Harvest']['UniqueFilter'] = '-'.join([field for field in metadata['UniqueIdentifierKeys']])
+            from helpers import get_nested_values
+            unique_identifier = '-'.join([get_nested_values(s=field, d=record)[0] for field in metadata['UniqueIdentifierKeys']])
+
+            # Attach existing metadata to the record
+            record.update({'Harvest': metadata | {'UniqueIdentifier': unique_identifier}})
 
         return data
 
@@ -529,7 +525,7 @@ class HarvestRecordUpdateTask(BaseTask):
         build_components = {
             'Module': {
                 str(k).title(): v
-                for k, v in getattr(self, 'metadata', {}).items()}
+                for k, v in getattr(self, '_harvest_plugin_metadata', {}).items()}
         }
 
         from datetime import datetime, timezone
@@ -582,17 +578,26 @@ class HarvestRecordUpdateTask(BaseTask):
         from ..silos import get_silo
 
         for record in data:
-            replace_resource = ReplaceOne(filter=record['Harvest']['UniqueFilter'],
+            # Remove an existing MongoDb _id field if it exists. This happens if the data source is MongoDB. We don't
+            # want to set the _id field because it is the primary key in MongoDB which should not be overwritten by this process.
+            from bson import ObjectId
+            if isinstance(record.get('_id'), ObjectId):
+                record.pop('_id')
+
+            replace_filter = {'Harvest.UniqueIdentifier': record['Harvest']['UniqueIdentifier']}
+
+            replace_resource = ReplaceOne(filter=replace_filter,
                                           replacement=record,
                                           upsert=True)
 
             # Gather the extra metadata fields for the record
+            from helpers import get_nested_values
             extras = {
-                field: record.get(field)
+                field: get_nested_values(s=field, d=record)
                 for field in self.task_chain.extra_metadata_fields
             }
 
-            replace_meta = ReplaceOne(filter=record['Harvest']['UniqueFilter'],
+            replace_meta = ReplaceOne(filter=replace_filter,
                                       replacement=record['Harvest'] | {'Tags': record.get('Tags') or {}} | extras,
                                       upsert=True)
 
@@ -613,8 +618,10 @@ class HarvestRecordUpdateTask(BaseTask):
             """
             start_time = datetime.now(tz=timezone.utc)
 
-            silo = get_silo(silo_name).connect()
-            bulk_replace_results = silo[collection].bulk_write(requests=prepared_replacements)
+            silo = get_silo(silo_name)
+            client = silo.connect()
+
+            bulk_replace_results = client[silo.database][collection].bulk_write(requests=prepared_replacements)
 
             end_time = datetime.now(tz=timezone.utc)
 
@@ -637,9 +644,9 @@ class HarvestRecordUpdateTask(BaseTask):
         self.meta['Stages'].append({'BulkReplaceDocuments': replacement_results})
         self.meta['Stages'].append({'BulkReplaceMetadata': metadata_results})
 
-        # Gather ObjectId's of all the records that were processed based on the record['Harvest']['UniqueFilter']
+        # Gather ObjectId's of all the records that were processed based on the record['Harvest']['UniqueIdentifier']
         # and return them as a list for use in the deactivation process
-        unique_filters = [record['Harvest']['UniqueFilter'] for record in data]
+        unique_filters = [record['Harvest']['UniqueIdentifier'] for record in data]
 
         return unique_filters
 
@@ -653,86 +660,97 @@ class HarvestRecordUpdateTask(BaseTask):
         Returns:
             dict: The result of the deactivation operation.
         """
+        try:
+            from datetime import datetime, timezone
+            from ..silos import get_silo
 
-        from datetime import datetime, timezone
-        from ..silos import get_silo
+            # Deactivate Records that were not found in this data collection operation (assumed to be inactive)
+            # We filter on the following fields to ensure we don't deactivate records that are collected in other processes:
+            # - UniqueIdentifier not in the list of unique filters
+            # - Account
+            # - Region
+            deactivate_records_start = datetime.now(tz=timezone.utc)
+            deactivation_timestamp = datetime.now(tz=timezone.utc).isoformat()
 
-        # Deactivate Records that were not found in this data collection operation (assumed to be inactive)
-        # We filter on the following fields to ensure we don't deactivate records that are collected in other processes:
-        # - UniqueFilter not in the list of unique filters
-        # - Account
-        # - Region
-        deactivate_records_start = datetime.now(tz=timezone.utc)
-        deactivation_timestamp = datetime.now(tz=timezone.utc).isoformat()
-        deactivated_replacements = get_silo(self.task_chain.destination_silo).connect()[self.task_chain.replacement_collection_name].update_many(
-            filter={
-                'Harvest.UniqueFilter': {'$nin': unique_filters},
-                'Harvest.Account': self.task_chain.account,
-                'Harvest.Region': self.task_chain.region
-            },
-            update={
-                '$set': {
-                    'Harvest.Active': False,
-                    'Harvest.DeactivatedOn': deactivation_timestamp
+            silo = get_silo(self.task_chain.destination_silo)
+
+            deactivated_replacements = silo.connect()[silo.database][self.task_chain.replacement_collection_name].update_many(
+                filter={
+                    'Harvest.UniqueIdentifier': {'$nin': unique_filters},
+                    'Harvest.Account': self.task_chain.account,
+                    'Harvest.Region': self.task_chain.region
+                },
+                update={
+                    '$set': {
+                        'Harvest.Active': False,
+                        'Harvest.DeactivatedOn': deactivation_timestamp
+                    }
+                }
+            )
+
+            # Record the deactivation operation in the Task metadata
+            self.meta['Stages'].append({'DeactivateDocuments': {
+                'StartTime': deactivate_records_start,
+                'DeactivatedDocuments': {
+                    'matched': deactivated_replacements.matched_count,
+                    'modified': deactivated_replacements.modified_count
+                },
+                'EndTime': datetime.now(tz=timezone.utc)
+            }})
+
+            # Deactivate Metadata records that were not found in this data collection operation (assumed to be inactive)
+            # Deactivate Records that were not found in this data collection operation (assumed to be inactive)
+            # We filter on the following fields to ensure we don't deactivate records that are collected in other processes:
+            # - UniqueIdentifier not in the list of unique filters
+            # - Silo
+            # - Collection
+            # - Account
+            # - Region
+            deactivate_metadata_start = datetime.now(tz=timezone.utc)
+            silo = get_silo('harvest-core')
+            deactivated_metadata = silo.connect()[silo.database]['metadata'].update_many(
+
+                filter={
+                    'UniqueIdentifier': {'$nin': unique_filters},
+                    'Silo': self.task_chain.destination_silo,
+                    'Collection': self.task_chain.replacement_collection_name,
+                    'Harvest.Account': self.task_chain.account,
+                    'Harvest.Region': self.task_chain.region
+                },
+                update={
+                    '$set': {
+                        'Active': False,
+                        'DeactivatedOn': deactivation_timestamp
+                    }
+                }
+            )
+
+            # Record the deactivation operation in the Task metadata
+            self.meta['Stages'].append({'DeactivateMetadata': {
+                'StartTime': deactivate_metadata_start,
+                'DeactivatedMetadata': {
+                    'matched': deactivated_metadata.matched_count,
+                    'modified': deactivated_metadata.modified_count
+                },
+                'EndTime': datetime.now(tz=timezone.utc)
+            }})
+
+        except Exception as ex:
+            from traceback import format_exc
+            ex_details = format_exc()
+            raise ValueError(f'{self.name}: Error deactivating records. {str(ex)}')
+
+        else:
+            return {
+                'Replacements': {
+                    'matched': deactivated_replacements.matched_count,
+                    'modified': deactivated_replacements.modified_count
+                },
+                'Metadata': {
+                    'matched': deactivated_metadata.matched_count,
+                    'modified': deactivated_metadata.modified_count
                 }
             }
-        )
-
-        # Record the deactivation operation in the Task metadata
-        self.meta['Stages'].append({'DeactivateDocuments': {
-            'StartTime': deactivate_records_start,
-            'DeactivatedDocuments': {
-                'matched': deactivated_replacements.matched_count,
-                'modified': deactivated_replacements.modified_count
-            },
-            'EndTime': datetime.now(tz=timezone.utc)
-        }})
-
-        # Deactivate Metadata records that were not found in this data collection operation (assumed to be inactive)
-        # Deactivate Records that were not found in this data collection operation (assumed to be inactive)
-        # We filter on the following fields to ensure we don't deactivate records that are collected in other processes:
-        # - UniqueFilter not in the list of unique filters
-        # - Silo
-        # - Collection
-        # - Account
-        # - Region
-        deactivate_metadata_start = datetime.now(tz=timezone.utc)
-        deactivated_metadata = get_silo('harvest-core').connect()['metadata'].update_many(
-            filter={
-                'UniqueFilter': {'$nin': unique_filters},
-                'Silo': self.task_chain.destination_silo,
-                'Collection': self.task_chain.replacement_collection_name,
-                'Harvest.Account': self.task_chain.account,
-                'Harvest.Region': self.task_chain.region
-            },
-            update={
-                '$set': {
-                    'Active': False,
-                    'DeactivatedOn': deactivation_timestamp
-                }
-            }
-        )
-
-        # Record the deactivation operation in the Task metadata
-        self.meta['Stages'].append({'DeactivateMetadata': {
-            'StartTime': deactivate_metadata_start,
-            'DeactivatedMetadata': {
-                'matched': deactivated_metadata.matched_count,
-                'modified': deactivated_metadata.modified_count
-            },
-            'EndTime': datetime.now(tz=timezone.utc)
-        }})
-
-        return {
-            'Replacements': {
-                'matched': deactivated_replacements.matched_count,
-                'modified': deactivated_replacements.modified_count
-            },
-            'Metadata': {
-                'matched': deactivated_metadata.matched_count,
-                'modified': deactivated_metadata.modified_count
-            }
-        }
 
 @register_definition(name='json', category='task')
 class JsonTask(BaseTask):
@@ -822,21 +840,6 @@ class MongoTask(BaseDataTask):
     The MongoTask class is a subclass of the BaseDataTask class. It represents a task that interacts with a MongoDB database.
     """
     from ..user_filters import MongoUserFilter
-    from pymongo import MongoClient
-
-    # Uses the default mapping from the BaseDataTask class, sans 'database'.
-    CONNECTION_KEY_MAP = (
-        ('host', 'host'),
-        ('port', 'port'),
-        ('username', 'username'),
-        ('password', 'password')
-    )
-
-    # Connection pools are used to store connections to the data provider. Their names are assigned based on the Silo.name.
-    CONNECTION_POOLS = {}
-
-    # These keys are the minimum keys required to connect, not including authentication parameters.
-    REQUIRED_CONFIGURATION_KEYS = ['host', 'port', 'database']
 
     # The user filter class and stage are used to apply user filters to the database query results.
     USER_FILTER_CLASS = MongoUserFilter
@@ -857,17 +860,24 @@ class MongoTask(BaseDataTask):
         self.collection = collection
         self.result_attribute = result_attribute
 
-    @property
     def is_connected(self) -> bool:
         """
-        Checks if the connection to the MongoDB server is active.
-        """
-        try:
-            self.connection.server_info()
-            return True
+        Checks if the task is connected to the database.
 
-        except Exception as ex:
-            return False
+        Returns:
+            bool: True if the task is connected to the database, otherwise False.
+        """
+        from pymongo import MongoClient
+        silo_config = self.silo.__dict__()
+        silo_config.pop('engine')
+        silo_config.pop('database')
+
+        silo_extend = silo_config.pop('extended_db_configuration', {})
+        connection_config = silo_config | silo_extend
+        client = MongoClient(**connection_config)
+        si = client.server_info()
+
+        return True
 
     def apply_user_filters(self) -> 'BaseTask':
         """
@@ -886,45 +896,6 @@ class MongoTask(BaseDataTask):
             else:
                 self.arguments = ufc.result
 
-    def connect(self) -> MongoClient:
-        """
-        Connects to the MongoDB server. If an existing pool is available, it will be used. Otherwise, a new connection
-        pool will be created and stored for future use.
-        """
-
-        # If already connected, return the existing connection
-        if self.is_connected:
-            return self.connection
-
-        # Create a connection pool key based on the database configuration
-        connection_pool_key = self.connection_pool_key()
-
-        # If a connection pool exists, use it
-        if self.CONNECTION_POOLS.get(connection_pool_key):
-            self.connection = self.CONNECTION_POOLS[connection_pool_key]
-
-        # Otherwise, create a new connection pool
-        else:
-            from pymongo import MongoClient
-            self.connection = MongoClient(**{'maxPoolSize': self.max_pool_size} | self.mapped_connection_configuration)
-            self.CONNECTION_POOLS[connection_pool_key] = self.connection
-
-        # Verify that the connection was successful
-        if not self.is_connected:
-            raise MongoTaskException(f"Could not connect to the MongoDB server at {self.host}:{self.port}.")
-
-        return self.connection
-
-    def disconnect(self):
-        """
-        Disconnects from the MongoDB server.
-        """
-        try:
-            self.connection.close()
-
-        except Exception:
-            pass
-
     def method(self, *args, **kwargs):
         """
         Runs the task. This method will execute the method defined in `self.command` on the database or collection and
@@ -933,22 +904,36 @@ class MongoTask(BaseDataTask):
         """
 
         # If connected, return existing connection otherwise connect
-        self.connect()
+        from pymongo import MongoClient
+        silo_config = self.silo.__dict__()
+        silo_config.pop('engine')
+        silo_config.pop('database')
+
+        silo_extend = silo_config.pop('extended_db_configuration', {})
+        connection_config = silo_config | silo_extend
+        client = MongoClient(**connection_config)
+        si = client.server_info()
+
+        if not self.silo.is_connected:
+            raise ConnectionError(f'{self.name}: Unable to connect to the {self.silo.name} silo.')
 
         if self.collection:
             # Note that MongoDb does not return an error if a collection is not found. Instead, MongoDb will faithfully
             # create the new collection name, even if it malformed or incorrect. This is an intentional feature of MongoDb.
-            database_object = self.connection[self.database][self.collection]
+            database_object = client[self.silo.database][self.collection]
 
         else:
             # Expose database-level commands
-            database_object = self.connection[self.database]
+            database_object = client[self.silo.database]
 
         # Execute the command on the database or collection
+        self.calls += 1
+
         result = self.walk_result_command_path(
             getattr(database_object, self.base_command_part)(**self.arguments)
         )
 
+        # Convert the result to a list if it is a generator or cursor
         from types import GeneratorType
         from pymongo import CursorType
         from pymongo.cursor import Cursor
@@ -975,33 +960,8 @@ class RedisTask(BaseDataTask):
     >>>     arguments={'key': 'my_key'}
     >>> )
     """
+
     from redis import StrictRedis
-
-    # The connection key map is used to map the BaseDataTask connection attributes to the appropriate driver attributes
-    # for the subclass.
-    #
-    # base_configration_key: The attribute in the BaseDataTask class.
-    # driver_configuration_key: The attribute specific to the data provider driver / module.
-    # Format: (base_configuration_key, driver_configuration_key)
-    CONNECTION_KEY_MAP = (
-        ('host', 'host'),
-        ('port', 'port'),
-        ('username', 'username'),
-        ('password', 'password'),
-        ('database', 'db'),
-    )
-
-    # Connection pools are used to store connections to the data provider. This reduces the number of connections to the
-    # data provider and allows us to reuse connections. Override this attribute in subclasses to provide data provider
-    # specific connection pools.
-    CONNECTION_POOLS = {}
-
-    # Default connection pool parameters are used to provide default values for the connection pool.
-    DEFAULT_CONNECTION_POOL_PARAMETERS = {
-        'decode_responses': True
-    }
-
-    REQUIRED_CONFIGURATION_KEYS = ('host', )
 
     # These are the data types permitted in Redis. We use this list to evaluate if a value must be serialized before
     # being written to the Redis database.
@@ -1033,54 +993,6 @@ class RedisTask(BaseDataTask):
             from .exceptions import RedisTaskException
             raise RedisTaskException(f"Invalid command '{self.command}' for RedisTask. Must be one of {methods}.")
 
-    @property
-    def is_connected(self) -> bool:
-        try:
-            self.connection.ping()
-            return True
-
-        except Exception:
-            return False
-
-    def connect(self) -> StrictRedis:
-        """
-        Connects to a Redis server. If an existing pool is available, it will be used. Otherwise, a new connection
-        pool will be created and stored for future use.
-        """
-
-        from redis import ConnectionPool, StrictRedis
-
-        # If already connected, return the existing connection
-        if self.is_connected:
-            return self.connection
-
-        # Create a connection pool key based on the connection configuration
-        connection_pool_key = self.connection_pool_key()
-
-        # If a connection pool exists, get a connection from the pool
-        if self.CONNECTION_POOLS.get(connection_pool_key):
-            connection_pool = self.CONNECTION_POOLS[connection_pool_key]
-
-        # Otherwise, create a new connection pool
-        else:
-            connection_pool = ConnectionPool(
-                **(
-                        self.DEFAULT_CONNECTION_POOL_PARAMETERS |        # Default connection pool parameters
-                        {'max_connections': self.max_pool_size} |        # (super) Maximum number of connections in the pool
-                        self.mapped_connection_configuration             # (super) Connection configuration mapped to the driver
-                )
-            )
-
-            self.CONNECTION_POOLS[connection_pool_key] = connection_pool
-
-        # Assign the connection
-        self.connection = StrictRedis(connection_pool=connection_pool)
-
-        return self.connection
-
-    def disconnect(self):
-        self.connection.close()
-
     def method(self) -> 'RedisTask':
         """
         Executes the 'self.command' on the Redis database. Each offered StrictRedis command is prefixed with 'redis_'.
@@ -1089,8 +1001,6 @@ class RedisTask(BaseDataTask):
         It was necessary to break each offered command into different methods due to the complexity
         of the Redis api and the need to serialize and deserialize data.
         """
-
-        self.connect()
 
         result = self.walk_result_command_path(
             getattr(self, f'redis_{self.base_command_part}')()
@@ -1145,7 +1055,7 @@ class RedisTask(BaseDataTask):
         # Retrieve keys based on the pattern or keys provided
         keys = self.redis_keys()
 
-        delete_count = self.connection.delete(*keys)
+        delete_count = self.silo.connect().delete(*keys)
 
         result = {
             'deleted': delete_count,
@@ -1182,7 +1092,7 @@ class RedisTask(BaseDataTask):
 
         for key in keys:
             self.calls += 1
-            self.connection.expire(name=key, time=self.arguments['expire'])
+            self.silo.connect().expire(name=key, time=self.arguments['expire'])
 
         self.result = {'keys': keys}
 
@@ -1208,7 +1118,7 @@ class RedisTask(BaseDataTask):
 
         self.calls += 1
 
-        delete_count = self.connection.flushall()
+        delete_count = self.silo.connect().flushall()
 
         result = {
             'deleted': delete_count
@@ -1252,7 +1162,7 @@ class RedisTask(BaseDataTask):
             try:
                 self.calls += 1
 
-                r = self.connection.get(name=n)
+                r = self.silo.connect().get(name=n)
 
                 if self.serialization:
                     from json import loads
@@ -1296,7 +1206,7 @@ class RedisTask(BaseDataTask):
                 if keys == '*':
                     # HGETALL operation
                     self.calls += 1
-                    result = self.connection.hgetall(name=name)
+                    result = self.silo.connect().hgetall(name=name)
 
                 else:
                     # HGET operation
@@ -1305,7 +1215,7 @@ class RedisTask(BaseDataTask):
                         self.calls += 1
 
                         try:
-                            v = self.connection.hget(name=name, key=key)
+                            v = self.silo.connect().hget(name=name, key=key)
 
                             if self.serialization:
                                 from json import loads
@@ -1353,7 +1263,7 @@ class RedisTask(BaseDataTask):
 
         # Use pattern matching to return a list of keys
         if self.arguments.get('pattern'):
-            result = self.connection.scan_iter(match=self.arguments['pattern'])
+            result = self.silo.connect().scan_iter(match=self.arguments['pattern'])
 
         # If the keys are provided, return the keys
         elif self.arguments.get('keys'):
@@ -1361,7 +1271,7 @@ class RedisTask(BaseDataTask):
 
         # Return all keys
         else:
-            result = self.connection.scan_iter(match='*')
+            result = self.silo.connect().scan_iter(match='*')
 
         return result
 
@@ -1483,18 +1393,7 @@ class RedisTask(BaseDataTask):
         try:
             if name and value:
                 self.calls += 1
-                record_response_code(self.connection.set(name=name, value=self.serialize(value), ex=self.expire))
-
-                # except Exception as ex:
-                #     self.meta['Errors'].append(str(ex))
-                #     results['errors'] += 1
-                #
-                # else:
-                #     # Record metadata
-                #     if r == 0:
-                #         results['updated'] += 1
-                #     else:
-                #         results['added'] += 1
+                record_response_code(self.silo.connect().set(name=name, value=self.serialize(value), ex=self.expire))
 
             # HSET operation
             elif name and keys:
@@ -1507,44 +1406,17 @@ class RedisTask(BaseDataTask):
                 if isinstance(keys, str) and keys == '*':
                     keys = list(self.data.keys())
 
-                record_response_code(self.connection.hset(name=name,
+                record_response_code(self.silo.connect().hset(name=name,
                                                           mapping={
                                                               key: self.serialize(self.data[key])
                                                               for key in keys
                                                           })
                                      )
 
-                # # Iterate over each key in the list
-                # for key in keys:
-                #     # Only process a key if it is defined in the object
-                #     if key in self.data.keys():
-                #         v = self.data[key]
-                #
-                #         # Serialize the value if necessary
-                #         if self.serialization and not isinstance(v, _VALID_REDIS_TYPES):
-                #             from json import dumps
-                #             v = dumps(v, default=str)
-                #
-                #         self.calls += 1
-                #
-                #         try:
-                #             r = self.connection.hset(name=name, key=key, value=v)
-                #
-                #         except Exception as ex:
-                #             self.meta['Errors'].append(str(ex.args))
-                #             results['errors'] += 1
-                #
-                #         else:
-                #             # Record metadata
-                #             if r == 0:
-                #                 results['updated'] += 1
-                #             else:
-                #                 results['added'] += 1
-
                 # If an expiration time is provided, set the expiration time for this record
                 if self.expire:
                     self.calls += 1
-                    record_response_code(self.connection.expire(name=name, time=self.expire))
+                    record_response_code(self.silo.connect().expire(name=name, time=self.expire))
 
             else:
                 raise ValueError("Invalid arguments provided. Must provide 'name' and 'value' or 'name' and 'keys'.")

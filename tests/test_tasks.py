@@ -308,36 +308,16 @@ class TestJsonTask(unittest.TestCase):
 
 class TestMongoTask(unittest.TestCase):
     def setUp(self):
-        self.database_connection_config = {
-            'host': 'localhost',
-            'port': 44444,
-            'username': 'admin',
-            'password': 'default-harvest-password',
-            'database': 'harvest'
-        }
+        from ..CloudHarvestCoreTasks.silos import add_silo
 
-    def test_init(self):
-        from ..CloudHarvestCoreTasks.tasks import MongoTask
-
-        # Assert that the task is not created if the database parameters are missing
-        self.assertRaises(ValueError,
-                          MongoTask,
-                          name='test',
-                          description='This is a test task',
-                          alias='invalid',
-                          command='find',
-                          collection='test')
-
-        # Assert that the task is created
-        mongo_task = MongoTask(name='test',
-                               description='This is a test task',
-                               collection='test',
-                               command='test',
-                               host='localhost',
-                               port=27017,
-                               database='test')
-
-        self.assertTrue(mongo_task)
+        add_silo(name='test_silo',
+                 engine='mongo',
+                 host='localhost',
+                 port=44444,
+                 username='harvest-api',
+                 password='default-harvest-password',
+                 database='harvest',
+                 authSource='harvest')
 
     def test_method_find(self):
         task_chain_configuration = {
@@ -347,6 +327,7 @@ class TestMongoTask(unittest.TestCase):
                     {
                         'mongo': {
                             'name': 'find test',
+                            'silo': 'test_silo',
                             'collection': 'users',
                             'result_as': 'mongo_result',
                             'command': 'find',
@@ -354,7 +335,7 @@ class TestMongoTask(unittest.TestCase):
                                 'filter': {}
                             },
 
-                        } | self.database_connection_config,
+                        }
                     }
                 ]
             }
@@ -364,6 +345,7 @@ class TestMongoTask(unittest.TestCase):
         task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
+        self.assertFalse(task_chain.errors)
         self.assertEqual(len(task_chain.result['data']), 10)
 
     def test_method_subcommand(self):
@@ -378,44 +360,14 @@ class TestMongoTask(unittest.TestCase):
                     {
                         'mongo': {
                             'name': 'find.explain test',
+                            'silo': 'test_silo',
                             'collection': 'users',
                             'result_as': 'mongo_result',
                             'command': 'find.explain',
                             'arguments': {
                                 'filter': {}
                             }
-                         } | self.database_connection_config
-                    }
-                ]
-            }
-        }
-
-        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
-        task_chain = task_chain_from_dict(template=task_chain_configuration)
-        task_chain.run()
-
-        self.assertIn('command', task_chain.result['data'].keys())
-
-    def test_connection_from_silo(self):
-        from ..CloudHarvestCoreTasks.silos import add_silo
-
-        add_silo(name='test_silo', **self.database_connection_config | {'engine': 'mongo'})
-
-        task_chain_configuration = {
-            'report': {
-                'name': 'test_chain',
-                'tasks': [
-                    {
-                        'mongo': {
-                            'name': 'find test',
-                            'collection': 'users',
-                            'result_as': 'mongo_result',
-                            'silo': 'test_silo',
-                            'command': 'find',
-                            'arguments': {
-                                'filter': {}
-                            },
-                        }
+                         }
                     }
                 ]
             }
@@ -426,12 +378,24 @@ class TestMongoTask(unittest.TestCase):
         task_chain.run()
 
         self.assertFalse(task_chain.errors)
-        self.assertEqual(len(task_chain.result['data']), 10)
+        self.assertIn('command', task_chain.result['data'].keys())
+
 
 class TestRedisTask(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        from ..CloudHarvestCoreTasks.silos import add_silo
+
+        add_silo(name='test_silo',
+                 engine='redis',
+                 host='localhost',
+                 port=44445,
+                 database=0,
+                 password='default-harvest-password',
+                 decode_responses=True)
+
+
         from redis import StrictRedis
         cls.redis_connection_config = {
             'host': 'localhost',
@@ -455,10 +419,11 @@ class TestRedisTask(unittest.TestCase):
                 'tasks': [
                     {
                         'redis': {
-                                     'name': 'delete test',
-                                     'command': 'delete',
-                                     'arguments': {'keys': ['key1', 'key2']},
-                                 } | self.redis_connection_config,
+                            'name': 'delete test',
+                            'silo': 'test_silo',
+                            'command': 'delete',
+                            'arguments': {'keys': ['key1', 'key2']}
+                        }
                     }
                 ]
             }
@@ -481,10 +446,11 @@ class TestRedisTask(unittest.TestCase):
                 'tasks': [
                     {
                         'redis': {
-                                     'name': 'expire test',
-                                     'command': 'expire',
-                                     'arguments': {'expire': 3600, 'keys': ['key1', 'key2']},
-                                 } | self.redis_connection_config,
+                            'name': 'expire test',
+                            'command': 'expire',
+                            'silo': 'test_silo',
+                            'arguments': {'expire': 3600, 'keys': ['key1', 'key2']},
+                        }
                     }
                 ]
             }
@@ -507,9 +473,10 @@ class TestRedisTask(unittest.TestCase):
                 'tasks': [
                     {
                         'redis': {
-                                     'name': 'flushall test',
-                                     'command': 'flushall',
-                                 } | self.redis_connection_config,
+                            'name': 'flushall test',
+                            'silo': 'test_silo',
+                            'command': 'flushall',
+                        }
                     }
                 ]
             }
@@ -531,10 +498,11 @@ class TestRedisTask(unittest.TestCase):
                 'tasks': [
                     {
                         'redis': {
-                                     'name': 'get test',
-                                     'command': 'get',
-                                     'arguments': {'name': 'test_key'},
-                                 } | self.redis_connection_config,
+                            'name': 'get test',
+                            'command': 'get',
+                            'silo': 'test_silo',
+                            'arguments': {'name': 'test_key'}
+                        }
                     }
                 ]
             }
@@ -556,10 +524,11 @@ class TestRedisTask(unittest.TestCase):
                 'tasks': [
                     {
                         'redis': {
-                                     'name': 'keys test',
-                                     'command': 'keys',
-                                     'arguments': {'pattern': 'key*'},
-                                 } | self.redis_connection_config,
+                            'name': 'keys test',
+                            'silo': 'test_silo',
+                            'command': 'keys',
+                            'arguments': {'pattern': 'key*'}
+                        }
                     }
                 ]
             }
@@ -578,13 +547,14 @@ class TestRedisTask(unittest.TestCase):
                 'tasks': [
                     {
                         'redis': {
-                                     'name': 'set test',
-                                     'command': 'set',
-                                     'arguments': {
-                                         'name': 'test_key',
-                                         'value': 'test_value'
-                                     },
-                                 } | self.redis_connection_config,
+                            'name': 'set test',
+                            'command': 'set',
+                            'silo': 'test_silo',
+                            'arguments': {
+                                'name': 'test_key',
+                                'value': 'test_value'
+                            },
+                        }
                     }
                 ]
             }
@@ -607,14 +577,15 @@ class TestRedisTask(unittest.TestCase):
                 'tasks': [
                     {
                         'redis': {
-                                     'name': 'serialize set test',
-                                     'command': 'set',
-                                     'serialization': True,
-                                     'arguments': {
-                                         'name': 'test_key',
-                                         'value': nested_dict
-                                     },
-                                 } | self.redis_connection_config,
+                            'name': 'serialize set test',
+                            'command': 'set',
+                            'silo': 'test_silo',
+                            'serialization': True,
+                            'arguments': {
+                                'name': 'test_key',
+                                'value': nested_dict
+                            }
+                        }
                     }
                 ]
             }
@@ -636,17 +607,18 @@ class TestRedisTask(unittest.TestCase):
                 'tasks': [
                     {
                         'redis': {
-                                     'name': 'set dict test',
-                                     'command': 'set',
-                                     'data': 'var.dict_to_set',
-                                     'arguments': {
-                                         'name': 'test_hash',
-                                         'keys': [
-                                             'field1',
-                                             'field2'
-                                         ]
-                                     },
-                                 } | self.redis_connection_config,
+                            'name': 'set dict test',
+                            'command': 'set',
+                            'silo': 'test_silo',
+                            'data': 'var.dict_to_set',
+                            'arguments': {
+                                'name': 'test_hash',
+                                'keys': [
+                                    'field1',
+                                    'field2'
+                                ]
+                            },
+                        }
                     }
                 ]
             }

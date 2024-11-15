@@ -18,7 +18,7 @@ class BaseSilo:
     Silos manage connection pools to resources and provide heartbeat checks, if necessary.
     """
 
-    from typing import Any
+    SUPPORTED_CLIENT_PARAMETERS = ('host', 'port', 'username', 'password')
 
     def __init__(self,
                  name: str,
@@ -82,42 +82,22 @@ class BaseSilo:
         """
         raise NotImplementedError
 
-    @staticmethod
-    def call_with_only_valid_kwargs(callable_obj: Any, **kwargs) -> Any:
+    def call_with_supported_client_parameters(self, func, **kwargs):
         """
-        Calls an object with only the valid kwargs for the object. This method was implemented because the contents of
-        the kwargs dictionary are not always valid for the callable object. This method filters out the invalid kwargs
-        before calling the object. Specifically, this helps remove invalid keyes such as 'name' and 'engine' from the
-        kwargs dictionary before calling the MongoClient or (Redis) ConnectionPool objects, but it can be used for any
-        callable object.
+        Calls a function with only the supported client parameters.
 
-        Args:
-            callable_obj (function or method): The callable to inspect.
-            kwargs (dict): The kwargs to pass to the callable.
-
-        Returns:
-            tuple: A tuple of valid kwargs for the callable.
+        :param func: The function to call.
+        :param kwargs: The keyword arguments to pass to the function.
         """
-        from inspect import signature, Parameter
+        config = {k: v for k, v in kwargs.items() if k in self.SUPPORTED_CLIENT_PARAMETERS}
 
-        sig = signature(callable_obj)
-        valid_args = tuple(
-            param.name for param in sig.parameters.values()
-            if param.kind in (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY)
-        )
-
-        kwargs_less_invalid = {
-            k: v
-            for k, v in kwargs.items()
-            if k in valid_args
-        }
-
-        return callable_obj(**kwargs_less_invalid)
-
+        return func(**config)
 
 @register_definition('silo', 'mongo_silo')
 class MongoSilo(BaseSilo):
     from pymongo import MongoClient
+
+    SUPPORTED_CLIENT_PARAMETERS = BaseSilo.SUPPORTED_CLIENT_PARAMETERS + ('authSource', 'maxPoolSize', 'minPoolSize')
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -136,7 +116,7 @@ class MongoSilo(BaseSilo):
                 self.pool.server_info()
                 return True
 
-            except Exception:
+            except Exception as ex:
                 return False
 
         else:
@@ -201,11 +181,11 @@ class MongoSilo(BaseSilo):
             'maxPoolSize': 50,
         }
 
-        config = default_configuration | self.__dict__()
+        config = default_configuration | self.__dict__() | self.extended_db_configuration
 
         # Create the client object
         from pymongo import MongoClient
-        self.pool: MongoClient = self.call_with_only_valid_kwargs(MongoClient, **config)
+        self.pool: MongoClient = self.call_with_supported_client_parameters(MongoClient, **config)
 
         # Test that the connection works
         if self.is_connected:
@@ -217,6 +197,8 @@ class MongoSilo(BaseSilo):
 @register_definition('silo', 'redis_silo')
 class RedisSilo(BaseSilo):
     from redis import StrictRedis
+
+    SUPPORTED_CLIENT_PARAMETERS = BaseSilo.SUPPORTED_CLIENT_PARAMETERS + ('db', 'max_connections', 'decode_responses')
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -266,7 +248,7 @@ class RedisSilo(BaseSilo):
         config = default_configuration | self.__dict__()
 
         from redis import ConnectionPool
-        self.pool: ConnectionPool = self.call_with_only_valid_kwargs(ConnectionPool, **config)
+        self.pool: ConnectionPool = self.call_with_supported_client_parameters(ConnectionPool, **config)
 
         from redis import StrictRedis
         connection = StrictRedis(connection_pool=self.pool)
@@ -300,8 +282,13 @@ def add_silo(name: str, **kwargs) -> BaseSilo:
     # Create the silo object
     silo = silo_class[0](name=name, **kwargs)
 
-    # Add the silo to the top-level _SILOS dictionary
-    _SILOS[name] = silo
+    silo.connect()
+    if silo.is_connected:
+        # Add the silo to the top-level _SILOS dictionary
+        _SILOS[name] = silo
+
+    else:
+        raise ConnectionError(f'Could not connect to the silo {name}.')
 
     return silo
 

@@ -202,10 +202,10 @@ class TestBaseHarvestTaskChain(BaseTestCase):
                  engine='mongo',
                  host='localhost',
                  port=44444,
-                 username='admin',
+                 username='harvest-api',
                  password='default-harvest-password',
                  database='harvest',
-                 authSource='admin')
+                 authSource='harvest')
 
         # Create a dummy task and add it to the task chain
         self.task_configuration = {
@@ -213,29 +213,33 @@ class TestBaseHarvestTaskChain(BaseTestCase):
                 'name': 'Data Collection Task Chain',
                 'platform': 'mongo',
                 'service': 'users',
+                'type': 'user',
                 'account': 'test',
                 'region': 'us-east-1',
                 'description': 'Test data collection task chain',
-                'destination_silo': 'mongo_test',
-                'silo': 'harvest-core',
-                'unique_filter_keys': ['name.family', 'name.given'],
+                'destination_silo': 'harvest-core',
+                'unique_identifier_keys': ['name.family', 'name.given'],
                 'tasks': [
                     {
                         # This task will retrieve data from a MongoDB database
                         'mongo': {
                             'name': 'Remote data request',
                             'description': 'Retrieves data from a MongoDB database',
-                            'result_as': 'recordset',
-                            'silo': 'mongo_test',
+                            'result_as': 'mongo-result',
+                            'silo': 'harvest-core',
                             'collection': 'users',
                             'command': 'find',
-                            'arguments': {}
-                        },
+                            'arguments': {
+                                'filter': {}
+                            }
+                        }
+                    },
+                    {
                         # This task will modify the data using recordset operations
                         'recordset': {
                             'name': 'Modify data',
                             'description': 'Modifies the data using recordset operations',
-                            'data': 'var.recordset',
+                            'data': 'var.mongo-result',
                             'result_as': 'result',
                             'stages': [
                                 {
@@ -252,13 +256,15 @@ class TestBaseHarvestTaskChain(BaseTestCase):
         }
 
         from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
-        self.base_task_chain = task_chain_from_dict(task_chain_registered_class_name='harvest', template=self.task_configuration)
+        self.base_task_chain = task_chain_from_dict(template=self.task_configuration)
 
     def test_run(self):
         # Test the run method of the BaseHarvestTaskChain class
         self.base_task_chain.run()
+        self.assertFalse(self.base_task_chain.errors)
+        self.assertEqual(len(self.base_task_chain), 3)
         self.assertEqual(str(str(self.base_task_chain.status)), str(TaskStatusCodes.complete))
-
+        self.assertIsNotNone(self.base_task_chain.result)
 
 class TestBaseTaskChain(BaseTestCase):
     """

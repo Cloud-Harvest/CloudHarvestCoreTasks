@@ -27,6 +27,8 @@ from threading import Thread
 from typing import Any, Dict, List, Literal
 from logging import getLogger
 
+from silos import get_silo
+
 _log_levels = Literal['debug', 'info', 'warning', 'error', 'critical']
 USER_FILTERS = {
     'add_keys': [],
@@ -510,15 +512,8 @@ class BaseDataTask(BaseTask):
     REQUIRED_CONFIGURATION_KEYS = ()
 
     def __init__(self, command: str,
+                 silo: str,
                  arguments: dict = None,
-                 silo: str = None,
-                 host: str = None,
-                 port: int = None,
-                 username: str = None,
-                 password: str = None,
-                 database: str or int = None,
-                 extended_db_configuration: dict = None,
-                 max_pool_size: int = 10,
                  *args, **kwargs):
         """
         Initializes a new instance of the BaseDataTask class. In order to instantiate a BaseDataTask, a configuration
@@ -533,43 +528,20 @@ class BaseDataTask(BaseTask):
             command (str): The command to run on the data provider.
             arguments (dict, optional): Arguments to pass to the command.
             silo (str, optional): The name of the silo to use for the task. Defaults to None.
-            host (str, optional): The host address of the data provider. Defaults to None.
-            port (int, optional): The port number of the data provider. Defaults to None.
-            username (str, optional): The username for accessing the data provider. Defaults to None.
-            password (str, optional): The password for accessing the data provider. Defaults to None.
-            database (str or int, optional): The database name or number of the data provider. Defaults to None.
-            extended_db_configuration (dict, optional): Extended configuration for the data provider. Defaults to None.
-            max_pool_size (int, optional): The maximum number of connections to allow in the connection pool. Defaults to 10.
-        """
+\        """
 
         # Initialize the BaseTask class
         super().__init__(*args, **kwargs)
 
+        from ..silos import get_silo
+
         # Assigned attributes
-        self.silo = silo
+        self.silo = get_silo(silo)
         self.arguments = arguments or {}
         self.command = command
-        self.database = database
-        self.extended_db_configuration = extended_db_configuration or {}
-        self.host = host
-        self.max_pool_size = max_pool_size
-        self.password = password
-        self.port = port
-        self.username = username
 
         # Programmatic attributes
-        self.connection = None
         self.calls = 0
-
-        if silo:
-            from ..silos import get_silo
-            silo = get_silo(silo)
-
-            for key, value in silo.__dict__().items():
-                setattr(self, key, value)
-
-        # Validate the configuration of the task
-        self.validate_configuration()
 
     def __enter__(self):
         return self
@@ -594,94 +566,6 @@ class BaseDataTask(BaseTask):
             result = self.command.split('[')[0]
 
         return result
-    @property
-    def mapped_connection_configuration(self, include_null_values: bool = False) -> dict:
-        """
-        Maps the connection keys to the appropriate attributes. Update CONNECTION_KEY_MAP in subclasses to include
-        driver-specific keys. Returns None if there is an error.
-        """
-        result = None
-
-        try:
-            result = self.extended_db_configuration | {
-                driver_configuration_key: getattr(self, base_configuration_key)
-                for base_configuration_key, driver_configuration_key in self.CONNECTION_KEY_MAP
-                if getattr(self, base_configuration_key) or include_null_values
-            }
-
-        finally:
-            return result
-
-    @property
-    def is_connected(self) -> bool:
-        """
-        Returns a boolean indicating whether the task is connected to the data provider.
-
-        This method should be overwritten in subclasses to provide specific functionality.
-
-        >>> try:
-        >>>     # Your connection test here.
-        >>>     return True
-        >>>
-        >>> except Exception:
-        >>>     return False
-        """
-
-        return False
-
-    def connection_pool_key(self) -> str:
-        """
-        Constructs a connection pool key in the form of a URL-like address.
-        The key consists of the username, password SHA, hostname, port, and database.
-
-        We use this key to store connection pools and return a pool based on the connection parameters. This allows us to
-        reuse connections and reduce the number of connections to the data provider.
-        """
-
-        if self.silo:
-            return self.silo
-
-        from hashlib import sha256
-
-        # Construct the URL-like address
-        connection_pool_key = sha256( f"{self.username}:{self.password}@{self.host}:{self.port}/{self.database}".encode()).hexdigest()
-
-        return connection_pool_key
-
-    def connect(self) -> 'BaseDataTask':
-        """
-        Connect the Task to the data provider.
-
-        This method should be overwritten in subclasses to provide specific functionality. However, super().connect()
-        should be called in the subclass method to ensure that the connection is established.
-        """
-
-        return self
-
-    def disconnect(self) -> 'BaseDataTask':
-        """
-        Disconnect the task from the data provider.
-
-        This method should be overwritten in subclasses to provide specific functionality.
-
-        >>> # If the task is connected, disconnect it
-        >>> if self.connection:
-        >>>     try:
-        >>>         self.connection.close()
-        >>>     except Exception as ex:
-        >>>         logger.error(f'Error closing connection: {ex}')
-        """
-
-        return self
-
-    def validate_configuration(self):
-        """
-        Validates the configuration of the task.
-        """
-
-        # Validate that all minimum configuration keys are provided
-        if not all([getattr(self, key) for key in self.REQUIRED_CONFIGURATION_KEYS]):
-            raise ValueError(f"Missing required configuration for MongoTask: {self.REQUIRED_CONFIGURATION_KEYS}")
 
     def walk_result_command_path(self, result: Any) -> Any:
         """

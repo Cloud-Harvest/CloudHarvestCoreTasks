@@ -6,7 +6,6 @@
   - now expects the task chain to begin with a key representing the task chain's class such as `chain`, `harvest`, or `report`
   - all tests updated accordingly
 
-
 # 0.4.1
 - [#12](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/12) Completely redesigned how objects are templated variables referenced in task configurations
 - [#13](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/13) Added the `BaseTask.itemize` directive 

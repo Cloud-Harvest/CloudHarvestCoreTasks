@@ -398,8 +398,8 @@ class PruneTask(BaseTask):
 
         return self
 
-@register_definition(name='harvest_record_update', category='task')
-class HarvestRecordUpdateTask(BaseTask):
+@register_definition(name='harvest_update', category='task')
+class HarvestUpdateTask(BaseTask):
     """
     The HarvestTask class is a subclass of the MongoTask class. It represents a task that performs the steps necessary
     to upload data collected in a BaseHarvestTaskChain to a MongoDB database.
@@ -447,12 +447,12 @@ class HarvestRecordUpdateTask(BaseTask):
         from .base import BaseHarvestTaskChain
         self.task_chain = cast(BaseHarvestTaskChain, self.task_chain)
 
-    def method(self) -> 'HarvestRecordUpdateTask':
+    def method(self) -> 'HarvestUpdateTask':
         """
         Executes the task.
 
         Returns:
-            HarvestRecordUpdateTask: The current instance of the HarvestTask class.
+            HarvestUpdateTask: The current instance of the HarvestTask class.
         """
 
         self.meta['Stages'] = []

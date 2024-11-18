@@ -1356,7 +1356,7 @@ class BaseHarvestTaskChain(BaseTaskChain):
 
         # Insert a HarvestTask template into the end of the task chain
         template = {
-            'harvest_record_update': {
+            'harvest_update': {
                 'name': f'{self.destination_silo}:{self.platform}/{self.service}/{self.type}/{self.account}/{self.region}',
                 'description': 'Updates the Harvest Persistent Storage with the latest data',
                 'data': 'var.result',

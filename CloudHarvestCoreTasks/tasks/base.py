@@ -27,6 +27,8 @@ from threading import Thread
 from typing import Any, Dict, List, Literal
 from logging import getLogger
 
+from silos import get_silo
+
 _log_levels = Literal['debug', 'info', 'warning', 'error', 'critical']
 USER_FILTERS = {
     'add_keys': [],
@@ -177,6 +179,14 @@ class BaseTask:
         """
 
         return ((self.end or datetime.now(tz=timezone.utc)) - self.start).total_seconds() if self.start else -1
+
+    @property
+    def errors(self) -> List[str]:
+        """
+        Returns a list of errors that occurred during the task.
+        """
+
+        return self.meta.get('Errors')
 
     @property
     def position(self) -> int:
@@ -330,15 +340,12 @@ class BaseTask:
 
         finally:
             # Update the metadata with the task's status, duration, and other information
-            self.meta.update(
-                {
-                    'attempts': self.attempts,
-                    'count': len(self.result) if hasattr(self, '__len__') else 1,
-                    'duration': self.duration,
-                    'status': self.status.__str__(),
-                }
-            )
-
+            self.meta = self.meta | {
+                'attempts': self.attempts,
+                'count': len(self.result) if hasattr(self, '__len__') else 1,
+                'duration': self.duration,
+                'status': str(self.status)
+            }
         return self
 
     def _run_on_directive(self, directive: str):
@@ -379,7 +386,7 @@ class BaseTask:
 
         # Store the result in the task chain's variables if a result_as variable is provided
         if self.result_as and self.task_chain:
-            self.task_chain.variables[self.result_as.name].write(data=self.result)
+            self.task_chain.variables[self.result_as] = self.result
 
         # Apply user filters if the user filter stage is set to 'complete'
         if self.USER_FILTER_STAGE == 'complete':
@@ -505,15 +512,8 @@ class BaseDataTask(BaseTask):
     REQUIRED_CONFIGURATION_KEYS = ()
 
     def __init__(self, command: str,
+                 silo: str,
                  arguments: dict = None,
-                 silo: str = None,
-                 host: str = None,
-                 port: int = None,
-                 username: str = None,
-                 password: str = None,
-                 database: str or int = None,
-                 extended_db_configuration: dict = None,
-                 max_pool_size: int = 10,
                  *args, **kwargs):
         """
         Initializes a new instance of the BaseDataTask class. In order to instantiate a BaseDataTask, a configuration
@@ -528,36 +528,20 @@ class BaseDataTask(BaseTask):
             command (str): The command to run on the data provider.
             arguments (dict, optional): Arguments to pass to the command.
             silo (str, optional): The name of the silo to use for the task. Defaults to None.
-            host (str, optional): The host address of the data provider. Defaults to None.
-            port (int, optional): The port number of the data provider. Defaults to None.
-            username (str, optional): The username for accessing the data provider. Defaults to None.
-            password (str, optional): The password for accessing the data provider. Defaults to None.
-            database (str or int, optional): The database name or number of the data provider. Defaults to None.
-            extended_db_configuration (dict, optional): Extended configuration for the data provider. Defaults to None.
-            max_pool_size (int, optional): The maximum number of connections to allow in the connection pool. Defaults to 10.
-        """
+\        """
 
         # Initialize the BaseTask class
         super().__init__(*args, **kwargs)
 
+        from ..silos import get_silo
+
         # Assigned attributes
-        self.silo = silo
+        self.silo = get_silo(silo)
         self.arguments = arguments or {}
         self.command = command
-        self.database = database
-        self.extended_db_configuration = extended_db_configuration or {}
-        self.host = host
-        self.max_pool_size = max_pool_size
-        self.password = password
-        self.port = port
-        self.username = username
 
         # Programmatic attributes
-        self.connection = None
         self.calls = 0
-
-        # Validate the configuration of the task
-        self.validate_configuration()
 
     def __enter__(self):
         return self
@@ -582,105 +566,6 @@ class BaseDataTask(BaseTask):
             result = self.command.split('[')[0]
 
         return result
-    @property
-    def mapped_connection_configuration(self, include_null_values: bool = False) -> dict:
-        """
-        Maps the connection keys to the appropriate attributes. Update CONNECTION_KEY_MAP in subclasses to include
-        driver-specific keys. Returns None if there is an error.
-        """
-        result = None
-
-        try:
-            result = self.extended_db_configuration | {
-                driver_configuration_key: getattr(self, base_configuration_key)
-                for base_configuration_key, driver_configuration_key in self.CONNECTION_KEY_MAP
-                if getattr(self, base_configuration_key) or include_null_values
-            }
-
-        finally:
-            return result
-
-    @property
-    def is_connected(self) -> bool:
-        """
-        Returns a boolean indicating whether the task is connected to the data provider.
-
-        This method should be overwritten in subclasses to provide specific functionality.
-
-        >>> try:
-        >>>     # Your connection test here.
-        >>>     return True
-        >>>
-        >>> except Exception:
-        >>>     return False
-        """
-
-        return False
-
-    def connection_pool_key(self) -> str:
-        """
-        Constructs a connection pool key in the form of a URL-like address.
-        The key consists of the username, password SHA, hostname, port, and database.
-
-        We use this key to store connection pools and return a pool based on the connection parameters. This allows us to
-        reuse connections and reduce the number of connections to the data provider.
-        """
-
-        if self.silo:
-            return self.silo
-
-        from hashlib import sha256
-
-        # Construct the URL-like address
-        connection_pool_key = sha256( f"{self.username}:{self.password}@{self.host}:{self.port}/{self.database}".encode()).hexdigest()
-
-        return connection_pool_key
-
-    def connect(self) -> 'BaseDataTask':
-        """
-        Connect the Task to the data provider.
-
-        This method should be overwritten in subclasses to provide specific functionality. However, super().connect()
-        should be called in the subclass method to ensure that the connection is established.
-        """
-
-        return self
-
-    def disconnect(self) -> 'BaseDataTask':
-        """
-        Disconnect the task from the data provider.
-
-        This method should be overwritten in subclasses to provide specific functionality.
-
-        >>> # If the task is connected, disconnect it
-        >>> if self.connection:
-        >>>     try:
-        >>>         self.connection.close()
-        >>>     except Exception as ex:
-        >>>         logger.error(f'Error closing connection: {ex}')
-        """
-
-        return self
-
-    def validate_configuration(self):
-        """
-        Validates the configuration of the task.
-        """
-
-        # Retrieve the configuration from the Silos dictionary if it is provided
-        if self.silo:
-            from ..silos import get_silo
-            silo = get_silo(self.silo)
-
-            if silo:
-                self.connection = silo.connect()
-
-            else:
-                raise ValueError(f"Could not find Silo: {self.silo}")
-
-        # Validate that all minimum configuration keys are provided
-        if not all([getattr(self, key) for key in self.REQUIRED_CONFIGURATION_KEYS]):
-            raise ValueError(f"Missing required configuration for MongoTask: {self.REQUIRED_CONFIGURATION_KEYS}")
 
     def walk_result_command_path(self, result: Any) -> Any:
         """
@@ -750,8 +635,8 @@ class BaseTaskChain(List[BaseTask]):
 
     def __init__(self,
                  template: dict,
-                 cache_progress: bool = False,
                  user_filters: dict = None,
+                 variables: dict = None,
                  *args, **kwargs):
         """
         Initializes a new instance of the BaseTaskChain class.
@@ -764,6 +649,9 @@ class BaseTaskChain(List[BaseTask]):
                 max_workers(int, optional): The maximum number of concurrent workers that are permitted.
             cache_progress(bool, optional): A boolean indicating whether the progress of the task chain should
                                             be reported to the Ephemeral Silo. Defaults to False.
+            user_filters(dict, optional): A dictionary of user filters to apply to the data. Defaults to None.
+            variables(dict, optional): Variables that can be used by the tasks in the chain. The dictionary is merged
+                                        with into the BaseTaskChain.variables attribute. Defaults to None.
         """
         self.original_template = template
 
@@ -774,10 +662,10 @@ class BaseTaskChain(List[BaseTask]):
 
         self.name = template['name']
         self.description = template.get('description')
-        self.cache_progress = cache_progress
 
-        # Variables are stored with their name as the key and the BaseLockableVariable instance as the value.
-        self.variables: Dict[str, Any] = {}
+        # Variables are stored with their name as the key.
+        # Starting variables can be added using the variables parameter.
+        self.variables: Dict[str, Any] = {} | (variables or {})
 
         self.task_templates: List[dict or BaseTask] = template.get('tasks', [])
 
@@ -793,8 +681,9 @@ class BaseTaskChain(List[BaseTask]):
         self.end = None
         self.user_filters = USER_FILTERS | (user_filters or {})
 
-        self._data = None
-        self._meta = None
+        self.meta = {}
+
+        self.reporting_thread = self.update_task_chain_cache_thread()
 
     def __enter__(self) -> 'BaseTaskChain':
         """
@@ -821,45 +710,20 @@ class BaseTaskChain(List[BaseTask]):
         return None
 
     @property
-    def data(self):
+    def errors(self) -> List[dict]:
         """
-        Returns the data produced by the last task in the task chain.
-        """
-
-        return self.variables.get('result')
-
-    @property
-    def detailed_progress(self) -> dict:
-        """
-        This method calculates and returns the progress of the task chain.
-
-        It returns a dictionary with the following keys:
-        - 'total': The total number of tasks in the task chain.
-        - 'current': The current position of the task chain.
-        - 'percent': The percentage of tasks completed in the task chain.
-        - 'duration': The total duration of the task chain in seconds. If the task chain has not started, it returns 0.
-        - 'counts': A dictionary with the count of tasks in each status. The keys of this dictionary are the status codes defined in the TaskStatusCodes Enum.
-
-        Returns:
-            dict: A dictionary representing the progress of the task chain.
+        Returns a list of errors that occurred during the task chain.
         """
 
-        from datetime import datetime, timezone
-        count_result = {
-            k: 0 for k in TaskStatusCodes
-        }
-
-        # iterate over tasks to get their individual status codes
+        errors = []
         for task in self:
-            count_result[task.status] += 1
+            if task.meta.get('Errors'):
+                errors.append({f'{self.index(task)}-{task.name}': task.meta['Errors']})
 
-        return {
-            'total': self.total,
-            'current': self.position,
-            'percent': (self.position / self.total) * 100,
-            'duration': (self.end or datetime.now(tz=timezone.utc) - self.start).total_seconds() if self.start else 0,
-            'counts': count_result
-        }
+        if self.meta.get('Errors'):
+            errors.append({'TaskChain': self.meta['Errors']})
+
+        return errors
 
     @property
     def percent(self) -> float:
@@ -987,33 +851,22 @@ class BaseTaskChain(List[BaseTask]):
     @property
     def result(self) -> dict:
         """
-        Returns the result of the task chain. This can be interpreted either as the 'result' variable in the task
-        chain's variables or the data and meta of the last task in the chain.
+        Returns either `var.result` or the result of the last task in the task chain.
         """
 
-        result = {}
+        result = None
 
         try:
-            if str(self.status) == str(TaskStatusCodes.initialized):
-                result = {
-                    'info': 'The task chain has not been run yet.'
-                }
-
-            else:
-                result = {
-                    'data': self._data or self.data or self[-1].result,
-                    'meta': self._meta or self[-1].meta
-                }
+            result = self.variables.get('result') or self[-1].result
 
         except IndexError:
-            result = {
-                'error': ' '.join([f'None of the {len(self.task_templates)} tasks in the task chain `{self.name}` were'
-                                   f' successfully instantiated. You may have a configuration error.',
-                                   str(self._meta) or 'No error message provided.'])
-            }
+            result = None
 
         finally:
-            return result
+            return {
+                'data': result,
+                'meta': self.meta
+            }
 
     @property
     def total(self) -> int:
@@ -1022,6 +875,40 @@ class BaseTaskChain(List[BaseTask]):
         """
 
         return len(self.task_templates)
+
+    def detailed_progress(self) -> dict:
+        """
+        This method calculates and returns the progress of the task chain.
+
+        It returns a dictionary with the following keys:
+        - 'total': The total number of tasks in the task chain.
+        - 'current': The current position of the task chain.
+        - 'percent': The percentage of tasks completed in the task chain.
+        - 'duration': The total duration of the task chain in seconds. If the task chain has not started, it returns 0.
+        - 'counts': A dictionary with the count of tasks in each status. The keys of this dictionary are the status codes defined in the TaskStatusCodes Enum.
+
+        Returns:
+            dict: A dictionary representing the progress of the task chain.
+        """
+
+        from datetime import datetime, timezone
+
+        # Set the possible status codes based on the TaskStatusCodes Enum
+        count_result = {
+            str(k): 0 for k in TaskStatusCodes
+        }
+
+        # Now we count the number of tasks in each status
+        for task in self:
+            count_result[str(task.status)] += 1
+
+        return {
+            'total': self.total,
+            'current': self.position,
+            'percent': (self.position / self.total) * 100,
+            'duration': (self.end or datetime.now(tz=timezone.utc) - self.start).total_seconds() if self.start else 0,
+            'counts': count_result
+        }
 
     def find_task_by_name(self, task_name: str) -> 'BaseTask':
         """
@@ -1152,7 +1039,7 @@ class BaseTaskChain(List[BaseTask]):
         """
 
         self.status = TaskStatusCodes.error
-        self._meta = ex.args
+        self.meta['Error'] = ex.args
 
         if self.pool.queue_size:
             self.pool.terminate()
@@ -1180,9 +1067,6 @@ class BaseTaskChain(List[BaseTask]):
         Returns:
             BaseTaskChain: The instance of the task chain.
         """
-
-        # Kick off the Ephemeral Silo thread if the cache_progress flag is set
-        ephemeral_cache_thread = self.update_task_chain_cache_thread() if self.cache_progress else None
 
         try:
             self.on_start()
@@ -1249,8 +1133,12 @@ class BaseTaskChain(List[BaseTask]):
         finally:
             self.on_complete()
 
-            if ephemeral_cache_thread:
-                ephemeral_cache_thread.join(timeout=5)
+            if self.reporting_thread:
+                try:
+                    self.reporting_thread.join(timeout=5)
+
+                except TimeoutError:
+                    pass
 
             return self
 
@@ -1327,25 +1215,28 @@ class BaseTaskChain(List[BaseTask]):
 
         return self
 
-    def update_task_chain_cache_thread(self) -> Thread:
+    def update_task_chain_cache_thread(self) -> Thread or None:
         """
         This method is responsible for updating the job cache with the task chain's progress.
         """
+
+        from ..silos import get_silo
+
+        # We only report status to harvest-jobs. If the silo is not available, we return None.
+        if not get_silo('harvest-jobs'):
+            return None
 
         def update_task_chain_cache():
             """
             Updates the job cache with the task chain's progress.
             """
-
-            from silos import get_silo
-
             while True:
                 cache_entry = {
-                                  'id': self.id,
-                                  'status': self.status.__str__(),
-                                  'start': self.start,
-                                  'end': self.end,
-                              } | self.detailed_progress
+                    'id': self.id,
+                    'status': self.status.__str__(),
+                    'start': self.start,
+                    'end': self.end
+                } | self.detailed_progress()
 
                 try:
                     client = get_silo('harvest-jobs').connect()
@@ -1365,6 +1256,9 @@ class BaseTaskChain(List[BaseTask]):
                         case TaskStatusCodes.initialized, TaskStatusCodes.idle:
                             sleep(5)
 
+                        case TaskStatusCodes.complete:
+                            break
+
                         case _:
                             sleep(1)
 
@@ -1373,6 +1267,113 @@ class BaseTaskChain(List[BaseTask]):
 
         return thread
 
+
+@register_definition(name='harvest', category='chain')
+class BaseHarvestTaskChain(BaseTaskChain):
+    """
+    The BaseHarvestTaskChain class is a subclass of the BaseTaskChain class and is used to manage a sequence of tasks
+    related to harvesting data. Specific functionality may be required based on the source data
+    provider.
+    """
+
+    def __init__(self,
+                 platform: str,
+                 service: str,
+                 type: str,
+                 account: str,
+                 region: str,
+                 destination_silo: str,
+                 unique_identifier_keys: (str or List[str]),
+                 extra_matadata_fields: (str or List[str]) = None,
+                 mode: Literal['all', 'single'] = 'all',
+                 *args, **kwargs):
+
+        """
+        Initializes a new instance of the BaseHarvestTaskChain class.
+
+        platform (str): The Platform (ie AWS, Azure, Google)
+        service (str): The Platform's service name (ie RDS, EC2, GCP)
+        type (str): The Service subtype, if applicable (ie RDS instance, EC2 event)
+        account (str): The Platform account name or identifier
+        region (str): The geographic region name for the Platform
+        destination_silo (str): The name of the destination silo where the harvested data will be stored
+        unique_identifier_keys (str or List[str]): The unique filter keys for the harvested data
+        extra_matadata_fields (str or List[str], optional): Additional metadata fields to include in the harvested data's metadata record
+        mode (str, optional): The mode of the harvest task chain. 'all' will harvest all data, 'single' will harvest a single record
+
+        Exposes
+        The following parameters are exposed as variables in the task chain:
+        - var.pstar: A dictionary containing the platform, service, type, account, and region.
+
+        Configuration Example
+        >>> {
+        >>>   "name": "Example Harvest Task Chain",
+        >>>   "description": "A task chain for harvesting data",
+        >>>   "tasks": [
+        >>>     {
+        >>>       "task_name": "example_task",
+        >>>       "result_as": "result",
+        >>>       "task_parameters": {
+        >>>         "param1": "value1",
+        >>>         "param2": "value2"
+        >>>       }
+        >>>     }
+        >>>   ],
+        >>>   "max_workers": 4,
+        >>>   "idle_refresh_rate": 3,
+        >>>   "worker_refresh_rate": 0.5,
+        >>>   "platform": "aws",                        # This should be populated by the
+        >>>   "service": "ec2",
+        >>>   "type": "instance",
+        >>>   "account": "example_account",
+        >>>   "region": "us-west-2",
+        >>>   "destination_silo": "example_silo",
+        >>>   "unique_identifier_keys": ["key1", "key2"],
+        >>>   "extra_metadata_fields": ["field1", "field2"]
+        >>> }
+        """
+
+        # Update the template based on the mode
+        if isinstance(kwargs['tasks'], dict):
+            if kwargs['tasks'].get('all') and kwargs['tasks'].get('single'):
+                kwargs['tasks'] = kwargs['tasks']['mode']
+
+        super().__init__(*args, **kwargs)
+
+        # Set the class attributes
+        self.platform = platform
+        self.service = service
+        self.type = type
+        self.account = account
+        self.region = region
+        self.mode = mode
+        self.destination_silo = destination_silo
+        self.unique_identifier_keys = [unique_identifier_keys] if isinstance(unique_identifier_keys, str) else unique_identifier_keys
+        self.extra_metadata_fields = [extra_matadata_fields] if isinstance(extra_matadata_fields, str) else extra_matadata_fields or []
+
+        # Computed attributes
+        self.replacement_collection_name = f'{self.platform}_{self.service}_{self.type}'
+
+        # Insert a HarvestTask template into the end of the task chain
+        template = {
+            'harvest_update': {
+                'name': f'{self.destination_silo}:{self.platform}/{self.service}/{self.type}/{self.account}/{self.region}',
+                'description': 'Updates the Harvest Persistent Storage with the latest data',
+                'data': 'var.result',
+                'result_as': 'result',
+            }
+        }
+
+        self.task_templates.append(template)
+
+        # Expose the platform, service, type, account, and region as variables
+        self.variables['pstar'] = {
+            'platform': self.platform,
+            'service': self.service,
+            'type': self.type,
+            'account': self.account,
+            'region': self.region,
+        }
 
 class BaseTaskPool:
     """

@@ -43,15 +43,12 @@ def task_chain_from_file(file_path: str) -> BaseTaskChain:
     else:
         raise ValueError('Unsupported file type. Supported types are .json, .yaml, and .yml.')
 
-    task_chain = task_chain_from_dict(task_chain_registered_class_name=file_path, task_chain=task_chain)
+    task_chain = task_chain_from_dict(task_chain_registered_class_name=file_path, template=task_chain)
 
     return task_chain
 
 
-def task_chain_from_dict(task_chain_registered_class_name: str,
-                         task_chain: dict,
-                         extra_vars: dict = None,
-                         **kwargs) -> BaseTaskChain:
+def task_chain_from_dict(template: dict, **kwargs) -> BaseTaskChain:
     """
     Creates a task chain from a dictionary.
 
@@ -71,6 +68,18 @@ def task_chain_from_dict(task_chain_registered_class_name: str,
 
     from CloudHarvestCorePluginManager.registry import Registry
 
+    # Identify the class and configuration for the task chain.
+    try:
+        # The chain class is the first key in the dictionary which does not begin with '.'. We allow templates to include
+        # keys that begin with '.' to allow for YAML anchors and references, in addition to metadata keys.
+        task_chain_registered_class_name = [key for key in template.keys() if not key.startswith('.')][0]
+        task_chain_configuration = template[task_chain_registered_class_name]
+
+    except IndexError:
+        from .base import BaseTaskException
+        raise BaseTaskException('No task chain class found in the task chain configuration.')
+
+    # Attempt to locate the identified class in the registry.
     try:
         chain_class = Registry.find(result_key='cls',
                                     category='chain',
@@ -81,11 +90,11 @@ def task_chain_from_dict(task_chain_registered_class_name: str,
         raise BaseTaskException(f'No task chain class found for {task_chain_registered_class_name}.')
 
     # Set the name of the task chain if it is not already set.
-    if 'name' not in task_chain.keys():
-        task_chain['name'] = task_chain_registered_class_name
+    if 'name' not in task_chain_configuration.keys():
+        task_chain_configuration['name'] = task_chain_registered_class_name
 
     # Instantiate the task chain class.
-    result = chain_class(template=task_chain, extra_vars=extra_vars, **kwargs)
+    result = chain_class(template=task_chain_configuration, **task_chain_configuration)
 
     return result
 
@@ -184,8 +193,8 @@ def replace_variable_path_with_value(original_string: str,
         [^\s]*: Matches zero or more characters that are not whitespace.
     """
 
-    # If the original string is not a string or does not contain 'var' or 'item', return the original string
-    if not isinstance(original_string, str) or ('var' not in original_string and 'item' not in original_string):
+    # If the original string is not a string or does not start with 'var' or 'item', return the original string
+    if not isinstance(original_string, str) or not any([f'{prefix}.' in original_string for prefix in ('item', 'var')]):
         return original_string
 
     pattern = compile('(item|var)\.[^\s]*')
@@ -284,6 +293,10 @@ def replace_variable_path_with_value(original_string: str,
             # Use the iterator as the source object
             case 'item':
                 replacement_values[match] = walk_path(match, item)
+
+            case 'task':
+                if task_chain:
+                    replacement_values[match] = walk_path(match, task_chain)
 
             # Get a component of a task chain variable
             case 'var':

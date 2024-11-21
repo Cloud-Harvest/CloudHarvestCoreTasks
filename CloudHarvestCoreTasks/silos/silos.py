@@ -309,6 +309,15 @@ def drop_silo(name: str):
     if name in _SILOS:
         _SILOS.pop(name)
 
+def drop_silos(*names):
+    """
+    Remove multiple silos from the silo registry.
+
+    :param names: A list of silo names to remove.
+    """
+    for name in names:
+        drop_silo(name)
+
 
 def get_silo(name: str) -> BaseSilo:
     """

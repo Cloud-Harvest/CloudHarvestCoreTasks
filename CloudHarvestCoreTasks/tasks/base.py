@@ -27,8 +27,6 @@ from threading import Thread
 from typing import Any, Dict, List, Literal
 from logging import getLogger
 
-from silos import get_silo
-
 _log_levels = Literal['debug', 'info', 'warning', 'error', 'critical']
 USER_FILTERS = {
     'add_keys': [],

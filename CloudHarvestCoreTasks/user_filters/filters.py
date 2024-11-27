@@ -94,7 +94,8 @@ class MongoUserFilter(BaseUserFilter):
 
         return self
 
-    def _matches(self, pre_syntax: dict) -> dict:
+    @staticmethod
+    def _matches(pre_syntax: dict) -> dict:
         """
         Converts matching syntax into a MongoDb filter.
         """
@@ -231,7 +232,8 @@ class SqlUserFilters(BaseUserFilter):
             'parameters': {**_select_params, **_where_params, **_limit_params}
         }
 
-    def _select(self, headers) -> tuple:
+    @staticmethod
+    def _select(headers) -> tuple:
         from uuid import uuid4
 
         parameterized_headers = {
@@ -242,7 +244,8 @@ class SqlUserFilters(BaseUserFilter):
 
         return result, parameterized_headers
 
-    def _where(self, matches: List[List[str]]) -> tuple:
+    @staticmethod
+    def _where(matches: List[List[str]]) -> tuple:
         """
         Converts matching syntax into an SQL WHERE clause condition.
 
@@ -267,7 +270,8 @@ class SqlUserFilters(BaseUserFilter):
 
         return 'WHERE ' + clauses, parameters
 
-    def _order(self, sort: dict) -> tuple:
+    @staticmethod
+    def _order(sort: dict) -> tuple:
         from uuid import uuid4
 
         # Convert the sort into a parameterized dictionary
@@ -282,7 +286,8 @@ class SqlUserFilters(BaseUserFilter):
         # Return the syntax, and the parameters using uuid and key names
         return syntax, {key: value[0] for key, value in sort_parameters.items()}
 
-    def _limit(self, limit: int) -> tuple:
+    @staticmethod
+    def _limit(limit: int) -> tuple:
         from uuid import uuid4
         uid = str(uuid4()).replace('-', '_')
 

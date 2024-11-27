@@ -338,7 +338,7 @@ class BaseTask:
 
         finally:
             # Update the metadata with the task's status, duration, and other information
-            self.meta = self.meta | {
+            self.meta |= {
                 'attempts': self.attempts,
                 'count': len(self.result) if hasattr(self, '__len__') else 1,
                 'duration': self.duration,

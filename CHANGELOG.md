@@ -1,5 +1,6 @@
 # 0.4.3
 - Added `drop_silos(*names)` to the Silos
+- Added `HarvestAgentBlueprint` and `HarvestApiBlueprint` objects
 
 # 0.4.2
 - Added `BaseHarvestTaskChain` and `HarvestRecordUpdateTask` to upload data collected from other sources to a persistent silo

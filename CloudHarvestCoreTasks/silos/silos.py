@@ -136,32 +136,29 @@ class MongoSilo(BaseSilo):
         # Get the connection
         client = self.connect()
 
-        # Identify databases
-        for database in indexes.keys():
+        # Identify collections
+        for collection in indexes.keys():
 
-            # Identify collections
-            for collection in indexes['harvest'].keys():
+            # Identify indexes
+            for index in indexes[collection]:
 
-                # Identify indexes
-                for index in indexes['harvest'][collection]:
+                # Add single-field indexes defined as a list of strings
+                if isinstance(index, (str, list)):
+                    client['harvest'][collection].create_index(keys=index)
+                    logger.debug(f'{client.log_prefix}: added index: {self.database}.{collection}.{str(index)}')
 
-                    # Add single-field indexes defined as a list of strings
-                    if isinstance(index, (str, list)):
-                        client['harvest'][collection].create_index(keys=index)
-                        logger.debug(f'{client.log_prefix}: added index: {database}.{collection}.{str(index)}')
+                # Add complex indexes defined as a dictionary
+                elif isinstance(index, dict):
 
-                    # Add complex indexes defined as a dictionary
-                    elif isinstance(index, dict):
+                    # pymongo is very picky and demands a list[tuple())
+                    keys = [(i['field'], i.get('sort', 1)) for i in index.get('keys', [])]
 
-                        # pymongo is very picky and demands a list[tuple())
-                        keys = [(i['field'], i.get('sort', 1)) for i in index.get('keys', [])]
+                    client['harvest'][collection].create_index(keys=keys, **index['options'])
 
-                        client['harvest'][collection].create_index(keys=keys, **index['options'])
+                    logger.debug(f'{client.log_prefix}: added index: {self.database}.{collection}.{str(index)}')
 
-                        logger.debug(f'{client.log_prefix}: added index: {database}.{collection}.{str(index)}')
-
-                    else:
-                        logger.error(f'unexpected type for index `{index}`: {str(type(index))}')
+                else:
+                    logger.error(f'unexpected type for index `{index}`: {str(type(index))}')
 
     def connect(self) -> MongoClient:
         """

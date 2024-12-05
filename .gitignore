@@ -130,7 +130,6 @@ dmypy.json
 
 # Harvest-specific
 .harvest/*
-.idea
 
 # Poetry
 poetry.lock

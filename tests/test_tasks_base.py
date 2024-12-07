@@ -197,15 +197,30 @@ class TestBaseTask(BaseTestCase):
 class TestBaseHarvestTaskChain(BaseTestCase):
     def setUp(self):
         # Create a test silo for the task chain
-        from ..CloudHarvestCoreTasks.silos import add_silo
+        from ..CloudHarvestCoreTasks.silos import add_silo, get_silo
+        from data import MONGO_TEST_RECORDS
+        from pymongo import MongoClient
+
         add_silo(name='harvest-core',
                  engine='mongo',
                  host='localhost',
-                 port=44444,
+                 port=27017,
                  username='harvest-api',
                  password='default-harvest-password',
                  database='harvest',
                  authSource='harvest')
+
+
+        silo = get_silo('harvest-core')
+        client = silo.connect()
+        self.collection = client[silo.database]['users']
+
+        # Ensure the collection is empty before inserting records
+        self.collection.drop()
+
+        self.collection.insert_many(MONGO_TEST_RECORDS)
+
+        assert len(list(self.collection.find())) == 10
 
         # Create a dummy task and add it to the task chain
         self.task_configuration = {
@@ -257,6 +272,12 @@ class TestBaseHarvestTaskChain(BaseTestCase):
 
         from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
         self.base_task_chain = task_chain_from_dict(template=self.task_configuration)
+
+    def tearDown(self):
+        # Drop the collection
+        self.collection.drop()
+
+        assert len(list(self.collection.find())) == 0
 
     def test_run(self):
         # Test the run method of the BaseHarvestTaskChain class

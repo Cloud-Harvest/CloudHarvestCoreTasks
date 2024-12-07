@@ -7,7 +7,7 @@ class test_MongoSilo(TestCase):
         self.silo = MongoSilo(name='test',
                               engine='mongo',
                               host='localhost',
-                              port=44444,
+                              port=27017,
                               database='test',
                               username='admin',
                               password='default-harvest-password',

@@ -3,6 +3,7 @@ import os
 import tempfile
 import unittest
 
+from data import MONGO_TEST_RECORDS
 from ..CloudHarvestCoreTasks.tasks import *
 
 
@@ -308,16 +309,32 @@ class TestJsonTask(unittest.TestCase):
 
 class TestMongoTask(unittest.TestCase):
     def setUp(self):
-        from ..CloudHarvestCoreTasks.silos import add_silo
+        from ..CloudHarvestCoreTasks.silos import add_silo, get_silo
 
         add_silo(name='test_silo',
                  engine='mongo',
                  host='localhost',
-                 port=44444,
+                 port=27017,
                  username='harvest-api',
                  password='default-harvest-password',
                  database='harvest',
                  authSource='harvest')
+
+        from pymongo import MongoClient
+        silo = get_silo('test_silo')
+        client: MongoClient = silo.connect()
+        self.collection = client['harvest']['users']
+
+        # Ensures that the collection is empty before inserting the records
+        self.collection.drop()
+
+        self.collection.insert_many(MONGO_TEST_RECORDS)
+        assert len(list(self.collection.find())) == 10
+
+    def tearDown(self):
+        self.collection.drop()
+
+        assert len(list(self.collection.find())) == 0
 
     def test_method_find(self):
         task_chain_configuration = {
@@ -390,7 +407,7 @@ class TestRedisTask(unittest.TestCase):
         add_silo(name='test_silo',
                  engine='redis',
                  host='localhost',
-                 port=44445,
+                 port=6379,
                  database=0,
                  password='default-harvest-password',
                  decode_responses=True)
@@ -399,7 +416,7 @@ class TestRedisTask(unittest.TestCase):
         from redis import StrictRedis
         cls.redis_connection_config = {
             'host': 'localhost',
-            'port': 44445,
+            'port': 6379,
             'password': 'default-harvest-password',
             'decode_responses': True
         }

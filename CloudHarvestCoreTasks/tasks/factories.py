@@ -55,11 +55,9 @@ def task_chain_from_dict(template: dict, **kwargs) -> BaseTaskChain:
     This function takes a dictionary representation of a task chain and the name of the task chain class to create, and
     returns an instance of that class.
 
-    Parameters:
-    task_chain_registered_class_name (str): The name of the task chain.
-    task_chain (dict): The dictionary representation of the task chain. This should include all the necessary
-                       information to create the task chain, such as the tasks to be executed and their order.
-    extra_vars (dict): A dictionary of extra variables to be passed to the task chain.
+    Arguments
+    template (dict): A dictionary representation of the task chain.
+    **kwargs: Additional keyword arguments to pass to the task
 
     Returns:
     BaseTaskChain: An instance of the specified task chain class, initialized with the information from the provided

@@ -1,6 +1,10 @@
 # 0.4.3
 - Added `drop_silos(*names)` to the Silos
 - Added `HarvestAgentBlueprint` and `HarvestApiBlueprint` objects
+- Updated MongoTask silo usage code
+- Updated to Python 3.13
+- Moved test data from seed files to `tests/data.py` for easier implementation
+- Tests should now leverage default CloudHarvestStack configurations instead of internally managed `tests/docker-compose.yaml`
 
 # 0.4.2
 - Added `BaseHarvestTaskChain` and `HarvestRecordUpdateTask` to upload data collected from other sources to a persistent silo

@@ -1,4 +1,4 @@
-CloudHarvestCorePluginManager @ git+https://github.com/Cloud-Harvest/CloudHarvestCorePluginManager.git@main
+CloudHarvestCorePluginManager @ git+https://github.com/Cloud-Harvest/CloudHarvestCorePluginManager.git@0.4.0
 Flask
 flatten-json
 Jinja2

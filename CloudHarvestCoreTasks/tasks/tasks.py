@@ -860,24 +860,24 @@ class MongoTask(BaseDataTask):
         self.collection = collection
         self.result_attribute = result_attribute
 
-    def is_connected(self) -> bool:
-        """
-        Checks if the task is connected to the database.
-
-        Returns:
-            bool: True if the task is connected to the database, otherwise False.
-        """
-        from pymongo import MongoClient
-        silo_config = self.silo.__dict__()
-        silo_config.pop('engine')
-        silo_config.pop('database')
-
-        silo_extend = silo_config.pop('extended_db_configuration', {})
-        connection_config = silo_config | silo_extend
-        client = MongoClient(**connection_config)
-        si = client.server_info()
-
-        return True
+    # def is_connected(self) -> bool:
+    #     """
+    #     Checks if the task is connected to the database.
+    #
+    #     Returns:
+    #         bool: True if the task is connected to the database, otherwise False.
+    #     """
+    #     from pymongo import MongoClient
+    #     silo_config = self.silo.__dict__()
+    #     silo_config.pop('engine')
+    #     silo_config.pop('database')
+    #
+    #     silo_extend = silo_config.pop('extended_db_configuration', {})
+    #     connection_config = silo_config | silo_extend
+    #     client = MongoClient(**connection_config)
+    #     si = client.server_info()
+    #
+    #     return True
 
     def apply_user_filters(self) -> 'BaseTask':
         """
@@ -904,15 +904,17 @@ class MongoTask(BaseDataTask):
         """
 
         # If connected, return existing connection otherwise connect
-        from pymongo import MongoClient
-        silo_config = self.silo.__dict__()
-        silo_config.pop('engine')
-        silo_config.pop('database')
+        # from pymongo import MongoClient
+        # silo_config = self.silo.__dict__()
+        # silo_config.pop('engine')
+        # silo_config.pop('database')
+        #
+        # silo_extend = silo_config.pop('extended_db_configuration', {})
+        # connection_config = silo_config | silo_extend
+        # client = MongoClient(**connection_config)
+        # si = client.server_info()
 
-        silo_extend = silo_config.pop('extended_db_configuration', {})
-        connection_config = silo_config | silo_extend
-        client = MongoClient(**connection_config)
-        si = client.server_info()
+        client: MongoClient = self.silo.connect()
 
         if not self.silo.is_connected:
             raise ConnectionError(f'{self.name}: Unable to connect to the {self.silo.name} silo.')

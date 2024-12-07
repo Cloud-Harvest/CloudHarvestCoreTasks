@@ -5,6 +5,8 @@
 - Updated to Python 3.13
 - Moved test data from seed files to `tests/data.py` for easier implementation
 - Tests should now leverage default CloudHarvestStack configurations instead of internally managed `tests/docker-compose.yaml`
+- `task_chain_from_dict()` now merges `**kwargs` with the task chain configuration on class instantiation
+
 
 # 0.4.2
 - Added `BaseHarvestTaskChain` and `HarvestRecordUpdateTask` to upload data collected from other sources to a persistent silo

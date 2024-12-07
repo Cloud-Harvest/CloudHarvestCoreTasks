@@ -92,7 +92,7 @@ def task_chain_from_dict(template: dict, **kwargs) -> BaseTaskChain:
         task_chain_configuration['name'] = task_chain_registered_class_name
 
     # Instantiate the task chain class.
-    result = chain_class(template=task_chain_configuration, **task_chain_configuration)
+    result = chain_class(template=task_chain_configuration, **task_chain_configuration | kwargs)
 
     return result
 

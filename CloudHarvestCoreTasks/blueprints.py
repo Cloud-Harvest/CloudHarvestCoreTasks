@@ -21,7 +21,7 @@ class HarvestAgentBlueprint(Blueprint):
         super().__init__(*args, **kwargs)
 
 
-@register_definition(category='harvest_blueprint', name='harvest_api_blueprint', register_instances=True)
+@register_definition(name='harvest_blueprint', category='harvest_api_blueprint', register_instances=True)
 class HarvestApiBlueprint(Blueprint):
     def __init__(self, *args, **kwargs):
         logger.info(f'Initializing Blueprint: {args[0]}')

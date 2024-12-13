@@ -93,7 +93,7 @@ class BaseSilo:
 
         return func(**config)
 
-@register_definition('silo', 'mongo_silo')
+@register_definition('silo', 'mongo')
 class MongoSilo(BaseSilo):
     from pymongo import MongoClient
 
@@ -191,7 +191,7 @@ class MongoSilo(BaseSilo):
         else:
             raise ConnectionError(f'Could not connect to the MongoDB database {self.name}.')
 
-@register_definition('silo', 'redis_silo')
+@register_definition('silo', 'redis')
 class RedisSilo(BaseSilo):
     from redis import StrictRedis
 
@@ -266,11 +266,8 @@ def add_silo(name: str, **kwargs) -> BaseSilo:
     # We use the Registry here in case there are plugins which support silo engines not defined in the CoreTasks repo.
     from CloudHarvestCorePluginManager.registry import Registry
 
-    # Define the class name
-    class_name = f'{engine.title()}_silo'
-
     # Retrieve the class name
-    silo_class = Registry.find(result_key='cls', name=class_name, category='silo')
+    silo_class = Registry.find(result_key='cls', name=engine, category='silo')
 
     # Raise an error if the class is not found
     if not silo_class:

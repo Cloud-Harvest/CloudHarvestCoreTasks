@@ -13,7 +13,7 @@ from logging import getLogger
 logger = getLogger('harvest')
 
 
-@register_definition(name='harvest_blueprint', category='harvest_agent_blueprint', register_instances=True)
+@register_definition(name='agent', category='blueprint', register_instances=True)
 class HarvestAgentBlueprint(Blueprint):
     def __init__(self, *args, **kwargs):
         logger.info(f'Initializing Blueprint: {args[0]}')
@@ -21,7 +21,7 @@ class HarvestAgentBlueprint(Blueprint):
         super().__init__(*args, **kwargs)
 
 
-@register_definition(name='harvest_blueprint', category='harvest_api_blueprint', register_instances=True)
+@register_definition(name='api', category='blueprint', register_instances=True)
 class HarvestApiBlueprint(Blueprint):
     def __init__(self, *args, **kwargs):
         logger.info(f'Initializing Blueprint: {args[0]}')

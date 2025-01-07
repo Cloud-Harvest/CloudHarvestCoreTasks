@@ -1131,13 +1131,6 @@ class BaseTaskChain(List[BaseTask]):
         finally:
             self.on_complete()
 
-            if self.reporting_thread:
-                try:
-                    self.reporting_thread.join(timeout=5)
-
-                except TimeoutError:
-                    pass
-
             return self
 
     def iterate_task(self, original_task_configuration: dict) -> List[dict]:
@@ -1212,58 +1205,6 @@ class BaseTaskChain(List[BaseTask]):
         self.status = TaskStatusCodes.terminating
 
         return self
-
-    # def update_task_chain_cache_thread(self) -> Thread or None:
-    #     """
-    #     This method is responsible for updating the job cache with the task chain's progress.
-    #     """
-    #
-    #     from ..silos import get_silo
-    #
-    #     # We only report status to harvest-jobs. If the silo is not available, we return None.
-    #     if not get_silo('harvest-jobs'):
-    #         return None
-    #
-    #     def update_task_chain_cache():
-    #         """
-    #         Updates the job cache with the task chain's progress.
-    #         """
-    #         while True:
-    #             cache_entry = {
-    #                 'id': self.id,
-    #                 'status': self.status.__str__(),
-    #                 'start': self.start,
-    #                 'end': self.end
-    #             } | self.detailed_progress()
-    #
-    #             try:
-    #                 client = get_silo('harvest-jobs').connect()
-    #
-    #                 client.hset(name=self.id, mapping=cache_entry)
-    #
-    #                 # A job which has not updated in 15 minutes is considered stale and will be removed from the cache.
-    #                 client.expire(name=self.id, time=900)
-    #
-    #             except Exception as ex:
-    #                 logger.error(f'{self.name}: Error updating job cache: {ex}')
-    #
-    #             finally:
-    #                 from time import sleep
-    #
-    #                 match self.status:
-    #                     case TaskStatusCodes.initialized, TaskStatusCodes.idle:
-    #                         sleep(5)
-    #
-    #                     case TaskStatusCodes.complete:
-    #                         break
-    #
-    #                     case _:
-    #                         sleep(1)
-    #
-    #     thread = Thread(target=update_task_chain_cache, daemon=True)
-    #     thread.start()
-    #
-    #     return thread
 
 
 @register_definition(name='harvest', category='chain')

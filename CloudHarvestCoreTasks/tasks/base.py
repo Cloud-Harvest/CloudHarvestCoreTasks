@@ -24,7 +24,7 @@ from CloudHarvestCorePluginManager.decorators import register_definition
 from datetime import datetime, timezone
 from enum import Enum
 from threading import Thread
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, List, Literal, Tuple
 from logging import getLogger
 
 _log_levels = Literal['debug', 'info', 'warning', 'error', 'critical']
@@ -679,7 +679,10 @@ class BaseTaskChain(List[BaseTask]):
 
         self.meta = {}
 
-        # self.reporting_thread = self.update_task_chain_cache_thread()
+        # When set, the TaskChain will send results to this silo when it completes or errors. Can only be set after the
+        # TaskChain has been instantiated. This is to prevent users from setting the silo in the template, thus sending
+        # results to the wrong silo.
+        self.results_silo = None
 
     def __enter__(self) -> 'BaseTaskChain':
         """
@@ -1023,6 +1026,8 @@ class BaseTaskChain(List[BaseTask]):
         self.status = TaskStatusCodes.complete
         self.end = datetime.now(tz=timezone.utc)
 
+        self.results_to_silo()
+
         return self
 
     def on_error(self, ex: Exception) -> 'BaseTaskChain':
@@ -1042,6 +1047,8 @@ class BaseTaskChain(List[BaseTask]):
 
         logger.error(f'Error running task chain {self.name}: {ex}')
 
+        self.results_to_silo()
+
         return self
 
     def on_start(self) -> 'BaseTaskChain':
@@ -1054,6 +1061,23 @@ class BaseTaskChain(List[BaseTask]):
         self.start = datetime.now(tz=timezone.utc)
 
         return self
+
+    def results_to_silo(self):
+        """
+        Sends the TaskChain results to a remote silo.
+        """
+
+        if self.results_silo:
+            from ..silos import get_silo
+            from json import dumps
+            silo = get_silo(self.results_silo)
+
+            try:
+                client = silo.connect()
+                client.set(self.id, dumps(self.result, default=str))
+
+            except Exception as ex:
+                logger.error(f'Error storing task chain results in silo {self.results_silo}: {ex}')
 
     def run(self) -> 'BaseTaskChain':
         """

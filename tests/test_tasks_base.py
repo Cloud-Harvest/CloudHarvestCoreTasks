@@ -1,5 +1,5 @@
 import unittest
-from CloudHarvestCorePluginManager.functions import register_objects
+from CloudHarvestCorePluginManager.registry import register_objects
 from ..CloudHarvestCoreTasks.tasks import *
 
 

@@ -645,8 +645,6 @@ class BaseTaskChain(List[BaseTask]):
                 tasks(List[dict]): A list of task configurations for the tasks in the chain.
                 description(str, optional): A brief description of what the task chain does. Defaults to None.
                 max_workers(int, optional): The maximum number of concurrent workers that are permitted.
-            cache_progress(bool, optional): A boolean indicating whether the progress of the task chain should
-                                            be reported to the Ephemeral Silo. Defaults to False.
             user_filters(dict, optional): A dictionary of user filters to apply to the data. Defaults to None.
             variables(dict, optional): Variables that can be used by the tasks in the chain. The dictionary is merged
                                         with into the BaseTaskChain.variables attribute. Defaults to None.
@@ -662,7 +660,7 @@ class BaseTaskChain(List[BaseTask]):
         self.description = template.get('description')
 
         # Variables are stored with their name as the key.
-        # Starting variables can be added using the variables parameter.
+        # Starting variables can be added using the `variables` parameter.
         self.variables: Dict[str, Any] = {} | (variables or {})
 
         self.task_templates: List[dict or BaseTask] = template.get('tasks', [])

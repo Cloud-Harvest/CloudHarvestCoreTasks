@@ -1073,8 +1073,16 @@ class BaseTaskChain(List[BaseTask]):
             silo = get_silo(self.results_silo)
 
             try:
-                client = silo.connect()
-                client.set(self.id, dumps(self.result, default=str))
+                from redis import StrictRedis
+                client: StrictRedis = silo.connect()
+                client.mset(
+                    {
+                        self.id: {
+                            'data': dumps(self.result['data']),
+                            'meta': dumps(self.result['meta'])
+                        }
+                    }
+                )
 
             except Exception as ex:
                 logger.error(f'Error storing task chain results in silo {self.results_silo}: {ex}')

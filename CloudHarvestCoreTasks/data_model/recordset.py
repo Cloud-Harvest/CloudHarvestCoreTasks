@@ -418,6 +418,28 @@ class HarvestRecord(OrderedDict):
 
         return self
 
+    def title_keys(self, remove_characters: List[str] = None, replacement_character: str = '') -> 'HarvestRecord':
+        """
+        Title case the keys of the record, optionally removing characters after title casing.
+
+        :param remove_characters: a list of characters to remove from the keys, defaults to None
+        :param replacement_character: the character to replace the removed characters with, defaults to ''
+        """
+
+        for key in list(self.keys()):
+            new_key = key.title()
+
+            # If provided, remove characters from the new key. This is useful for removing spaces, underscores, etc
+            # which made sense in the original key format but not when titled.
+            if remove_characters:
+                for char in remove_characters:
+                    new_key = new_key.replace(char, replacement_character)
+
+            # Replace the old key with the new key
+            self[new_key] = self.pop(key, None)
+
+        return self
+
     def unflatten(self, separator: str = '.') -> 'HarvestRecord':
         """
         Unflatten the record.

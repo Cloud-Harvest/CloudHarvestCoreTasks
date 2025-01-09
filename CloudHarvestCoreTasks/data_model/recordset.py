@@ -8,7 +8,7 @@ Classes:
 
 """
 
-from typing import Dict, List, Literal
+from typing import Any, Dict, List, Literal
 from collections import OrderedDict
 
 
@@ -161,6 +161,20 @@ class HarvestRecord(OrderedDict):
                 result = delimiter.join(result)
 
         self[target_key] = result
+
+        return self
+
+    def assign_value_to_key(self, key: str, value: Any = None, clobber: bool = False) -> 'HarvestRecord':
+        """
+        Assign a value to a key in the record.
+
+        :param key: the name of the key
+        :param value: the value to assign to the key, defaults to None
+        :param clobber: whether to overwrite the existing value, defaults to False
+        """
+
+        if clobber or key not in self:
+            self[key] = value
 
         return self
 

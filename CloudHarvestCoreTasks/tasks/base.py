@@ -743,109 +743,95 @@ class BaseTaskChain(List[BaseTask]):
 
         The method returns a dictionary with the following keys:
 
-        - 'TaskMetrics': Contains a list of dictionaries, each representing a task in the task chain. Each dictionary
+        - 'data': Contains a list of dictionaries, each representing a task in the task chain. Each dictionary
           includes the following keys:
             - 'Position': The position of the task in the task chain.
             - 'Name': The name of the task.
             - 'Status': The status of the task.
+            - 'Attempts': The number of attempts made to run the task.
             - 'DataBytes': The size of the data produced by the task, in bytes.
             - 'Records': The number of records in the task's data, if applicable.
             - 'Duration': The duration of the task, in seconds.
             - 'Start': The start time of the task.
             - 'End': The end time of the task.
 
-        - 'Timings': Contains statistics about the durations of the tasks in the task chain, including the average,
-           maximum, minimum, and standard deviation.
-
-        - 'SystemMetrics': Contains a list of dictionaries, each representing a system metric. Each dictionary includes
-          the following keys:
-            - 'Name': The name of the metric.
-            - 'Value': The value of the metric.
-
-            The system metrics returned are:
-            - CPU Cores: The number of CPU cores.
-            - CPU Threads: The number of CPU threads.
-            - CPU Architecture: The CPU architecture.
-            - CPU Clock Speed: The CPU clock speed.
-            - OS Architecture: The OS architecture.
-            - OS Version: The OS version.
-            - OS 64/32 bit: Whether the OS is 64 or 32 bit.
-            - OS Runtime: The OS runtime.
-            - Total Memory: The total memory available.
-            - Available Memory: The available memory.
-            - Swap Size: The size of the swap space.
-            - Swap Usage: The amount of swap space used.
-            - Total Disk Space: The total disk space.
-            - Used Disk Space: The used disk space.
-            - Free Disk Space: The free disk space.
+        - 'meta': Contains metadata about the task chain, including the headers for the task metrics.
 
         Returns:
-            List[dict]: A dictionary representing the performance metrics of the task chain.
+            dict: A dictionary representing the performance metrics of the task chain.
         """
 
-        from sys import getsizeof
+        if len(self) > 0:
+            from sys import getsizeof
 
-        # This part of the report returns results for each task in the task chain.
-        task_metrics = [
-            {
-                'Position': self.position,
-                'Name': task.name,
-                'Status': task.status.__str__(),
-                'Attempts': task.attempts,
-                'DataBytes': getsizeof(task.result),
-                'Records': len(task.result) if hasattr(task.result, '__len__') else 'N/A',
-                'Duration': task.duration,
-                'Start': task.start,
-                'End': task.end,
-            }
-            for task in self
-        ]
-
-        # Gather metrics for the entire task chain
-        # We generate multiple lists through one loop to perform the necessary calculations without having to loop
-        # multiple times through the TaskChain's tasks.
-        total_records = []
-        total_result_size = []
-        starts = []
-        ends = []
-        for task in self:
-            if hasattr(task.result, '__len__'):
-                total_records.append(len(task.result))
-
-            total_result_size.append(getsizeof(task.result))
-            starts.append(task.start)
-            ends.append(task.end)
-
-        # Add a total row to the task metrics
-        total_records = sum(total_records)
-        total_result_size = sum(total_result_size)
-        starts = min(starts)
-        ends = max(ends)
-
-        task_metrics.append({
-            'Position': 'Total',
-            'Name': '',
-            'Status': self.status.__str__(),
-            'Records': total_records,
-            'DataBytes': total_result_size,
-            'Duration': (ends - starts).total_seconds() if starts and ends else 0,
-            'Start': starts,
-            'End': ends,
-        })
-
-        # Add a buffer run between the task list and the Total
-        # We add it at this stage just in case there are no Tasks in the TaskChain
-        # which means the only row in the task_metrics list is the Total row
-        task_metrics.insert(-1, {k: '' for k in task_metrics[-1].keys()})
-
-        return [
-            {
-                'data': task_metrics,
-                'meta': {
-                    'headers': [k for k in task_metrics[0].keys()]
+            # This part of the report returns results for each task in the task chain.
+            task_metrics = [
+                {
+                    'Position': self.position,
+                    'Name': task.name,
+                    'Status': task.status.__str__(),
+                    'Attempts': task.attempts,
+                    'DataBytes': getsizeof(task.result),
+                    'Records': len(task.result) if hasattr(task.result, '__len__') else 'N/A',
+                    'Duration': task.duration,
+                    'Start': task.start,
+                    'End': task.end,
                 }
-            }
-        ]
+                for task in self
+            ]
+
+            # Gather metrics for the entire task chain
+            # We generate multiple lists through one loop to perform the necessary calculations without having to loop
+            # multiple times through the TaskChain's tasks.
+            total_records = []
+            total_result_size = []
+            starts = []
+            ends = []
+            for task in self:
+                if hasattr(task.result, '__len__'):
+                    total_records.append(len(task.result))
+
+                total_result_size.append(getsizeof(task.result))
+                starts.append(task.start)
+                ends.append(task.end)
+
+            # Add a total row to the task metrics
+            total_records = sum(total_records)
+            total_result_size = sum(total_result_size)
+            starts = min(starts)
+            ends = max(ends)
+
+            task_metrics.append({
+                'Position': 'Total',
+                'Name': '',
+                'Status': self.status.__str__(),
+                'Records': total_records,
+                'DataBytes': total_result_size,
+                'Duration': (ends - starts).total_seconds() if starts and ends else 0,
+                'Start': starts,
+                'End': ends,
+            })
+
+            # Add a buffer run between the task list and the Total
+            # We add it at this stage just in case there are no Tasks in the TaskChain
+            # which means the only row in the task_metrics list is the Total row
+            # task_metrics.insert(-1, {k: '' for k in task_metrics[-1].keys()})
+
+        else:
+            # If there are no tasks in the task chain, we return a single row with the total metrics.
+            task_metrics = [{
+                'Position': 'Total',
+                'Name': '',
+                'Status': self.status.__str__(),
+                'Records': 0,
+                'DataBytes': 0,
+                'Duration': (self.end - self.start).total_seconds() if self.start and self.end else 0,
+                'Start': self.start,
+                'End': self.end,
+            }]
+
+
+        return task_metrics
 
     @property
     def result(self) -> dict:
@@ -1078,8 +1064,8 @@ class BaseTaskChain(List[BaseTask]):
                 client.hset(
                     name=self.id,
                     mapping={
-                        'data': dumps(self.result['data']),
-                        'meta': dumps(self.result['meta'])
+                        'data': dumps(self.result['data'], default=str),
+                        'meta': dumps(self.performance_metrics['data'], default=str)
                     }
                 )
 

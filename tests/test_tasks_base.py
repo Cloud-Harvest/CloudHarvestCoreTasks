@@ -395,8 +395,7 @@ class TestBaseTaskChain(BaseTestCase):
         # Assert that the report is a dictionary
         self.assertIsInstance(report, list)
         # Assert that the report contains the expected keys
-        self.assertEqual(report[0]['data'][-2]['Position'], '')
-        self.assertEqual(report[0]['data'][-1]['Position'], 'Total')
+        self.assertEqual(report[-1]['Position'], 'Total')
 
 class TestBaseTaskChainIterateDirective(BaseTestCase):
     def setUp(self):

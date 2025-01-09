@@ -1065,7 +1065,7 @@ class BaseTaskChain(List[BaseTask]):
                     name=self.id,
                     mapping={
                         'data': dumps(self.result['data'], default=str),
-                        'meta': dumps(self.performance_metrics['data'], default=str)
+                        'meta': dumps(self.performance_metrics, default=str)
                     }
                 )
 

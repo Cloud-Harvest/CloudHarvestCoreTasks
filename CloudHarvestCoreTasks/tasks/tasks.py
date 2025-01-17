@@ -319,32 +319,37 @@ class HarvestRecordSetTask(BaseTask):
 
         from ..data_model.recordset import HarvestRecordSet, HarvestRecord
         for stage in self.stages:
-            # Each dictionary should only contain one key-value pair
-            for function, arguments in stage.items():
+            try:
+                # Each dictionary should only contain one key-value pair
+                for function, arguments in stage.items():
 
-                # This is a HarvestRecordSet command
-                if hasattr(HarvestRecordSet, function):
-                    # We don't template RecordSet commands because they are not intended to be used with record-level data
-                    getattr(self.data, function)(**(arguments or {}))
+                    # This is a HarvestRecordSet command
+                    if hasattr(HarvestRecordSet, function):
+                        # We don't template RecordSet commands because they are not intended to be used with record-level data
+                        getattr(self.data, function)(**(arguments or {}))
 
-                # This is a HarvestRecord command which must iterate over each record in the record set
-                elif hasattr(HarvestRecord, function):
-                    for record in self.data:
-                        # Here, we use record-level templating to allow for dynamic arguments based on the record
-                        from .templating import template_object
+                    # This is a HarvestRecord command which must iterate over each record in the record set
+                    elif hasattr(HarvestRecord, function):
+                        for record in self.data:
+                            # Here, we use record-level templating to allow for dynamic arguments based on the record
+                            from .templating import template_object
 
-                        # We can't used items() here because we do not iterate over the dictionary
-                        templated_stage = template_object(template=self.original_template['stages'][self.stage_position],
-                                                          variables=record)
+                            # We can't used items() here because we do not iterate over the dictionary
+                            templated_stage = template_object(template=self.original_template['stages'][self.stage_position],
+                                                              variables=record)
 
-                        # Execute the function on the record
-                        getattr(record, function)(**(list(templated_stage.values())[0] or {}))
+                            # Execute the function on the record
+                            getattr(record, function)(**(list(templated_stage.values())[0] or {}))
 
-                else:
-                    from .exceptions import HarvestRecordsetTaskException
-                    raise HarvestRecordsetTaskException(f"Neither HarvestRecordSet nor HarvestRecord has a method named '{function}'")
+                    else:
+                        from .exceptions import HarvestRecordsetTaskException
+                        raise HarvestRecordsetTaskException(f"Neither HarvestRecordSet nor HarvestRecord has a method named '{function}'")
 
-                break
+                    break
+
+            except Exception as ex:
+                from .base import BaseTaskException
+                raise BaseTaskException(f"Error executing stage [{self.stages.index(stage) + 1}] {list(stage.keys())[0]}: {str(ex)}")
 
             # Increment the stage_position
             self.stage_position += 1

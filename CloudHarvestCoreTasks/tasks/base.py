@@ -418,7 +418,11 @@ class BaseTask:
         if hasattr(ex, 'args'):
             self.meta['Errors'].append(str(ex.args))
 
-        logger.error(f'Error running task {self.name}: {ex}')
+        if self.task_chain:
+            logger.error(f'{self.task_chain.id}[{self.position + 1}]: Error running task "{self.name}": {ex}')
+
+        else:
+            logger.error(f'Error running task "{self.name}": {ex}')
 
         self._run_on_directive('error')
 
@@ -1031,7 +1035,7 @@ class BaseTaskChain(List[BaseTask]):
         if self.pool.queue_size:
             self.pool.terminate()
 
-        logger.error(f'Error running task chain {self.name}: {ex}')
+        logger.error(f'{self.id}: Error running task chain {self.name}: {ex}')
 
         self.results_to_silo()
 

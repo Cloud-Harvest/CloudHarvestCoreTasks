@@ -10,12 +10,6 @@ class BaseTestCase(unittest.TestCase):
         super(BaseTestCase, cls).setUpClass()
 
 
-class TestTaskStatusCodes(BaseTestCase):
-    def test_enum_values(self):
-        task_codes = TaskStatusCodes.__members__
-        [self.assertTrue(code == TaskStatusCodes[code].value) for code in task_codes]
-
-
 class TestTaskConfiguration(BaseTestCase):
     def setUp(self):
         # Create a dummy task and add it to the registry
@@ -61,10 +55,10 @@ class TestTaskConfiguration(BaseTestCase):
         self.assertIsNone(self.base_task_chain.result.get('error'))
         self.assertIsInstance(self.base_task_chain[0], DummyTask)
         self.assertIsInstance(self.base_task_chain[1], WaitTask)
-        self.assertEqual(str(self.base_task_chain[0].status), str(str(TaskStatusCodes.complete)))
-        self.assertEqual(str(self.base_task_chain[1].status), str(str(TaskStatusCodes.skipped)))
-        self.assertEqual(str(self.base_task_chain[2].status), str(str(TaskStatusCodes.complete)))
-        self.assertEqual(str(str(self.base_task_chain.status)), str(str(TaskStatusCodes.complete)))
+        self.assertEqual(str(self.base_task_chain[0].status), TaskStatusCodes.complete)
+        self.assertEqual(str(self.base_task_chain[1].status), TaskStatusCodes.skipped)
+        self.assertEqual(str(self.base_task_chain[2].status), TaskStatusCodes.complete)
+        self.assertEqual(str(str(self.base_task_chain.status)), TaskStatusCodes.complete)
 
 
 class TestBaseTask(BaseTestCase):
@@ -77,17 +71,17 @@ class TestBaseTask(BaseTestCase):
         # Test the __init__ method
         self.assertEqual(self.base_task.name, 'test')
         self.assertEqual(self.base_task.description, 'test task')
-        self.assertEqual(str(str(self.base_task.status)), str(TaskStatusCodes.initialized))
+        self.assertEqual(str(str(self.base_task.status)), TaskStatusCodes.initialized)
 
     def test_run(self):
         # Test the run method
         self.base_task.run()
-        self.assertEqual(str(self.base_task.status), str(TaskStatusCodes.complete))
+        self.assertEqual(str(self.base_task.status), TaskStatusCodes.complete)
 
     def test_on_complete(self):
         # Test the on_complete method
         self.base_task.on_complete()
-        self.assertEqual(str(self.base_task.status), str(TaskStatusCodes.complete))
+        self.assertEqual(str(self.base_task.status), TaskStatusCodes.complete)
 
     def test_on_error(self):
         # Test the on_error method
@@ -96,7 +90,7 @@ class TestBaseTask(BaseTestCase):
         except Exception as e:
             self.base_task.on_error(e)
             
-        self.assertEqual(str(self.base_task.status), str(TaskStatusCodes.error))
+        self.assertEqual(str(self.base_task.status), TaskStatusCodes.error)
 
     def test_retry(self):
         # Test the retry method
@@ -165,33 +159,33 @@ class TestBaseTask(BaseTestCase):
         task_chain.run()
 
         # Testing max_attempts and delay
-        self.assertEqual(str(task_chain[0].status), str(TaskStatusCodes.error))
+        self.assertEqual(task_chain[0].status, TaskStatusCodes.error)
         self.assertEqual(task_chain[0].attempts, 3)
 
         # Testing when_error_like (positive)
-        self.assertEqual(str(task_chain[1].status), str(TaskStatusCodes.error))
+        self.assertEqual(task_chain[1].status, TaskStatusCodes.error)
         self.assertEqual(task_chain[1].attempts, 3)
 
         # Testing when_error_like (negative)
-        self.assertEqual(str(task_chain[2].status), str(TaskStatusCodes.error))
+        self.assertEqual(task_chain[2].status, TaskStatusCodes.error)
         self.assertEqual(task_chain[2].attempts, 1)
 
         # Testing when_error_not_like (positive)
-        self.assertEqual(str(task_chain[3].status), str(TaskStatusCodes.error))
+        self.assertEqual(task_chain[3].status, TaskStatusCodes.error)
         self.assertEqual(task_chain[3].attempts, 3)
 
         # Testing when_error_not_like (negative)
-        self.assertEqual(str(task_chain[4].status), str(TaskStatusCodes.error))
+        self.assertEqual(task_chain[4].status, TaskStatusCodes.error)
         self.assertEqual(task_chain[4].attempts, 1)
 
     def test_on_skipped(self):
         self.base_task.on_skipped()
-        self.assertEqual(str(self.base_task.status), str(str(TaskStatusCodes.skipped)))
+        self.assertEqual(str(self.base_task.status), TaskStatusCodes.skipped)
 
     def test_terminate(self):
         # Test the terminate method
         self.base_task.terminate()
-        self.assertEqual(str(self.base_task.status), str(TaskStatusCodes.terminating))
+        self.assertEqual(str(self.base_task.status), TaskStatusCodes.terminating)
 
 
 class TestBaseHarvestTaskChain(BaseTestCase):
@@ -284,7 +278,7 @@ class TestBaseHarvestTaskChain(BaseTestCase):
         self.base_task_chain.run()
         self.assertFalse(self.base_task_chain.errors)
         self.assertEqual(len(self.base_task_chain), 3)
-        self.assertEqual(str(str(self.base_task_chain.status)), str(TaskStatusCodes.complete))
+        self.assertEqual(str(str(self.base_task_chain.status)), TaskStatusCodes.complete)
         self.assertIsNotNone(self.base_task_chain.result)
 
 class TestBaseTaskChain(BaseTestCase):
@@ -337,7 +331,7 @@ class TestBaseTaskChain(BaseTestCase):
         self.assertEqual(self.base_task_chain.name, 'test_chain')
         self.assertEqual(self.base_task_chain.description, 'This is a task_chain.')
         self.assertEqual(self.base_task_chain.variables, {})
-        self.assertEqual(str(str(self.base_task_chain.status)), str(TaskStatusCodes.initialized))
+        self.assertEqual(str(str(self.base_task_chain.status)), TaskStatusCodes.initialized)
         self.assertEqual(self.base_task_chain.position, 0)
         self.assertEqual(self.base_task_chain.start, None)
         self.assertEqual(self.base_task_chain.end, None)
@@ -352,7 +346,7 @@ class TestBaseTaskChain(BaseTestCase):
         self.base_task_chain.run()
 
         # Assert that the status of the task chain is 'complete'
-        self.assertEqual(str(str(self.base_task_chain.status)), str(TaskStatusCodes.complete))
+        self.assertEqual(str(str(self.base_task_chain.status)), TaskStatusCodes.complete)
 
     def test_on_complete(self):
         """
@@ -361,7 +355,7 @@ class TestBaseTaskChain(BaseTestCase):
         # Call the on_complete method of the task chain
         self.base_task_chain.on_complete()
         # Assert that the status of the task chain is 'complete'
-        self.assertEqual(str(str(self.base_task_chain.status)), str(TaskStatusCodes.complete))
+        self.assertEqual(str(str(self.base_task_chain.status)), TaskStatusCodes.complete)
 
     def test_on_error(self):
         """
@@ -374,7 +368,7 @@ class TestBaseTaskChain(BaseTestCase):
             # Call the on_error method of the task chain
             self.base_task_chain.on_error(e)
         # Assert that the status of the task chain is 'error'
-        self.assertEqual(str(str(self.base_task_chain.status)), str(TaskStatusCodes.error))
+        self.assertEqual(str(str(self.base_task_chain.status)), TaskStatusCodes.error)
 
     def test_terminate(self):
         """
@@ -383,7 +377,7 @@ class TestBaseTaskChain(BaseTestCase):
         # Call the terminate method of the task chain
         self.base_task_chain.terminate()
         # Assert that the status of the task chain is 'terminating'
-        self.assertEqual(str(str(self.base_task_chain.status)), str(TaskStatusCodes.terminating))
+        self.assertEqual(str(str(self.base_task_chain.status)), TaskStatusCodes.terminating)
 
     def test_performance_metrics(self):
         """
@@ -425,10 +419,10 @@ class TestBaseTaskChainIterateDirective(BaseTestCase):
         self.task_chain.run()
 
         self.assertEqual(len(self.task_chain), 4)
-        self.assertEqual(str(self.task_chain[0].status), str(TaskStatusCodes.skipped))  # This was the parent task
-        self.assertEqual(str(self.task_chain[1].status), str(TaskStatusCodes.complete))
-        self.assertEqual(str(self.task_chain[2].status), str(TaskStatusCodes.complete))
-        self.assertEqual(str(self.task_chain[3].status), str(TaskStatusCodes.complete))
+        self.assertEqual(str(self.task_chain[0].status), TaskStatusCodes.skipped)  # This was the parent task
+        self.assertEqual(str(self.task_chain[1].status), TaskStatusCodes.complete)
+        self.assertEqual(str(self.task_chain[2].status), TaskStatusCodes.complete)
+        self.assertEqual(str(self.task_chain[3].status), TaskStatusCodes.complete)
 
         # Order checks
         self.assertEqual(self.task_chain[1].name, 'Dummy Iterative Task - 1/3')
@@ -517,28 +511,28 @@ class TestBaseTaskChainOnDirective(BaseTestCase):
         self.base_task_chain.run()
 
         # This is the control task which always succeeds
-        self.assertEqual(str(self.base_task_chain[0].status), str(TaskStatusCodes.complete))
+        self.assertEqual(str(self.base_task_chain[0].status), TaskStatusCodes.complete)
 
         # This task will succeed then run the on_complete directive
-        self.assertEqual(str(self.base_task_chain[1].status), str(TaskStatusCodes.complete))
+        self.assertEqual(str(self.base_task_chain[1].status), TaskStatusCodes.complete)
 
         # This next task was created by the previous task's on_complete directive
-        self.assertEqual(str(self.base_task_chain[2].status), str(TaskStatusCodes.complete))
+        self.assertEqual(str(self.base_task_chain[2].status), TaskStatusCodes.complete)
 
         # This task will always end in the error state
-        self.assertEqual(str(self.base_task_chain[3].status), str(TaskStatusCodes.error))
+        self.assertEqual(str(self.base_task_chain[3].status), TaskStatusCodes.error)
 
         # This next task was created by the previous task's on_error directive
-        self.assertEqual(str(self.base_task_chain[4].status), str(TaskStatusCodes.complete))
+        self.assertEqual(str(self.base_task_chain[4].status), TaskStatusCodes.complete)
 
         # This task will always be skipped
-        self.assertEqual(str(self.base_task_chain[5].status), str(TaskStatusCodes.skipped))
+        self.assertEqual(str(self.base_task_chain[5].status), TaskStatusCodes.skipped)
 
         # This next task was created by the previous task's on_skipped directive
-        self.assertEqual(str(self.base_task_chain[6].status), str(TaskStatusCodes.complete))
+        self.assertEqual(str(self.base_task_chain[6].status), TaskStatusCodes.complete)
 
         # Verify that the task chain completed successfully
-        self.assertEqual(str(str(self.base_task_chain.status)), str(TaskStatusCodes.complete))
+        self.assertEqual(str(str(self.base_task_chain.status)), TaskStatusCodes.complete)
 
 class TestBaseTaskPool(BaseTestCase):
     def setUp(self):
@@ -612,35 +606,35 @@ class TestBaseTaskPool(BaseTestCase):
             sleep(.1)
 
         # Make sure all tasks have started or completed
-        while not all([str(task.status) in [str(TaskStatusCodes.complete), str(str(TaskStatusCodes.running))] for task in self.base_task_chain]):
+        while not all([str(task.status) in [TaskStatusCodes.complete, TaskStatusCodes.running] for task in self.base_task_chain]):
             sleep(.1)
 
         # Make sure the task chain is still running
-        self.assertEqual(str(str(self.base_task_chain.status)), str(TaskStatusCodes.running))
+        self.assertEqual(str(str(self.base_task_chain.status)), TaskStatusCodes.running)
 
         # Make sure the control blocking task is complete
-        self.assertEqual(str(self.base_task_chain.find_task_by_name('Control Task 1').status), str(TaskStatusCodes.complete))
+        self.assertEqual(str(self.base_task_chain.find_task_by_name('Control Task 1').status), TaskStatusCodes.complete)
 
         # Make sure the non-blocking tasks are still running
-        self.assertEqual(str(self.base_task_chain.find_task_by_name('wait task 1').status), str(TaskStatusCodes.running))
-        self.assertEqual(str(self.base_task_chain.find_task_by_name('wait task 2').status), str(TaskStatusCodes.running))
-        self.assertEqual(str(self.base_task_chain.find_task_by_name('wait task 3').status), str(TaskStatusCodes.running))
+        self.assertEqual(str(self.base_task_chain.find_task_by_name('wait task 1').status), TaskStatusCodes.running)
+        self.assertEqual(str(self.base_task_chain.find_task_by_name('wait task 2').status), TaskStatusCodes.running)
+        self.assertEqual(str(self.base_task_chain.find_task_by_name('wait task 3').status), TaskStatusCodes.running)
 
         # Make sure the final control task is complete
-        self.assertEqual(str(self.base_task_chain.find_task_by_name('Control Task 2').status), str(TaskStatusCodes.complete))
+        self.assertEqual(str(self.base_task_chain.find_task_by_name('Control Task 2').status), TaskStatusCodes.complete)
 
         # Wait until the task chain is complete
-        while str(str(self.base_task_chain.status)) != str(TaskStatusCodes.complete):
+        while str(str(self.base_task_chain.status)) != TaskStatusCodes.complete:
             sleep(.5)
 
         # Verify that wait task 2's child on_complete task was included in the chain
         self.assertEqual(6, len(self.base_task_chain))
-        self.assertEqual(str(self.base_task_chain.find_task_by_name('Async Child Dummy Task').status), str(TaskStatusCodes.complete))
+        self.assertEqual(str(self.base_task_chain.find_task_by_name('Async Child Dummy Task').status), TaskStatusCodes.complete)
 
         # Assert that all tasks in the pool have completed
-        self.assertEqual(str(self.base_task_chain.status), str(TaskStatusCodes.complete))
+        self.assertEqual(str(self.base_task_chain.status), TaskStatusCodes.complete)
         [
-            self.assertEqual(str(task.status), str(TaskStatusCodes.complete)) for task in self.base_task_chain
+            self.assertEqual(str(task.status), TaskStatusCodes.complete) for task in self.base_task_chain
         ]
 
 

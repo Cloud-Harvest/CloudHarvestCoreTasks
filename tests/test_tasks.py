@@ -27,8 +27,14 @@ class TestErrorTask(unittest.TestCase):
         self.error_task = ErrorTask(name='error_task', description='This is an error task')
 
     def test_run(self):
-        self.error_task.run()
-        self.assertEqual(str(self.error_task.status), str(TaskStatusCodes.error))
+        from ..CloudHarvestCoreTasks.tasks.base import TaskException
+
+        try:
+            self.error_task.run()
+
+        except TaskException as ex:
+            self.assertIsInstance(ex, TaskException)
+            self.assertEqual(self.error_task.status, TaskStatusCodes.error)
 
 class TestFileTask(unittest.TestCase):
     def setUp(self):
@@ -820,7 +826,7 @@ class TestPruneTask(unittest.TestCase):
 
         # Check that the task chain did not result in error
         self.assertIsNone(self.task_chain.result.get('error'))
-        self.assertEqual(str(self.task_chain.status), str(TaskStatusCodes.complete))
+        self.assertEqual(str(self.task_chain.status), TaskStatusCodes.complete)
 
     def test_run_prune_all_at_near_end(self):
         self.task_configuration['chain']['tasks'].append({
@@ -848,7 +854,7 @@ class TestPruneTask(unittest.TestCase):
 
         # Check that the task chain did not result in error
         self.assertIsNone(self.task_chain.result.get('error'))
-        self.assertEqual(str(self.task_chain.status), str(TaskStatusCodes.complete))
+        self.assertEqual(str(self.task_chain.status), TaskStatusCodes.complete)
 
 class TestWaitTask(unittest.TestCase):
     def setUp(self):

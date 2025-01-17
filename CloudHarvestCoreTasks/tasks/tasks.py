@@ -19,9 +19,10 @@ from .base import (
     BaseDataTask,
     BaseTask,
     BaseTaskChain,
+    TaskChainException,
+    TaskException,
     TaskStatusCodes
 )
-from .exceptions import *
 
 from ..user_filters import MongoUserFilter
 
@@ -64,7 +65,7 @@ class ErrorTask(BaseTask):
         super().__init__(*args, **kwargs)
 
     def method(self):
-        raise Exception('This is an error task')
+        raise TaskException(self, 'This is an error task')
 
 
 @register_definition(name='file', category='task')
@@ -114,7 +115,7 @@ class FileTask(BaseTask):
         # Value Checks
         if self.mode == 'read':
             if self.result_as is None:
-                raise ValueError(f'{self.name}: The `result_as` attribute is required for read operations.')
+                raise TaskException(self, f'The `result_as` attribute is required for read operations.')
 
     def determine_format(self):
         """
@@ -151,8 +152,6 @@ class FileTask(BaseTask):
         Returns:
             self: Returns the instance of the FileTask.
         """
-        from .exceptions import FileTaskException
-
         from configparser import ConfigParser
         from csv import DictReader, DictWriter
         import json
@@ -232,7 +231,7 @@ class FileTask(BaseTask):
                             config.write(file)
 
                         else:
-                            raise FileTaskException(f'{self.name}: `FileTask` only supports dictionaries for writes to config files.')
+                            raise TaskException(self, f'`FileTask` only supports dictionaries for writes to config files.')
 
                     elif self.format == 'csv':
                         if isinstance(self.data, list):
@@ -247,7 +246,7 @@ class FileTask(BaseTask):
 
                                 return self
 
-                        raise FileTaskException(f'{self.name}: `FileTask` only supports lists of dictionaries for writes to CSV files.')
+                        raise TaskException(self, f'`FileTask` only supports lists of dictionaries for writes to CSV files.')
 
                     elif self.format == 'json':
                         json.dump(self.data, file, default=str, indent=4)
@@ -260,7 +259,7 @@ class FileTask(BaseTask):
                 finally:
                     from os.path import exists
                     if not exists(self.abs_path):
-                        raise FileNotFoundError(f'{self.name}: The file `{file}` was not written to disk.')
+                        raise TaskException(self, f'The file `{file}` was not written to disk.')
 
         return self
 
@@ -342,14 +341,12 @@ class HarvestRecordSetTask(BaseTask):
                             getattr(record, function)(**(list(templated_stage.values())[0] or {}))
 
                     else:
-                        from .exceptions import HarvestRecordsetTaskException
-                        raise HarvestRecordsetTaskException(f"Neither HarvestRecordSet nor HarvestRecord has a method named '{function}'")
+                        raise TaskException(self, f"Command '{function}' does not exist for the recordset task.")
 
                     break
 
             except Exception as ex:
-                from .base import BaseTaskException
-                raise BaseTaskException(f"Error executing stage [{self.stages.index(stage) + 1}] {list(stage.keys())[0]}: {str(ex)}")
+                raise TaskException(self, f"Error executing stage [{self.stages.index(stage) + 1}] {list(stage.keys())[0]}: {str(ex)}")
 
             # Increment the stage_position
             self.stage_position += 1
@@ -387,7 +384,7 @@ class PruneTask(BaseTask):
         # If previous_task_data is True, clear the data of all previous tasks
         if self.previous_task_data:
             for i in range(self.task_chain.position):
-                if str(self.task_chain[i].status) in [str(TaskStatusCodes.complete), str(TaskStatusCodes.error), str(TaskStatusCodes.skipped)]:
+                if str(self.task_chain[i].status) in [TaskStatusCodes.complete, TaskStatusCodes.error, TaskStatusCodes.skipped]:
                     total_bytes_pruned += getsizeof(self.task_chain[i].result)
                     self.task_chain[i].result = None
 
@@ -444,7 +441,7 @@ class HarvestUpdateTask(BaseTask):
         # Ensure that the task chain is a BaseHarvestTaskChain
         from .base import BaseHarvestTaskChain
         if not isinstance(self.task_chain, BaseHarvestTaskChain):
-            raise ValueError(f'{self.name}: HarvestTask must be used in a BaseHarvestTaskChain.')
+            raise TaskException(self, 'HarvestTask must be used in a BaseHarvestTaskChain.')
 
         # Type hint for the task_chain attribute
         from typing import cast
@@ -468,7 +465,7 @@ class HarvestUpdateTask(BaseTask):
                 get_silo(silo_name).connect().server_info()
 
             except Exception as ex:
-                raise ValueError(f'{self.name}: Unable to connect to the {silo_name} silo. {str(ex)}')
+                raise TaskException(self, f'Unable to connect to the {silo_name} silo. {str(ex)}')
 
         # Attach metadata to the records
         data = self.attach_metadata_to_records(data=self.data, metadata=self.build_metadata())
@@ -559,7 +556,7 @@ class HarvestUpdateTask(BaseTask):
         ]
 
         if missing_fields:
-            raise ValueError(f'Missing required metadata fields: {missing_fields}')
+            raise TaskException(self, f'Missing required metadata fields: {missing_fields}')
 
         else:
             return result
@@ -742,7 +739,7 @@ class HarvestUpdateTask(BaseTask):
         except Exception as ex:
             from traceback import format_exc
             ex_details = format_exc()
-            raise ValueError(f'{self.name}: Error deactivating records. {str(ex)}')
+            raise TaskException(self, f'Error deactivating records. {str(ex)}')
 
         else:
             return {
@@ -921,7 +918,7 @@ class MongoTask(BaseDataTask):
         client: MongoClient = self.silo.connect()
 
         if not self.silo.is_connected:
-            raise ConnectionError(f'{self.name}: Unable to connect to the {self.silo.name} silo.')
+            raise TaskException(self, f'Unable to connect to the {self.silo.name} silo.')
 
         if self.collection:
             # Note that MongoDb does not return an error if a collection is not found. Instead, MongoDb will faithfully
@@ -996,8 +993,7 @@ class RedisTask(BaseDataTask):
                 if method.startswith('redis_')
             ]
 
-            from .exceptions import RedisTaskException
-            raise RedisTaskException(f"Invalid command '{self.command}' for RedisTask. Must be one of {methods}.")
+            raise TaskException(self, f"Invalid command '{self.command}' for RedisTask. Must be one of {methods}.")
 
     def method(self) -> 'RedisTask':
         """
@@ -1273,7 +1269,7 @@ class RedisTask(BaseDataTask):
             ]
 
         else:
-            raise ValueError(f'{self.name}: Correct argument combinations are: (names, keys), (names, patterns), (patterns), (keys).')
+            raise TaskException(self, f'Invalid arguments. Correct argument combinations are: (names, keys), (names, patterns), (names), (patterns), (keys).')
 
         return results
 
@@ -1447,9 +1443,9 @@ class RedisTask(BaseDataTask):
             # HSET operation
             elif name and keys:
                 if not self.data:
-                    raise SyntaxError("When 'name' and 'keys' are supplied, the 'data' attribute must be provided.",
-                                      "This allows the task to iterate over the keys within the data and store them in "
-                                      "the database.")
+                    raise TaskException(self, "When 'name' and 'keys' are supplied, the 'data' attribute must be provided.",
+                                        "This allows the task to iterate over the keys within the data and store them in "
+                                        "the database.")
 
                 # If keys is '*', we treat this as a wildcard operation and iterate over all keys in the data
                 if isinstance(keys, str) and keys == '*':
@@ -1468,7 +1464,7 @@ class RedisTask(BaseDataTask):
                     record_response_code(self.silo.connect().expire(name=name, time=self.expire))
 
             else:
-                raise ValueError("Invalid arguments provided. Must provide 'name' and 'value' or 'name' and 'keys'.")
+                raise TaskException(self, "Invalid argument combination. Must provide ('name', 'value') or ('name', 'keys').")
 
         except Exception as ex:
             self.meta['Errors'].append(str(ex))

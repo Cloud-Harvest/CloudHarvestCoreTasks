@@ -41,7 +41,7 @@ USER_FILTERS = {
 logger = getLogger('harvest')
 
 
-class TaskStatusCodes(Enum):
+class TaskStatusCodes:
     """
     These are the basic status codes for any given Task object. Valid states are:
     - complete: The task has stopped and there are no more tasks to complete.
@@ -227,8 +227,8 @@ class BaseTask:
         for i in range(10):
 
             # Make sure to include a block which handles termination
-            if str(self.status) == str(TaskStatusCodes.terminating):
-                raise TaskTerminationException('Task was instructed to terminate.')
+            if self.status == TaskStatusCodes.terminating:
+                break
 
             from time import sleep
             sleep(1)
@@ -273,7 +273,7 @@ class BaseTask:
                     else:
                         self.on_skipped()
 
-                except Exception as ex:
+                except (Exception, TaskException) as ex:
                     # If the `retry` directive is provided, check if the task should be retried. We include isinstance()
                     # to ensure that the retry directive is a dictionary.
                     if self.retry and isinstance(self.retry, dict):
@@ -293,7 +293,7 @@ class BaseTask:
                             self.attempts < max_attempts,
 
                             # Check if the task is not terminating
-                            str(self.status) != str(TaskStatusCodes.terminating)
+                            self.status != TaskStatusCodes.terminating
                         )
 
                         retry = all(retry)
@@ -317,7 +317,7 @@ class BaseTask:
 
                 else:
                     # If the task was not skipped, call the on_complete() method
-                    if str(self.status) != str(TaskStatusCodes.skipped):
+                    if self.status != TaskStatusCodes.skipped:
 
                         # If the result is a generator, convert it to a list. We do this at this stage instead of
                         # inside the on_complete() method to make sure any post-task processing will be handled on the
@@ -334,7 +334,7 @@ class BaseTask:
 
 
         except Exception as ex:
-            raise BaseTaskException(f'Top level error while running task {self.name}: {ex}')
+            raise TaskException(self, ex)
 
         finally:
             # Update the metadata with the task's status, duration, and other information
@@ -342,7 +342,7 @@ class BaseTask:
                 'attempts': self.attempts,
                 'count': len(self.result) if hasattr(self, '__len__') else 1,
                 'duration': self.duration,
-                'status': str(self.status)
+                'status': self.status
             }
         return self
 
@@ -889,7 +889,7 @@ class BaseTaskChain(List[BaseTask]):
 
         # Now we count the number of tasks in each status
         for task in self:
-            count_result[str(task.status)] += 1
+            count_result[task.status] += 1
 
         return {
             'total': self.total,
@@ -977,7 +977,7 @@ class BaseTaskChain(List[BaseTask]):
         position = self.find_task_position_by_name(task_name)
 
         if position < self.position:
-            raise BaseTaskException('Cannot insert a task before the current task.')
+            raise TaskChainException(self, 'Cannot insert a task before the current task.')
 
         else:
             self.task_templates.insert(position - 1, new_task_configuration)
@@ -1135,7 +1135,7 @@ class BaseTaskChain(List[BaseTask]):
                     self.pool.add(task)
 
                 # Check for termination
-                if str(self.status) == str(TaskStatusCodes.terminating):
+                if self.status == TaskStatusCodes.terminating:
                     raise TaskTerminationException('Task chain was instructed to terminate.')
 
                 # Hold within the loop if there are outstanding pool tasks because the async task might have an
@@ -1483,7 +1483,7 @@ class BaseTaskPool:
                 Thread(target=next_task.run).start()  # Start the task in a new thread
 
             for task in self._active:
-                if str(task.status) in (str(TaskStatusCodes.complete), str(TaskStatusCodes.error), str(TaskStatusCodes.skipped)):
+                if task.status in (TaskStatusCodes.complete, str(TaskStatusCodes.error), TaskStatusCodes.skipped):
                     self._active.remove(task)
                     self._complete.append(task)
 
@@ -1491,7 +1491,7 @@ class BaseTaskPool:
             if self.queue_size:
                 sleep(self.worker_refresh_rate)
             else:
-                if str(self.status) == str(TaskStatusCodes.terminating):
+                if self.status == TaskStatusCodes.terminating:
                     break
                 else:
                     sleep(self.idle_refresh_rate)
@@ -1524,12 +1524,37 @@ class BaseHarvestException(BaseException):
 
         getattr(logger, log_level.lower())(str(args))
 
+class TaskChainException(BaseHarvestException):
+    def __init__(self, task_chain: 'BaseTaskChain', *args):
+        new_args = []
 
-class BaseTaskException(BaseHarvestException):
-    def __init__(self, *args):
-        super().__init__(*args)
+        if task_chain:
+            new_args.append(f'{task_chain.id}: ')
+
+        new_args.extend(args)
+
+        super().__init__(*new_args)
 
 
-class TaskTerminationException(BaseTaskException):
+class TaskException(BaseHarvestException):
+    def __init__(self, task: BaseTask, *args):
+
+        new_args = []
+
+        if task.task_chain:
+            new_args.append(f'{task.task_chain.id}[{task.task_chain.position + 1}]: ')
+
+        else:
+            new_args.append(task.name + ': ')
+
+        new_args.extend(args)
+
+        task.meta['Errors'].append(new_args)
+        task.status = TaskStatusCodes.error
+
+        super().__init__(*new_args)
+
+
+class TaskTerminationException(TaskException):
     def __init__(self, *args):
         super().__init__(*args)

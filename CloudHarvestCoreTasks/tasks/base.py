@@ -61,6 +61,13 @@ class TaskStatusCodes:
     skipped = 'skipped'
     terminating = 'terminating'
 
+    @classmethod
+    def get_codes(cls):
+        return [
+            attr for attr in dir(cls)
+            if not attr.startswith('__') and not callable(getattr(cls, attr))
+        ]
+
 
 class BaseTask:
     """

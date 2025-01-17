@@ -1174,7 +1174,10 @@ class RedisTask(BaseDataTask):
                 self.meta['Errors'].append(f"Error retrieving key '{n}': {str(ex)}")
 
             else:
-                return {n: r}
+                return {
+                    'name': n,
+                    'value': r
+                }
 
         name = self.arguments.get('name')
         names = self.arguments.get('names')

@@ -1159,6 +1159,9 @@ class RedisTask(BaseDataTask):
 
             Arguments
             n (str): The name of the key to retrieve.
+
+            Returns
+            dict: The record retrieved from the Redis database. When the record is a simple value, it is stored in the 'value' field.
             """
 
             try:
@@ -1174,15 +1177,21 @@ class RedisTask(BaseDataTask):
                 self.meta['Errors'].append(f"Error retrieving key '{n}': {str(ex)}")
 
             else:
-                return {
-                    'name': n,
-                    'value': r
-                }
+                if isinstance(r, dict):
+                    r['_id'] = n
 
-        name = self.arguments.get('name')
-        names = self.arguments.get('names')
-        keys = self.arguments.get('keys')
-        pattern = self.arguments.get('pattern')
+                else:
+                    r = {
+                        '_id': n,
+                        'value': r
+                    }
+
+                return r
+
+        name = self.arguments.get('name')       # Single name
+        names = self.arguments.get('names')     # List of names
+        keys = self.arguments.get('keys')       # List of keys
+        pattern = self.arguments.get('pattern') # Pattern to match keys
 
         if pattern:
             # GET operation
@@ -1209,7 +1218,7 @@ class RedisTask(BaseDataTask):
 
             for name in names:
                 if keys == '*':
-                    # HGETALL operation
+                    # HGETALL operation returns all keys for the given name
                     self.calls += 1
                     result = self.silo.connect().hgetall(name=name)
 
@@ -1232,7 +1241,7 @@ class RedisTask(BaseDataTask):
                         result[key] = v
 
                 # Add the name field to the record
-                result['_name'] = name
+                result['_id'] = name
 
                 # Append this name result to the results list
                 results.append(result)
@@ -1263,12 +1272,22 @@ class RedisTask(BaseDataTask):
         >>>         'command': 'keys'
         >>>     }
         >>> }
-
         """
 
         # Use pattern matching to return a list of keys
         if self.arguments.get('pattern'):
-            result = self.silo.connect().scan_iter(match=self.arguments['pattern'])
+            pattern = self.arguments.get('pattern')
+
+            result = []
+            if isinstance(pattern, list):
+                for p in pattern:
+                    result += self.silo.connect().scan_iter(match=p)
+
+            elif isinstance(pattern, str):
+                result = self.silo.connect().scan_iter(match=pattern)
+
+            else:
+                raise ValueError(f'{self.name}: Invalid pattern type. Must be a string or list of strings.')
 
         # If the keys are provided, return the keys
         elif self.arguments.get('keys'):

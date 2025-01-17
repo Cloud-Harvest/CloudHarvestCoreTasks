@@ -798,8 +798,8 @@ class BaseTaskChain(List[BaseTask]):
             # Add a total row to the task metrics
             total_records = sum(total_records)
             total_result_size = sum(total_result_size)
-            starts = min(starts)
-            ends = max(ends)
+            starts = min([dt for dt in starts if dt])
+            ends = max([dt for dt in ends if dt])
 
             task_metrics.append({
                 'Position': 'Total',
@@ -1073,7 +1073,10 @@ class BaseTaskChain(List[BaseTask]):
                 client.expire(self.id, 3600)
 
             except Exception as ex:
-                logger.error(f'Error storing task chain results in silo {self.results_silo}: {ex}')
+                logger.error(f'{self.id}: Error storing task chain results in silo {self.results_silo}: {ex}')
+
+            else:
+                logger.debug(f'{self.id}: Stored task chain results in silo {self.results_silo}')
 
     def run(self) -> 'BaseTaskChain':
         """

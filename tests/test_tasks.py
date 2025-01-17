@@ -506,7 +506,7 @@ class TestRedisTask(unittest.TestCase):
         self.assertTrue(result['data']['deleted'])
         self.assertEqual(self.connection.keys('*'), [])
 
-    def test_redis_get(self):
+    def test_redis_get_single_name(self):
         self.connection.set('test_key', 'test_value')
 
         task_chain_configuration = {
@@ -518,7 +518,9 @@ class TestRedisTask(unittest.TestCase):
                             'name': 'get test',
                             'command': 'get',
                             'silo': 'test_silo',
-                            'arguments': {'name': 'test_key'}
+                            'arguments': {
+                                'names': 'test_key'
+                            }
                         }
                     }
                 ]
@@ -530,6 +532,116 @@ class TestRedisTask(unittest.TestCase):
 
         result = task_chain.result
         self.assertEqual(result['data'], [{'_id': 'test_key', 'value': 'test_value'}])
+
+    def test_redis_get_names(self):
+        self.connection.set('test_key', 'test_value')
+        self.connection.set('test_key2', 'test_value2')
+
+        task_chain_configuration = {
+            'chain': {
+                'name': 'test_chain',
+                'tasks': [
+                    {
+                        'redis': {
+                            'name': 'get test',
+                            'command': 'get',
+                            'silo': 'test_silo',
+                            'arguments': {
+                                'names': [
+                                    'test_key',
+                                    'test_key2'
+                                ]
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
+        task_chain = task_chain_from_dict(template=task_chain_configuration)
+        task_chain.run()
+
+        result = task_chain.result
+        expected_records = (
+            {'_id': 'test_key', 'value': 'test_value'},
+            {'_id': 'test_key2', 'value': 'test_value2'}
+        )
+
+        for record in expected_records:
+            self.assertIn(record, result['data'])
+
+    def test_redis_get_pattern(self):
+        self.connection.set('test_name', 'test_value')
+        self.connection.set('test_name2', 'test_value2')
+
+        task_chain_configuration = {
+            'chain': {
+                'name': 'test_chain',
+                'tasks': [
+                    {
+                        'redis': {
+                            'name': 'get test',
+                            'command': 'get',
+                            'silo': 'test_silo',
+                            'arguments': {
+                                'patterns': 'test_name*'
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
+        task_chain = task_chain_from_dict(template=task_chain_configuration)
+        task_chain.run()
+
+        result = task_chain.result
+        expected_records = (
+            {'_id': 'test_name', 'value': 'test_value'},
+            {'_id': 'test_name2', 'value': 'test_value2'}
+        )
+
+        for record in expected_records:
+            self.assertIn(record, result['data'])
+
+    def test_redis_get_keys(self):
+        self.connection.hset('test_name', 'key_a', 'value_a')
+        self.connection.hset('test_name', 'key_b', 'value_b')
+        self.connection.hset('test_name2', 'key_a', 'value_a2')
+        self.connection.hset('test_name2', 'key_b', 'value_b2')
+
+        task_chain_configuration = {
+            'chain': {
+                'name': 'test_chain',
+                'tasks': [
+                    {
+                        'redis': {
+                            'name': 'get test',
+                            'command': 'get',
+                            'silo': 'test_silo',
+                            'arguments': {
+                                'patterns': 'test_name*',
+                                'keys': '*'
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+
+        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
+        task_chain = task_chain_from_dict(template=task_chain_configuration)
+        task_chain.run()
+
+        result = task_chain.result
+
+        expected_records = [
+            {'_id': 'test_name', 'key_a': 'value_a', 'key_b': 'value_b'},
+            {'_id': 'test_name2', 'key_a': 'value_a2', 'key_b': 'value_b2'}
+        ]
+
+        for record in expected_records:
+            self.assertIn(record, result['data'])
 
     def test_redis_keys(self):
         self.connection.set('key1', 'value1')
@@ -544,7 +656,7 @@ class TestRedisTask(unittest.TestCase):
                             'name': 'keys test',
                             'silo': 'test_silo',
                             'command': 'keys',
-                            'arguments': {'pattern': 'key*'}
+                            'arguments': {'patterns': 'key*'}
                         }
                     }
                 ]

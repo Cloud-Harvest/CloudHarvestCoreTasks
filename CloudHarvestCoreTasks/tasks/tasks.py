@@ -1130,13 +1130,15 @@ class RedisTask(BaseDataTask):
 
     def redis_get(self) -> list:
         """
-        Gets the records from the Redis database based on a list of keys or a pattern. Returns a list of records. The
+        Gets the records from the Redis database based on a list of keys or a patterns. Returns a list of records. The
         return for this function is always a list of dictionaries. '_name' is included in the dictionary to indicate the
         name of the record.
         https://redis-py.readthedocs.io/en/stable/commands.html#redis.commands.core.CoreCommands.get
 
-        This command has two modes: GET and HGET. When 'name' and 'keys' are provided, we treat this as an hget() operation.
-        When 'name' is not provided, we use 'keys' or 'pattern' to retrieve the records.
+        Arguments
+        names (str or List[str], optional): One or a list of names to retrieve. Defaults to None.
+        keys (str or List[str], optional): One or a list of keys to retrieve. Defaults to None. Requires 'names' or 'patterns'.
+        patterns (str or List[str], optional): One or a list of patterns to match keys. Defaults to None.
 
         Example:
         >>> # Retrieve records named 'key1' and 'key2'
@@ -1145,7 +1147,18 @@ class RedisTask(BaseDataTask):
         >>>         'silo': 'my-redis-read',
         >>>         'command': 'get',
         >>>         'arguments': {
-        >>>             'name': ['key1', 'key2']
+        >>>             'names': ['key1', 'key2']
+        >>>             }
+        >>>     }
+        >>> }
+
+        >>> # Retrieve records based on a patterns
+        >>> task = {
+        >>>     'redis': {
+        >>>         'silo': 'my-redis-read',
+        >>>         'command': 'get',
+        >>>         'arguments': {
+        >>>             'patterns': ['key*']
         >>>             }
         >>>     }
         >>> }
@@ -1188,15 +1201,61 @@ class RedisTask(BaseDataTask):
 
                 return r
 
-        name = self.arguments.get('name')       # Single name
-        names = self.arguments.get('names')     # List of names
-        keys = self.arguments.get('keys')       # List of keys
-        pattern = self.arguments.get('pattern') # Pattern to match keys
+        # List of names
+        names = self.arguments.get('names')
+        if isinstance(names, str):
+            names = [names]
 
-        if pattern:
-            # GET operation
+        # List of keys
+        keys = self.arguments.get('keys')
+        if keys and isinstance(keys, str):
+            keys = [keys]
+
+        # Patterns to match keys
+        patterns = self.arguments.get('patterns')
+        if patterns and isinstance(patterns, str):
+            patterns = [patterns]
+
+        # HGET operations combine NAMES/PATTERN with a list of KEYS
+        if (names and keys) or (patterns and keys):
+            names = self.redis_keys() if patterns else names
+
+            for name in names:
+                if keys == ['*']:
+                    # HGETALL operation returns all keys for the given name
+                    self.calls += 1
+                    result = self.silo.connect().hgetall(name=name)
+
+                else:
+                    # HGET operation
+                    result = {}
+                    for key in keys:
+                        self.calls += 1
+                        result[key] = self.silo.connect().hget(name=name, key=key)
+
+                # Deserialize the result if necessary
+                if self.serialization:
+                    from json import loads, JSONDecodeError
+
+                    for key, value in result.items():
+                        try:
+                            result[key] = loads(value)
+
+                        except JSONDecodeError:
+                            result[key] = value
+
+                # Add the name field to the record
+                result['_id'] = name
+
+                # Append this name result to the results list
+                results.append(result)
+
+        # GET operations
+        elif patterns:
+            # Retrieve the record names based on the pattern
             names = self.redis_keys()
 
+            # Get the records
             [
                 results.append(_get(n=name))
                 for name in names
@@ -1209,42 +1268,8 @@ class RedisTask(BaseDataTask):
                 for name in names
             ]
 
-        elif name and not keys:
-            # GET operation
-            results.append(_get(n=name))
-
-        elif (name and keys) or (names and keys):
-            names = names if names else [name]
-
-            for name in names:
-                if keys == '*':
-                    # HGETALL operation returns all keys for the given name
-                    self.calls += 1
-                    result = self.silo.connect().hgetall(name=name)
-
-                else:
-                    # HGET operation
-                    result = {}
-                    for key in keys:
-                        self.calls += 1
-
-                        try:
-                            v = self.silo.connect().hget(name=name, key=key)
-
-                            if self.serialization:
-                                from json import loads
-                                v = loads(v)
-
-                        except Exception as ex:
-                            v = None
-
-                        result[key] = v
-
-                # Add the name field to the record
-                result['_id'] = name
-
-                # Append this name result to the results list
-                results.append(result)
+        else:
+            raise ValueError(f'{self.name}: Correct argument combinations are: (names, keys), (names, patterns), (patterns), (keys).')
 
         return results
 
@@ -1275,19 +1300,15 @@ class RedisTask(BaseDataTask):
         """
 
         # Use pattern matching to return a list of keys
-        if self.arguments.get('pattern'):
-            pattern = self.arguments.get('pattern')
+        if self.arguments.get('patterns'):
+            patterns = self.arguments.get('patterns')
+
+            if isinstance(patterns, str):
+                patterns = [patterns]
 
             result = []
-            if isinstance(pattern, list):
-                for p in pattern:
-                    result += self.silo.connect().scan_iter(match=p)
-
-            elif isinstance(pattern, str):
-                result = self.silo.connect().scan_iter(match=pattern)
-
-            else:
-                raise ValueError(f'{self.name}: Invalid pattern type. Must be a string or list of strings.')
+            for pattern in patterns:
+                result += self.silo.connect().scan_iter(match=pattern)
 
         # If the keys are provided, return the keys
         elif self.arguments.get('keys'):

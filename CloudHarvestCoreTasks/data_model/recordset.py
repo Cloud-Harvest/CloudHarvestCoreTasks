@@ -414,6 +414,10 @@ class HarvestRecord(OrderedDict):
         :param target_key: when provided, the result is placed in a new key, defaults to None
         """
 
+        # If the source key does not exist, we will not attempt to get a substring
+        if not self.get(source_key):
+            return self
+
         self[target_key or source_key] = self[source_key][start:end]
 
         return self

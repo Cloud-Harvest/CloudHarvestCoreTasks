@@ -10,6 +10,9 @@
 - Added methods to `HarvestRecord`
   - `assign_value_to_key()`
   - `title_keys()`
+- TaskStatusCodes
+  - added `get_codes()`
+  - Removed Enum; now uses string constants
 
 # 0.4.2
 - Added `BaseHarvestTaskChain` and `HarvestRecordUpdateTask` to upload data collected from other sources to a persistent silo

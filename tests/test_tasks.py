@@ -529,7 +529,7 @@ class TestRedisTask(unittest.TestCase):
         task_chain.run()
 
         result = task_chain.result
-        self.assertEqual(result['data'], [{'test_key': 'test_value'}])
+        self.assertEqual(result['data'], [{'_id': 'test_key', 'value': 'test_value'}])
 
     def test_redis_keys(self):
         self.connection.set('key1', 'value1')

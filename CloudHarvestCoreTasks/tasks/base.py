@@ -1545,7 +1545,7 @@ class TaskException(BaseHarvestException):
             prefix = f'{task.task_chain.id}[{task.task_chain.position + 1}]'
 
         else:
-            prefix = task.name + ': '
+            prefix = task.name
 
         task.status = TaskStatusCodes.error
 

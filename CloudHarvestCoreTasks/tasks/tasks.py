@@ -286,14 +286,13 @@ class HarvestRecordSetTask(BaseTask):
         method(): Executes the function on the record set with the provided arguments and stores the result in the data attribute.
     """
 
-
-
-    def __init__(self, data: Any, stages: List[dict], *args, **kwargs):
+    def __init__(self, stages: List[dict], data: Any = None, *args, **kwargs):
         """
         Constructs a new HarvestRecordSetTask instance.
 
         Args:
             stages (List[dict]): A list of dictionaries containing the function name and arguments to be applied to the recordset.
+            data (Any, optional): The record set to operate on. Defaults to None.
             *args: Variable length argument list.
             **kwargs: Arbitrary keyword arguments.
         """

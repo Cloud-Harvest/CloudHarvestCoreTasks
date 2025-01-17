@@ -1526,40 +1526,30 @@ class BaseHarvestException(BaseException):
     Base exception class for all exceptions in the Harvest system
     """
 
-    def __init__(self, *args, log_level: _log_levels = 'error'):
+    def __init__(self, prefix: str, *args, log_level: _log_levels = 'error'):
         super().__init__(*args)
 
-        getattr(logger, log_level.lower())(str(args))
+        message = ' '.join([str(a) for a in args])
+
+        getattr(logger, log_level.lower())(f'{prefix}: {message}')
 
 class TaskChainException(BaseHarvestException):
     def __init__(self, task_chain: 'BaseTaskChain', *args):
-        new_args = []
-
-        if task_chain:
-            new_args.append(f'{task_chain.id}: ')
-
-        new_args.extend(args)
-
-        super().__init__(*new_args)
+        super().__init__(task_chain.id, *args)
 
 
 class TaskException(BaseHarvestException):
     def __init__(self, task: BaseTask, *args):
 
-        new_args = []
-
         if task.task_chain:
-            new_args.append(f'{task.task_chain.id}[{task.task_chain.position + 1}]: ')
+            prefix = f'{task.task_chain.id}[{task.task_chain.position + 1}]'
 
         else:
-            new_args.append(task.name + ': ')
+            prefix = task.name + ': '
 
-        new_args.extend(args)
-
-        task.meta['Errors'].append(new_args)
         task.status = TaskStatusCodes.error
 
-        super().__init__(*new_args)
+        super().__init__(prefix, *args)
 
 
 class TaskTerminationException(TaskException):

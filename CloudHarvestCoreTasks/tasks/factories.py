@@ -300,7 +300,7 @@ def replace_variable_path_with_value(original_string: str,
             case 'var':
                 var = task_chain.variables.get(var_name) if task_chain is not None else None
 
-                if var:
+                if var is not None:
                     # Assign the value to the replacement_values dictionary
                     replacement_values[match] = walk_path(match, var)
 

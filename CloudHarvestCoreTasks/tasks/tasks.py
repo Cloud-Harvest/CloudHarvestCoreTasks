@@ -1188,6 +1188,7 @@ class RedisTask(BaseDataTask):
 
             except Exception as ex:
                 self.meta['Errors'].append(f"Error retrieving key '{n}': {str(ex)}")
+                raise TaskException(self, f"Error retrieving key '{n}': {str(ex)}")
 
             else:
                 if isinstance(r, dict):

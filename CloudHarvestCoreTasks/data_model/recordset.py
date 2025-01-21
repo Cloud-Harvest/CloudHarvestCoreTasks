@@ -39,6 +39,17 @@ class HarvestRecord(OrderedDict):
 
         return len(self.non_matching_expressions) == 0
 
+    def add_data(self, data: dict) -> 'HarvestRecord':
+        """
+        Add multiple key-value pairs to the record.
+
+        :param data: A dictionary containing the key-value pairs to add to the record.
+        """
+
+        self.update(data)
+
+        return self
+
     def add_freshness(self, fresh_range: int = 3600, aging_range: int = 43200) -> 'HarvestRecord':
         """
         Add the freshness key to the record. Freshness is determined by the time since the record was last seen and whether the record is active.
@@ -126,20 +137,6 @@ class HarvestRecord(OrderedDict):
 
         return self
 
-    def add_key_values(self, data: dict, replace_existing: bool = False) -> 'HarvestRecord':
-        """
-        Add multiple key-value pairs to the record.
-
-        :param data: A dictionary containing the key-value pairs to add to the record.
-        :param replace_existing: If True, existing keys in the record will be replaced by the new values. Defaults to False.
-        """
-
-        for key, value in data.items():
-            if replace_existing or key not in self:
-                self[key] = value
-
-        return self
-
     def assign_elements_at_index_to_key(self, source_key: str, target_key: str, start: int = None, end: int = None, delimiter: str = None) -> 'HarvestRecord':
         """
         Assign elements at a specific index to a new key.
@@ -164,17 +161,15 @@ class HarvestRecord(OrderedDict):
 
         return self
 
-    def assign_value_to_key(self, key: str, value: Any = None, clobber: bool = False) -> 'HarvestRecord':
+    def assign_value_to_key(self, key: str, value: Any = None) -> 'HarvestRecord':
         """
         Assign a value to a key in the record.
 
         :param key: the name of the key
         :param value: the value to assign to the key, defaults to None
-        :param clobber: whether to overwrite the existing value, defaults to False
         """
 
-        if clobber or key not in self:
-            self[key] = value
+        self[key] = value
 
         return self
 
@@ -298,20 +293,7 @@ class HarvestRecord(OrderedDict):
                                                                 value_name=value_key)
 
         if not preserve_original and target_key and target_key != source_key:
-            self.pop(source_key)
-
-        return self
-
-    def list_to_str(self, source_key: str, target_key: str = None, delimiter: str = '\n') -> 'HarvestRecord':
-        """
-        Convert a list to a string.
-
-        :param source_key: the name of the source key
-        :param target_key: the name of the target key, defaults to None
-        :param delimiter: the delimiter to use when joining the elements, defaults to '\n' (newline)
-        """
-
-        self[target_key or source_key] = delimiter.join(self[source_key])
+            self.pop(source_key, None)
 
         return self
 
@@ -324,28 +306,19 @@ class HarvestRecord(OrderedDict):
 
         return self
 
-    def remove_key(self, key: str) -> 'HarvestRecord':
-        """
-        Remove a key from the record.
-
-        :param key: the name of the key to remove
-        """
-
-        self.pop(key)
-
-        return self
-
-    def remove_keys_not_in(self, keys: List[str]) -> 'HarvestRecord':
+    def remove_keys(self, keys: List[str]) -> 'HarvestRecord':
         """
         Remove keys that are not in a list.
 
         :param keys: the list of keys to keep
         """
 
-        [
-            self.pop(key) for key in list(self.keys())
-            if key not in keys
-        ]
+        # Convert the keys to a list if they are not already
+        if not isinstance(keys, list):
+            keys = [keys]
+
+        for key in keys:
+            self.pop(key, None)
 
         return self
 
@@ -357,7 +330,7 @@ class HarvestRecord(OrderedDict):
         :param new_key: the name of the new key
         """
 
-        self[new_key] = self.pop(old_key)
+        self[new_key] = self.pop(old_key, None)
 
         return self
 
@@ -404,7 +377,7 @@ class HarvestRecord(OrderedDict):
 
         return self
 
-    def substring(self, source_key: str, start: int = None, end: int = None, target_key: str = None) -> 'HarvestRecord':
+    def substring_key(self, source_key: str, start: int = None, end: int = None, target_key: str = None) -> 'HarvestRecord':
         """
         Get a substring of the value of a key.
 
@@ -463,6 +436,39 @@ class HarvestRecord(OrderedDict):
 
         return self
 
+    def values_from_list_to_str(self, source_key: str, target_key: str = None, delimiter: str = '\n') -> 'HarvestRecord':
+        """
+        Convert a list to a string.
+
+        :param source_key: the name of the source key
+        :param target_key: the name of the target key, defaults to None
+        :param delimiter: the delimiter to use when joining the elements, defaults to '\n' (newline)
+        """
+
+        if self.get(source_key):
+            if isinstance(self[source_key], list):
+                self[target_key or source_key] = delimiter.join([str(s) for s in self[source_key]])
+
+            else:
+                self[target_key or source_key] = str(self[source_key])
+
+        return self
+
+    def values_to_list(self, source_key: str, target_key: str = None, delimiter: str = '\n') -> 'HarvestRecord':
+        """
+        Converts string values to a list.
+
+        :param source_key: the name of the source key
+        :param target_key: the name of the target key, defaults to None
+        :param delimiter: the delimiter to use when splitting the string, defaults to '\n' (newline)
+        """
+
+        if self.get(source_key):
+            if isinstance(self[source_key], str):
+                self[target_key or source_key] = self[source_key].split(delimiter)
+
+            else:
+                self[target_key or source_key] = self[source_key]
 
 class HarvestRecordSet(List[HarvestRecord]):
     """
@@ -588,7 +594,7 @@ class HarvestRecordSet(List[HarvestRecord]):
         :param index_name: The name of the index to drop
         """
 
-        self.indexes.pop(index_name)
+        self.indexes.pop(index_name, None)
 
         return self
 
@@ -600,6 +606,33 @@ class HarvestRecordSet(List[HarvestRecord]):
         """
 
         return HarvestRecordSet(data=[record for record in self if record.is_matched_record])
+
+    def nest_records(self, target_key: str, key_pattern: str = None, nest_type: Literal['dict', 'list'] = 'dict', delimiter: str = None) -> 'HarvestRecordSet':
+        """
+        Nest keys in the record set under a new key.
+
+        :param target_key: the key to nest the keys under
+        :param key_pattern: the pattern to match keys to nest, defaults to None
+        :param nest_type: the type of nesting to use, either 'dict' or 'list', defaults to 'dict'
+        :param delimiter: the delimiter to use when nesting, defaults to None
+        """
+
+        for record in self:
+            nested_result = {} if nest_type == 'dict' else []
+
+            for key in list(record.keys()):
+                if key_pattern:
+                    from re import match
+                    if match(key_pattern, key):
+                        if isinstance(nested_result, dict):
+                            nested_result[key] = record.pop(key, None)
+
+                        else:
+                            nested_result.append({key: record.pop(key, None)})
+
+            record[target_key] = nested_result
+
+        return self
 
     def rebuild_indexes(self):
         """
@@ -711,6 +744,33 @@ class HarvestRecordSet(List[HarvestRecord]):
 
         # Add the new records
         self.add(data=result)
+
+        return self
+
+    def unnest_records(self, key_pattern: str = None, nest_level: int = 0, delimiter: str = '.') -> 'HarvestRecordSet':
+        """
+        Removes the indicated layers of nesting from records.
+
+        Arguments:
+        key_pattern (str): The pattern to match keys to denormalize. When not provided, all keys are affected.
+        nest_level (int): The number of layers to remove from the key. Defaults to 0.
+        delimiter (str): The delimiter used to separate keys. Defaults to '.'.
+        """
+
+        # Flatten the records
+        [record.flatten(separator=delimiter) for record in self]
+
+        # Denormalize the keys
+        for record in self:
+            for key in list(record.keys()):
+                if key_pattern:
+                    from re import fullmatch
+                    if fullmatch(key_pattern, key):
+                        new_key = delimiter.join(key.split(delimiter)[-nest_level:])
+                        record[new_key] = record.pop(key, None)
+
+        # Unflatten the records
+        [record.unflatten(separator=delimiter) for record in self]
 
         return self
 
@@ -839,7 +899,8 @@ class HarvestRecordSets(Dict[str, HarvestRecordSet]):
         Remove a record set from the HarvestRecordSets object by name.
         """
 
-        self.pop(name)
+        self.pop(name, None)
+
         return self
 
     def rename(self, old_recordset_name: str, new_recordset_name: str) -> 'HarvestRecordSets':
@@ -847,7 +908,7 @@ class HarvestRecordSets(Dict[str, HarvestRecordSet]):
         Changes the name of a record set in the HarvestRecordSets object.
         """
 
-        self[new_recordset_name] = self.pop(old_recordset_name)
+        self[new_recordset_name] = self.pop(old_recordset_name, None)
 
         return self
 

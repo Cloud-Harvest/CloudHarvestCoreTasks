@@ -134,11 +134,11 @@ class TestHarvestRecord(unittest.TestCase):
         self.record.key_value_list_to_dict('KV')
         self.assertEqual(self.record['KV'], {'name': 'value'})
 
-    def test_remove_key(self):
+    def test_remove_keys(self):
         """
         Test the remove_key method
         """
-        self.record.remove_key('key1')
+        self.record.remove_keys(keys=['key1'])
         self.assertNotIn('key1', self.record)
 
     def test_rename_key(self):
@@ -165,15 +165,15 @@ class TestHarvestRecord(unittest.TestCase):
         self.record.split_key('key5', 'new_key')
         self.assertEqual(self.record['new_key'], ['value1', 'value2', 'value3'])
 
-    def test_substring(self):
+    def test_substring_key(self):
         """
         Test the substring method
         """
         self.record['key6'] = 'value1'
-        self.record.substring('key6', 0, 5, target_key='key7')
+        self.record.substring_key('key6', 0, 5, target_key='key7')
         self.assertEqual(self.record['key7'], 'value')
 
-        self.record.substring('key6', start=-1, target_key='key7')
+        self.record.substring_key('key6', start=-1, target_key='key7')
         self.assertEqual(self.record['key7'], '1')
 
     def test_unflatten(self):

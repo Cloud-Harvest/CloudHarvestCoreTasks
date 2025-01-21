@@ -46,6 +46,40 @@ class TestHarvestRecordSet(unittest.TestCase):
         self.recordset.remove_duplicates()
         self.assertEqual(len(self.recordset), 5)
 
+    def test_nesting(self):
+        # First test that we can properly nest records
+
+        from copy import deepcopy
+        nested_recordset = deepcopy(self.recordset)
+
+        nested_recordset.nest_records(target_key='nested', key_pattern='^value$', nest_type='list')
+
+        # Check the values
+        for r in range(len(nested_recordset)):
+            record = nested_recordset[r]
+
+            self.assertIn('nested', record)
+            self.assertIsInstance(record['nested'], list)
+
+            nested_value = record['nested'][0]['value']
+            original_value = self.recordset[r]['value']
+
+            self.assertEqual(nested_value, original_value)
+
+        # Now test that we can properly unnest records
+        nested_recordset.unnest_records(key_pattern='^nested.*', nest_level=1)
+
+        for r in range(len(nested_recordset)):
+            record = nested_recordset[r]
+
+            # Verify that no keys to be nested are present
+            for key in record.keys():
+                self.assertNotRegex(key, '^nested$')
+
+            # Check the values of records to make sure they match the original recordset
+            self.assertEqual(record, self.recordset[r])
+
+
     def test_unwind(self):
         self.recordset.add(data=[{'index': 5, 'value': ['value_5', 'value_6']}])
         self.recordset.unwind(source_key='value')

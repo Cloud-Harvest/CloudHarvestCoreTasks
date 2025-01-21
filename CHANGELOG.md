@@ -13,6 +13,12 @@
 - TaskStatusCodes
   - added `get_codes()`
   - Removed Enum; now uses string constants
+- HarvestRecordSet
+  - Added `nest()` and `unnest()` methods
+  - Added `values_to_list()` and `values_from_list_to_str()` methods
+  - Removed `remove_key()` in favor of `remove_keys()` which accepts a list of keys
+- Bugs
+  - Fixed an issue where vars were not properly replaced when they were non-None items
 
 # 0.4.2
 - Added `BaseHarvestTaskChain` and `HarvestRecordUpdateTask` to upload data collected from other sources to a persistent silo

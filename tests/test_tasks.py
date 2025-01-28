@@ -17,7 +17,7 @@ class TestDummyTask(unittest.TestCase):
         # Check that the method returns the instance of the DummyTask
         self.assertEqual(result, self.dummy_task)
 
-        # Check that the data and meta attributes are set correctly
+        # Check that the dataset and meta attributes are set correctly
         self.assertEqual(self.dummy_task.result, [{'dummy': 'data'}])
         self.assertEqual(self.dummy_task.meta['info'], self.dummy_task.meta['info'])
 
@@ -47,7 +47,7 @@ class TestFileTask(unittest.TestCase):
             'csv': [{'key1': 'value1', 'key2': 'value2'}, {'key1': 'value3', 'key2': 'value4'}],
             'json': {'key1': 'value1', 'key2': 'value2'},
             'yaml': {'key1': 'value1', 'key2': 'value2'},
-            'raw': 'This is raw data'
+            'raw': 'This is raw dataset'
         }
 
     def tearDown(self):
@@ -97,7 +97,7 @@ class TestFileTask(unittest.TestCase):
                         data=self.test_data['csv'],
                         mode='write',
                         format='csv')
-        self.test_task_chain.variables = {'data': self.test_data['csv']}
+        self.test_task_chain.variables = {'dataset': self.test_data['csv']}
         task.method()
         with open(path, 'r') as file:
             content = file.readlines()
@@ -127,7 +127,7 @@ class TestFileTask(unittest.TestCase):
                         data=self.test_data['json'],
                         mode='write',
                         format='json')
-        self.test_task_chain.variables = {'data': self.test_data['json']}
+        self.test_task_chain.variables = {'dataset': self.test_data['json']}
         task.method()
         with open(path, 'r') as file:
             content = file.read()
@@ -154,7 +154,7 @@ class TestFileTask(unittest.TestCase):
                         data=self.test_data['yaml'],
                         mode='write',
                         format='yaml')
-        self.test_task_chain.variables = {'data': self.test_data['yaml']}
+        self.test_task_chain.variables = {'dataset': self.test_data['yaml']}
         task.method()
 
         from yaml import load, FullLoader
@@ -189,14 +189,14 @@ class TestFileTask(unittest.TestCase):
                         data=self.test_data['raw'],
                         mode='write',
                         format='raw')
-        self.test_task_chain.variables = {'data': self.test_data['raw']}
+        self.test_task_chain.variables = {'dataset': self.test_data['raw']}
         task.method()
         with open(path, 'r') as file:
             content = file.read()
         self.assertEqual(content, self.test_data['raw'])
 
     def test_read_raw(self):
-        path = self.create_temp_file('This is raw data')
+        path = self.create_temp_file('This is raw dataset')
         task = FileTask(name="test",
                         path=path,
                         result_as='result',
@@ -204,25 +204,25 @@ class TestFileTask(unittest.TestCase):
                         mode='read',
                         format='raw')
         task.method()
-        self.assertEqual(task.result, 'This is raw data')
+        self.assertEqual(task.result, 'This is raw dataset')
 
 
-class TestHarvestRecordSetTask(unittest.TestCase):
+class TestDataSetTask(unittest.TestCase):
     def setUp(self):
         # import required to register class
 
-        harvest_recordset_task_template = {
+        harvest_dataset_task_template = {
             "name": "test_chain",
             "description": "This is a test chain.",
             "tasks": [
                 {
-                    "recordset": {
-                        "name": "test recordset task",
+                    "dataset": {
+                        "name": "test dataset task",
                         "description": "This is a test record set",
-                        "data": "var.test_recordset",
+                        "data": "var.test_dataset",
                         "stages": [
                             {
-                                "key_value_list_to_dict": {
+                                "convert_list_of_dict_to_dict": {
                                     "source_key": "tags",
                                     "target_key": "tags_dict",
                                     "name_key": "Name"
@@ -261,12 +261,12 @@ class TestHarvestRecordSetTask(unittest.TestCase):
 
         from ..CloudHarvestCoreTasks.tasks.base import BaseTaskChain
         self.test_data = test_data
-        self.chain = BaseTaskChain(template=harvest_recordset_task_template)
-        self.chain.variables["test_recordset"] = self.test_data
+        self.chain = BaseTaskChain(template=harvest_dataset_task_template)
+        self.chain.variables["test_dataset"] = self.test_data
 
     def test_init(self):
-        self.assertEqual(self.chain.variables["test_recordset"], self.test_data)
-        self.assertEqual(self.chain.task_templates[0]['recordset']['name'], "test recordset task")
+        self.assertEqual(self.chain.variables["test_dataset"], self.test_data)
+        self.assertEqual(self.chain.task_templates[0]['dataset']['name'], "test dataset task")
 
     def test_method(self):
         self.chain.run()
@@ -843,7 +843,7 @@ class TestPruneTask(unittest.TestCase):
         # run the task chain
         self.task_chain.run()
 
-        # Check that the data attribute of each task in the task before the PruneTask is None
+        # Check that the dataset attribute of each task in the task before the PruneTask is None
         self.assertGreater(self.task_chain[3].result.get('total_bytes_pruned'), 0)
         [
             self.assertIsNone(task.result)

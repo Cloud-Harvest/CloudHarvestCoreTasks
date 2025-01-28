@@ -225,15 +225,15 @@ class TestBaseHarvestTaskChain(BaseTestCase):
                 'type': 'user',
                 'account': 'test',
                 'region': 'us-east-1',
-                'description': 'Test data collection task chain',
+                'description': 'Test dataset collection task chain',
                 'destination_silo': 'harvest-core',
                 'unique_identifier_keys': ['name.family', 'name.given'],
                 'tasks': [
                     {
-                        # This task will retrieve data from a MongoDB database
+                        # This task will retrieve dataset from a MongoDB database
                         'mongo': {
-                            'name': 'Remote data request',
-                            'description': 'Retrieves data from a MongoDB database',
+                            'name': 'Remote dataset request',
+                            'description': 'Retrieves dataset from a MongoDB database',
                             'result_as': 'mongo-result',
                             'silo': 'harvest-core',
                             'collection': 'users',
@@ -244,17 +244,21 @@ class TestBaseHarvestTaskChain(BaseTestCase):
                         }
                     },
                     {
-                        # This task will modify the data using recordset operations
-                        'recordset': {
-                            'name': 'Modify data',
-                            'description': 'Modifies the data using recordset operations',
+                        # This task will modify the dataset using dataset operations
+                        'dataset': {
+                            'name': 'Modify dataset',
+                            'description': 'Modifies the dataset using dataset operations',
                             'data': 'var.mongo-result',
                             'result_as': 'result',
                             'stages': [
                                 {
-                                    "rename_key": {
-                                        "old_key": "tags",
-                                        "new_key": "Tags",
+                                    "rename_keys": {
+                                        'mappings': [
+                                            {
+                                                "old": "tags",
+                                                "new": "Tags",
+                                            }
+                                        ]
                                     }
                                 }
                             ]
@@ -279,7 +283,9 @@ class TestBaseHarvestTaskChain(BaseTestCase):
         self.assertFalse(self.base_task_chain.errors)
         self.assertEqual(len(self.base_task_chain), 3)
         self.assertEqual(str(str(self.base_task_chain.status)), TaskStatusCodes.complete)
-        self.assertIsNotNone(self.base_task_chain.result)
+        self.assertIsNotNone(self.base_task_chain[1].result[0]['Tags'])
+        self.assertGreater(self.base_task_chain.result['data']['RecordsProcessed'], 1)
+        self.assertGreater(self.base_task_chain.result['data']['RecordsReplaced'], 1)
 
 class TestBaseTaskChain(BaseTestCase):
     """

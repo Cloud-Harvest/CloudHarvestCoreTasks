@@ -1,3 +1,16 @@
+# 0.5.0
+- Replaced `HarvestRecordSet` with `DataSet(List[WalkableDict])`
+  - Most methods now return a `DataSet` object
+  - All operational methods are now stored under this object (whereas `HarvestRecordSet` and `HarvestRecord` split the methods based on how the object was manipulated)
+  - These changes simplified `DataSetTask` which replaces `HarvestRecordSetTask`
+- `WalkableDict` is a dictionary that can be accessed using dot notation
+  - We use different method names to avoid collision with existing `dict` methods
+  - `assign()` provides an interface to change the value of a nested key
+  - `drop()` pops a nested key from the dictionary
+  - `walk()` returns the value of a nested key
+- `HarvestRecordSetTask` has been replaced by `DataSetTask`
+- The `recordset` task chain directive has been replaced by `dataset`
+
 # 0.4.3
 - Added `drop_silos(*names)` to the Silos
 - Added `HarvestAgentBlueprint` and `HarvestApiBlueprint` objects

@@ -1,5 +1,5 @@
 import unittest
-from ..CloudHarvestCoreTasks.data_model import functions
+import functions
 
 
 class TestFunctions(unittest.TestCase):
@@ -52,7 +52,8 @@ class TestFunctions(unittest.TestCase):
         self.assertEqual(functions.key_value_list_to_dict([{'Key': 'Name', 'Value': 'MyName'}]), {'Name': 'MyName'})
 
         # Test converting a list of dictionaries with multiple key-value pairs to a dictionary
-        self.assertEqual(functions.key_value_list_to_dict([{'Key': 'Name', 'Value': 'MyName'}, {'Key': 'Age', 'Value': '30'}]), {'Name': 'MyName', 'Age': '30'})
+        self.assertEqual(
+            functions.key_value_list_to_dict([{'Key': 'Name', 'Value': 'MyName'}, {'Key': 'Age', 'Value': '30'}]), {'Name': 'MyName', 'Age': '30'})
 
     def test_is_number(self):
         """

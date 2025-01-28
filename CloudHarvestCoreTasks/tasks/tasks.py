@@ -264,8 +264,8 @@ class FileTask(BaseTask):
         return self
 
 
-@register_definition(name='recordset', category='task')
-class HarvestRecordSetTask(BaseTask):
+@register_definition(name='dataset', category='task')
+class DataSetTask(BaseTask):
     """
     The HarvestRecordSetTask class is a subclass of the BaseTask class. It represents a task that operates on a record set.
 
@@ -297,8 +297,8 @@ class HarvestRecordSetTask(BaseTask):
         """
         super().__init__(*args, **kwargs)
 
-        from ..data_model.recordset import HarvestRecordSet
-        self.data = data if isinstance(data, HarvestRecordSet) else HarvestRecordSet(data=data)
+        from ..dataset import DataSet
+        self.data = data if isinstance(data, DataSet) else DataSet().add_records(data)
         self.stages = stages
         self.stage_position = 0
 
@@ -316,34 +316,20 @@ class HarvestRecordSetTask(BaseTask):
             self: Returns the instance of the HarvestRecordSetTask.
         """
 
-        from ..data_model.recordset import HarvestRecordSet, HarvestRecord
+        from ..dataset import DataSet
+
         for stage in self.stages:
             try:
                 # Each dictionary should only contain one key-value pair
                 for function, arguments in stage.items():
 
                     # This is a HarvestRecordSet command
-                    if hasattr(HarvestRecordSet, function):
+                    if hasattr(DataSet, function):
                         # We don't template RecordSet commands because they are not intended to be used with record-level data
                         getattr(self.data, function)(**(arguments or {}))
 
-                    # This is a HarvestRecord command which must iterate over each record in the record set
-                    elif hasattr(HarvestRecord, function):
-                        for record in self.data:
-                            # Here, we use record-level templating to allow for dynamic arguments based on the record
-                            from .templating import template_object
-
-                            # We can't used items() here because we do not iterate over the dictionary
-                            templated_stage = template_object(template=self.original_template['stages'][self.stage_position],
-                                                              variables=record)
-
-                            # Execute the function on the record
-                            getattr(record, function)(**(list(templated_stage.values())[0] or {}))
-
                     else:
-                        raise TaskException(self, f"Command '{function}' does not exist for the recordset task.")
-
-                    break
+                        raise TaskException(self, f"Command '{function}' does not exist for the DataSetTask.")
 
             except Exception as ex:
                 raise TaskException(self, f"Error executing stage [{self.stages.index(stage) + 1}] {list(stage.keys())[0]}: {str(ex)}")
@@ -478,7 +464,7 @@ class HarvestUpdateTask(BaseTask):
 
         self.result = {
             'RecordsProcessed': len(data),
-            'UniqueIdentifiers': len(unique_filters),
+            'RecordsReplaced': len(unique_filters),
             'DeactivationResults': deactivation_results
         }
 
@@ -496,7 +482,7 @@ class HarvestUpdateTask(BaseTask):
 
         for record in data:
             # Generate this record's unique filter
-            from helpers import get_nested_values
+            from functions import get_nested_values
             unique_identifier = '-'.join([get_nested_values(s=field, d=record)[0] for field in metadata['UniqueIdentifierKeys']])
 
             # Attach existing metadata to the record
@@ -549,7 +535,7 @@ class HarvestUpdateTask(BaseTask):
         result = pstar | build_components | dates | silo
 
         # Validate that all required metadata fields are present
-        from ..helpers import get_nested_values
+        from functions import get_nested_values
         missing_fields = [
             field for field in self.REQUIRED_METADATA_FIELDS
             if not get_nested_values(s=field, d=result)
@@ -592,7 +578,7 @@ class HarvestUpdateTask(BaseTask):
                                           upsert=True)
 
             # Gather the extra metadata fields for the record
-            from helpers import get_nested_values
+            from functions import get_nested_values
             extras = {
                 field: get_nested_values(s=field, d=record)
                 for field in self.task_chain.extra_metadata_fields
@@ -632,18 +618,22 @@ class HarvestUpdateTask(BaseTask):
                 'EndTime': end_time,
             }
 
-        # Perform the bulk Replace operations
-        replacement_results = bulk_replace(silo_name=self.task_chain.destination_silo,
-                                           collection=self.task_chain.replacement_collection_name,
-                                           prepared_replacements=replacements)
+        if replacements:
+            # Perform the bulk Replace operations
+            replacement_results = bulk_replace(silo_name=self.task_chain.destination_silo,
+                                               collection=self.task_chain.replacement_collection_name,
+                                               prepared_replacements=replacements)
 
-        metadata_results = bulk_replace(silo_name='harvest-core',
-                                        collection='metadata',
-                                        prepared_replacements=metadata)
+            self.meta['Stages'].append({'BulkReplaceDocuments': replacement_results})
 
-        # Store the results in the metadata
-        self.meta['Stages'].append({'BulkReplaceDocuments': replacement_results})
-        self.meta['Stages'].append({'BulkReplaceMetadata': metadata_results})
+
+        if metadata:
+            metadata_results = bulk_replace(silo_name='harvest-core',
+                                            collection='metadata',
+                                            prepared_replacements=metadata)
+
+            # Store the results in the metadata
+            self.meta['Stages'].append({'BulkReplaceMetadata': metadata_results})
 
         # Gather ObjectId's of all the records that were processed based on the record['Harvest']['UniqueIdentifier']
         # and return them as a list for use in the deactivation process
@@ -884,7 +874,7 @@ class MongoTask(BaseDataTask):
         """
         Applies user filters to the database configuration.
         """
-        if self.user_filters.get('accepted') is None:
+        if self.user_filters.get('accepted') is None or self.ignore_user_filters:
             return self
 
         pipeline = self.arguments.get('pipeline')

@@ -1,28 +1,9 @@
 """
 This module defines the core classes and functionality for managing tasks and task chains in the Harvest system.
-
-Classes:
-    TaskStatusCodes (Enum): Defines the basic status codes for any given data collection object.
-    TaskConfiguration: Manages the configuration of a task and provides methods to instantiate the task.
-    BaseTask: Manages a single task in a task chain, providing the basic structure and methods for all tasks.
-    BaseAuthenticationTask (BaseTask): Manages tasks related to authentication.
-    BaseDataTask (BaseTask): Manages tasks that retrieve data from a data connection-based data provider.
-    BaseTaskChain (List[BaseTask]): Manages a chain of tasks, providing methods to run, insert, and handle task states.
-    BaseTaskPool: Manages a pool of tasks that can be executed concurrently.
-
-Modules:
-    CloudHarvestCorePluginManager.decorators: Provides decorators for registering task definitions.
-    CloudHarvestCoreTasks.exceptions: Defines custom exceptions for the Harvest system.
-    datetime: Provides classes for manipulating dates and times.
-    enum: Provides support for enumerations.
-    threading: Provides support for creating and managing threads.
-    typing: Provides support for type hints.
-    logging: Provides support for logging messages.
 """
 
 from CloudHarvestCorePluginManager.decorators import register_definition
 from datetime import datetime, timezone
-from enum import Enum
 from threading import Thread
 from typing import Any, Dict, List, Literal, Tuple
 from logging import getLogger
@@ -86,6 +67,7 @@ class BaseTask:
                  blocking: bool = True,
                  data: Any = None,
                  description: str = None,
+                 ignore_user_filters: bool = False,
                  iterate: dict = None,
                  on: dict = None,
                  task_chain: 'BaseTaskChain' = None,
@@ -106,6 +88,7 @@ class BaseTask:
             name (str): The name of the task.
             blocking (bool): A boolean indicating whether the task is blocking or not. If True, the task will block the task chain until it completes.
             description (str): A brief description of what the task does.
+            ignore_user_filters (bool): A boolean indicating whether to ignore user filters or not.
             iterate (dict): A dictionary
                 >>> iterate = {
                 >>>     'variable': 'var.variable_name',    # The name of the variable to iterate over.
@@ -155,6 +138,7 @@ class BaseTask:
         self.blocking = blocking
         self.data = data
         self.description = description
+        self.ignore_user_filters = ignore_user_filters
         self.iterate = iterate or {}
         self.on = on or {}
         self.output = None
@@ -217,12 +201,12 @@ class BaseTask:
         """
 
         # If the user filters not configured for this Task, return
-        if self.user_filters.get('accepted') is None:
+        if self.user_filters.get('accepted') is None or self.ignore_user_filters:
             return
 
-        from ..user_filters import HarvestRecordSetUserFilter
+        from ..user_filters import DataSetUserFilter
 
-        with HarvestRecordSetUserFilter(recordset=self.result, **self.user_filters) as user_filter:
+        with DataSetUserFilter(recordset=self.result, **self.user_filters) as user_filter:
             self.result = user_filter.apply()
 
     def method(self, *args, **kwargs) -> 'BaseTask':
@@ -625,7 +609,6 @@ class BaseTaskChain(List[BaseTask]):
         position (int): The current position in the task chain.
         start (datetime): The start time of the task chain.
         end (datetime): The end time of the task chain.
-        _meta (Any): Any metadata associated with the task chain.
 
     Methods:
         detailed_progress() -> dict: Returns a dictionary representing the progress of the task chain.
@@ -891,7 +874,7 @@ class BaseTaskChain(List[BaseTask]):
 
         # Set the possible status codes based on the TaskStatusCodes Enum
         count_result = {
-            str(k): 0 for k in TaskStatusCodes
+            str(k): 0 for k in TaskStatusCodes.get_codes()
         }
 
         # Now we count the number of tasks in each status
@@ -1520,6 +1503,154 @@ class BaseTaskPool:
 
         return []
 
+
+class BaseUserFilters:
+    from ..dataset import DataSet
+
+    def __init__(self,
+                 permitted: List[str] = '*',
+                 add_keys: List[str] = None,
+                 count: bool = False,
+                 exclude_keys: List[str] = None,
+                 headers: List[str] = None,
+                 limit: int = None,
+                 matches: List[List[str]] or List[str] = None,
+                 sort: List[str] = None,
+                 **kwargs):
+
+        """
+        Initializes a new instance of the BaseUserFilters class. This class is used to store information provided by the
+        user which indicates what restrictions on data should be applied.
+
+        Arguments
+        accepted (List[str]): A list of the filters which may be applied to a Task.
+        add_keys (List[str], optional): A list of keys to add to the data.
+        count (bool, optional): A flag indicating whether the result should be a count of the data, not the data itself.
+        exclude_keys (List[str], optional): A list of keys to exclude from the data.
+        headers (List[str], optional): A list of headers to include in the data. Other keys will be removed.
+        limit (int, optional): The maximum number of records to return.
+        matches (List[List[str]] or List[str], optional): A list of HarvestMatchSets to apply to the data.
+        sort (List[str], optional): A list of keys to sort the data by.
+        """
+        from ..matching import DataSetMatchSet
+
+        self.permitted = [permitted] if isinstance(permitted, str) else permitted
+        self.add_keys = add_keys or []
+        self.count = count
+        self.exclude_keys = exclude_keys or []
+        self.headers = headers or []
+        self.limit = limit
+        self.matches = DataSetMatchSet(matches or [])
+        self.sort = sort
+
+    def apply(self, data: List[dict]) -> List[dict]:
+        """
+        Applies the user filters to the data.
+
+        Arguments
+        data (List[dict]): The data to filter.
+
+        Returns
+        List[dict]: The filtered data.
+        """
+
+        from ..dataset import DataSet
+        data = DataSet().add_records(data)
+
+        # Apply the filters
+        data = self._apply_add_keys(data)
+        data = self._apply_count(data)
+        data = self._apply_exclude_keys(data)
+        data = self._apply_headers(data)
+        data = self._apply_limit(data)
+        data = self._apply_matches(data)
+        data = self._apply_sort(data)
+
+        return data
+
+    def _apply_add_keys(self, data: DataSet) -> DataSet:
+        """
+        Applies the add_keys filter to the data.
+
+        Arguments
+        data (DataSet): The data to filter.
+
+        Returns
+        DataSet: The filtered data.
+        """
+
+        if 'add_keys' not in self.permitted and self.permitted != '*':
+            return data
+
+        for record in data:
+            for key in self.add_keys:
+                if key not in record.keys():
+                    record[key] = None
+
+        # Add the keys to the headers
+        for ak in self.add_keys:
+            if ak not in self.headers:
+                self.headers.append(ak)
+
+        return data
+
+    def _apply_count(self, data: DataSet) -> int or DataSet:
+        """
+        Applies the count filter to the data.
+
+        Arguments
+        data (DataSet): The data to filter.
+
+        Returns
+        If permitted:
+            int: The count of the data.
+        Else:
+            DataSet: The data.
+        """
+
+        if 'count' not in self.permitted and self.permitted != '*':
+            return data
+
+        return len(data) if self.count else data
+
+    def _apply_exclude_keys(self, data: DataSet) -> DataSet:
+        """
+        Applies the exclude_keys filter to the data.
+
+        Arguments
+        data (DataSet): The data to filter.
+
+        Returns
+        DataSet: The filtered data.
+        """
+
+        [
+            record.drop(e)
+            for e in self.exclude_keys if e not in self.add_keys
+            for record in data
+        ]
+
+        # Remove the keys from the headers
+        for ek in self.exclude_keys:
+            if ek in self.headers:
+                self.headers.remove(ek)
+
+        return data
+
+    def _apply_headers(self, data: DataSet) -> DataSet:
+        """
+        Applies the headers filter to the data.
+
+        Arguments
+        data (DataSet): The data to filter.
+
+        Returns
+        DataSet: The filtered data.
+        """
+
+        data.clean_keys(base_keys=self.headers, add_keys=self.add_keys, exclude_keys=self.exclude_keys)
+
+        return data
 
 class BaseHarvestException(BaseException):
     """

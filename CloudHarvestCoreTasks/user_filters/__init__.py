@@ -5,6 +5,6 @@ Task with a compatible result.
 
 from .filters import (
     MongoUserFilter,
-    HarvestRecordSetUserFilter,
+    DataSetUserFilter,
     SqlUserFilters
 )

@@ -18,10 +18,10 @@ from .chains import (
 from .factories import *
 
 from .tasks import (
+    DataSetTask,
     DummyTask,
     ErrorTask,
     FileTask,
-    HarvestRecordSetTask,
     JsonTask,
     MongoTask,
     PruneTask,

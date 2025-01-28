@@ -42,3 +42,12 @@ class ReportTaskChain(BaseTaskChain):
         self.headers = kwargs.get('template', {}).get('headers') or None
 
         super().__init__(*args, **kwargs)
+
+    def run(self) -> 'ReportTaskChain':
+        super().run()
+
+        # Strip unused keys from the template
+        headers = self.headers
+
+
+        return self

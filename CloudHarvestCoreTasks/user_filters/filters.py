@@ -101,17 +101,17 @@ class MongoUserFilter(BaseUserFilter):
         """
         matches = pre_syntax['matches']
 
-        from ..data_model.matching import HarvestMatchSet
+        from matching import DataSetMatchSet
         # Convert the matches into HarvestMatchSet instances
         if len(matches) == 1:
-            result = HarvestMatchSet(matches=matches[0]).as_mongo_filter()
+            result = DataSetMatchSet(matches=matches[0]).as_mongo_filter()
 
         # If there are multiple matches, convert each match into a HarvestMatchSet instance and combine them into a single
         # MongoDB filter. When combining multiple matches, the matches are combined with an OR operation.
         else:
             result = {
                 '$or': [
-                    HarvestMatchSet(matches=match).as_mongo_filter()
+                    DataSetMatchSet(matches=match).as_mongo_filter()
                     for match in matches
                 ]
             }
@@ -119,16 +119,16 @@ class MongoUserFilter(BaseUserFilter):
         return result
 
 
-class HarvestRecordSetUserFilter(BaseUserFilter):
+class DataSetUserFilter(BaseUserFilter):
     """
-    This class converts user filters to HarvestRecordSet query syntax.
+    This class converts user filters to DataSet query syntax.
     """
 
-    from ..data_model.recordset import HarvestRecordSet
-    def __init__(self, recordset: HarvestRecordSet = None, *args, **kwargs):
+    from ..dataset import DataSet
+    def __init__(self, recordset: DataSet = None, *args, **kwargs):
         """
         Arguments:
-            recordset (HarvestRecordSet): The HarvestRecordSet to be filtered.
+            recordset (DataSet): The DataSet to be filtered.
         """
 
         super().__init__(*args, **kwargs)
@@ -255,13 +255,13 @@ class SqlUserFilters(BaseUserFilter):
         Returns:
             tuple: A tuple containing the SQL WHERE clause condition and parameters.
         """
-        from ..data_model.matching import HarvestMatchSet
+        from matching import DataSetMatchSet
         # Convert the matches into HarvestMatchSet instances
         clauses = []
         parameters = {}
 
         for match in matches:
-            clause, parameters = HarvestMatchSet(matches=match).as_sql_filter()
+            clause, parameters = DataSetMatchSet(matches=match).as_sql_filter()
             clauses.append(clause)
             parameters.update(parameters)
 

@@ -1,5 +1,5 @@
 """
-Test data for unit tests.
+Test dataset for unit tests.
 """
 
 MONGO_TEST_RECORDS = [
@@ -56,7 +56,7 @@ MONGO_TEST_RECORDS = [
             "city": "Austin",
             "zip": "73301"
         },
-        "tags": ["data scientist", "python", "machine learning"]
+        "tags": ["dataset scientist", "python", "machine learning"]
     },
     {
         "name": {"family": "Evans", "given": "Diana"},

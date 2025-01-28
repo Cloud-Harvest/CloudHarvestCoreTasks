@@ -561,14 +561,17 @@ class DataSet(List[WalkableDict]):
                         yield key
 
     @requires_flatten
-    def add_keys(self, keys: List[str], default_value: Any = None) -> 'DataSet':
+    def add_keys(self, keys: List[str] or str, default_value: Any = None) -> 'DataSet':
         """
         Adds keys to the data set.
 
         Arguments
-        keys (List[str]): The keys to add.
+        keys (List[str] or str): The keys to add.
         default_value (Any, optional): The default value to assign to the keys. Defaults to None.
         """
+
+        if isinstance(keys, str):
+            keys = [keys]
 
         [
             record.assign(key, default_value)
@@ -828,13 +831,16 @@ class DataSet(List[WalkableDict]):
         return self
 
     @requires_flatten
-    def drop_keys(self, keys: List[str]) -> 'DataSet':
+    def drop_keys(self, keys: List[str] or str) -> 'DataSet':
         """
         Drops keys from the data set.
 
         Arguments
         keys (List[str]): The keys to drop.
         """
+
+        if isinstance(keys, str):
+            keys = [keys]
 
         [
             record.drop(key)

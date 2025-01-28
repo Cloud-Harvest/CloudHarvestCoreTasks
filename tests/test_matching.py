@@ -1,6 +1,5 @@
 import unittest
-from collections import OrderedDict
-from dataset import (
+from ..CloudHarvestCoreTasks.dataset import (
     DataSetMatch,
     DataSetMatchSet, WalkableDict
 )

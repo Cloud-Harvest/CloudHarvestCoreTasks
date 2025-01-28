@@ -99,7 +99,7 @@ class DataSetMatch:
                     setattr(self, v, getattr(self, v).strip())
 
             # fuzzy cast the value to the appropriate type
-            from functions import fuzzy_cast
+            from .functions import fuzzy_cast
             self.value = fuzzy_cast(self.value)
 
             if self.value is None:
@@ -178,7 +178,7 @@ class DataSetMatch:
                     setattr(self, v, getattr(self, v).strip())
 
             # fuzzy cast the value to the appropriate type
-            from functions import fuzzy_cast
+            from .functions import fuzzy_cast
             self.value = fuzzy_cast(self.value)
 
         # Enclose string values in single quotes and self.operator is not '='
@@ -234,7 +234,7 @@ class DataSetMatch:
 
         self.key, self.value = self.syntax.split(self.operator, maxsplit=1)
 
-        from functions import is_bool, is_datetime, is_null, is_number
+        from .functions import is_bool, is_datetime, is_null, is_number
         matching_value = self.value
         record_key_value = record.walk(self.key)
 
@@ -255,7 +255,7 @@ class DataSetMatch:
             else:
                 cast_variables_as = 'str'
 
-            from functions import cast
+            from .functions import cast
             matching_value = cast(matching_value, cast_variables_as)
             record_key_value = cast(record_key_value, cast_variables_as)
 
@@ -532,7 +532,7 @@ class WalkableDict(dict):
 
 
 class DataSet(List[WalkableDict]):
-    from functions import CAST_TYPES
+    from .functions import CAST_TYPES
 
     def __init__(self, *args):
         if args:
@@ -613,7 +613,7 @@ class DataSet(List[WalkableDict]):
 
         target_key = target_key or source_key
 
-        from functions import cast
+        from .functions import cast
 
         [
             record.assign(target_key, cast(record.walk(source_key), target_type))
@@ -680,7 +680,7 @@ class DataSet(List[WalkableDict]):
 
         target_key = target_key or source_key
 
-        from functions import key_value_list_to_dict
+        from .functions import key_value_list_to_dict
 
         for record in self:
             # Gets the list of dictionaries from the source key

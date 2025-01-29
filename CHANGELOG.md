@@ -1,3 +1,9 @@
+# 0.5.1
+- Expanded `DataSet` with new maths methods
+  - `maths_keys()` performs a mathematical operation on multiple keys in a record and assigns the result to a new key.
+  - `maths_records()` performs a mathematical operation on all values for one or more keys and places the output in the maths_results attribute for later retrieval
+  - `append_record_maths_results()` appends the maths_results to the record
+
 # 0.5.0
 - Replaced `HarvestRecordSet` with `DataSet(List[WalkableDict])`
   - Most methods now return a `DataSet` object

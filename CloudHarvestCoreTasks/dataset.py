@@ -19,6 +19,8 @@ MATCH_OPERATIONS = {
         '=': findall        # Checks if 'a' contains 'b'
     }
 
+# The following operations are supported by the perform_operation() method:
+VALID_MATHS_OPERATIONS = Literal['add', 'subtract', 'multiply', 'divide', 'average', 'minimum', 'maximum']
 
 # DECORATORS------------------------------------------------------------------------------------------------------------
 def requires_flatten(method, preserve_lists: bool = False):
@@ -540,12 +542,26 @@ class DataSet(List[WalkableDict]):
 
         super().__init__()
 
+        self.maths_results = WalkableDict()
+
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.clear()
         return None
+
+    def key_values(self, source_key: str, missing_value: Any = None):
+        """
+        Consolidates the values of a key in the data set.
+
+        Arguments
+        source_key (str): The key to consolidate.
+        missing_value (Any): The value to use when a key is missing.
+        """
+
+        for record in self:
+            yield record.walk(source_key, missing_value)
 
     @property
     def keys(self):
@@ -561,13 +577,14 @@ class DataSet(List[WalkableDict]):
                         yield key
 
     @requires_flatten
-    def add_keys(self, keys: List[str] or str, default_value: Any = None) -> 'DataSet':
+    def add_keys(self, keys: List[str] or str, default_value: Any = None, clobber: bool = False) -> 'DataSet':
         """
         Adds keys to the data set.
 
         Arguments
         keys (List[str] or str): The keys to add.
         default_value (Any, optional): The default value to assign to the keys. Defaults to None.
+        clobber (bool, optional): When true, existing keys will be overwritten. Defaults to False.
         """
 
         if isinstance(keys, str):
@@ -577,6 +594,7 @@ class DataSet(List[WalkableDict]):
             record.assign(key, default_value)
             for record in self
             for key in keys
+            if clobber or record.walk(key) is None
         ]
 
         return self
@@ -600,6 +618,18 @@ class DataSet(List[WalkableDict]):
                 self.add_records(record)
                 for record in records
             ]
+
+        return self
+
+    def append_record_maths_results(self, record_identifier_key: str = '_id', record_identifier_value: str = 'Totals'):
+        """
+        Appends the maths results to the data set.
+        """
+
+        if self.maths_results:
+            self.maths_results[record_identifier_key] = record_identifier_value
+
+            self.append(self.maths_results)
 
         return self
 
@@ -899,6 +929,72 @@ class DataSet(List[WalkableDict]):
         # Clear the data set and add the matched records
         self.clear()
         self.extend(matched_records)
+
+        return self
+
+    def maths_keys(self,
+                   source_keys: List[str] or str,
+                   target_key: str,
+                   operation: VALID_MATHS_OPERATIONS,
+                   missing_value: Any,
+                   default_value: Any = None) -> 'DataSet':
+        """
+        Performs a mathematical operation on multiple keys in a record and assigns the result to a new key.
+
+        Arguments
+        source_keys (List[str] or str): The keys to perform the operation on. This is also the order of the values in the operation.
+        target_key (str): The key to assign the result to.
+        operation (VALID_MATHS_OPERATIONS): The operation to perform.
+        missing_value (Any): The value to use when a key is missing.
+        default_value (Any, optional): The default value to assign to the target key. Defaults to None.
+        """
+
+        for record in self:
+            values = [
+                record.walk(key, missing_value)
+                for key in source_keys
+            ]
+
+            record.assign(target_key, perform_maths_operation(operation=operation, values=values) or default_value)
+
+        return self
+
+    def maths_records(self,
+                   source_key: str,
+                   target_key: str,
+                   operation: VALID_MATHS_OPERATIONS,
+                   missing_value: Any,
+                   default_value: Any = None) -> 'DataSet':
+
+        """
+        Performs a mathematical operation on all values in a key in the data set. Results are stored in the maths_results
+        dictionary and made available by accessing that attribute.
+
+        Arguments
+        source_key (str): The key to perform the operation on.
+        target_key (str): The key to assign the result to in the maths_results attribute.
+        operation (VALID_MATHS_OPERATIONS): The operation to perform.
+        missing_value (Any): The value to use when a key is missing.
+        default_value (Any, optional): The default value to assign to the target key. Defaults to None.
+        """
+
+        values = [
+            record.walk(source_key, missing_value)
+            for record in self
+        ]
+
+        result = perform_maths_operation(operation=operation, values=values) or default_value
+
+        self.maths_results[target_key] = result
+
+        return self
+
+    def maths_reset(self):
+        """
+        Resets the maths_results dictionary.
+        """
+
+        self.maths_results = {}
 
         return self
 
@@ -1299,3 +1395,46 @@ class DataSet(List[WalkableDict]):
         self.extend(new_records)
 
         return self
+
+
+def perform_maths_operation(operation: VALID_MATHS_OPERATIONS, values: List[Any]) -> int or float or None:
+    """
+    Perform the mathematical operation on the values.
+
+    Arguments
+    operation (VALID_MATHS_OPERATIONS): The operation to perform.
+    values (List[Any]): The values to perform the operation on.
+    """
+
+    total = None
+
+    try:
+        if operation == 'add':
+            total = sum(values)
+
+        elif operation == 'subtract':
+            total = 0
+            for value in values:
+                total -= value
+
+        elif operation == 'multiply':
+            total = 1
+            for value in values:
+                total *= value
+
+        elif operation == 'divide':
+            total = values[0]
+            for value in values[1:]:
+                total /= value
+
+        elif operation == 'average':
+            total = sum(values) / len(values)
+
+        elif operation == 'minimum':
+            total = min(values)
+
+        elif operation == 'maximum':
+            total = max(values)
+
+    finally:
+        return total

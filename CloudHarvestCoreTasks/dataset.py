@@ -1216,7 +1216,7 @@ class DataSet(List[WalkableDict]):
         """
 
         for record in self:
-            for key in record.keys():
+            for key in list(record.keys()):
                 new_key = key.title()
 
                 if remove_characters:

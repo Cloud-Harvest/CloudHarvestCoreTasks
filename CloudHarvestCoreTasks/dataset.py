@@ -394,7 +394,7 @@ class DataSetMatchSet(list):
                 match_false.append(match.final_match_operation)
 
         if result_as_bool:
-            return len(match_true) > 0 and len(match_true) == 0
+            return len(match_true) > 0 and len(match_false) == 0
 
         else:
             return match_true, match_false

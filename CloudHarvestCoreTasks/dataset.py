@@ -899,7 +899,7 @@ class DataSet(List[WalkableDict]):
 
         # Clear the data set and add the flattened data
         self.clear()
-        self.extend(flat_data)
+        self.add_records(flat_data)
 
         return self
 
@@ -928,7 +928,7 @@ class DataSet(List[WalkableDict]):
 
         # Clear the data set and add the matched records
         self.clear()
-        self.extend(matched_records)
+        self.add_records(matched_records)
 
         return self
 
@@ -1047,7 +1047,7 @@ class DataSet(List[WalkableDict]):
         ]
 
         self.clear()
-        self.extend(records)
+        self.add_records(records)
 
         return self
 
@@ -1250,7 +1250,7 @@ class DataSet(List[WalkableDict]):
         self.clear()
 
         # Add the new records
-        self.extend(result)
+        self.add_records(result)
 
         return self
 
@@ -1272,7 +1272,7 @@ class DataSet(List[WalkableDict]):
 
         # Clear the data set and add the unflattened data
         self.clear()
-        self.extend(unflat_data)
+        self.add_records(unflat_data)
 
         return self
 
@@ -1309,7 +1309,7 @@ class DataSet(List[WalkableDict]):
         ]
 
         self.clear()
-        self.extend(result)
+        self.add_records(result)
 
         return self
 
@@ -1337,7 +1337,7 @@ class DataSet(List[WalkableDict]):
                 new_records.append(record)
 
         self.clear()
-        self.extend(new_records)
+        self.add_records(new_records)
 
         return self
 
@@ -1392,7 +1392,7 @@ class DataSet(List[WalkableDict]):
 
         # Purge the existing records from the data set and add the new records
         self.clear()
-        self.extend(new_records)
+        self.add_records(new_records)
 
         return self
 

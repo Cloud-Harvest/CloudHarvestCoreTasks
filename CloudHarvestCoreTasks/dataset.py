@@ -1085,18 +1085,25 @@ class DataSet(List[WalkableDict]):
 
         return self
 
-    def rename_keys(self, mappings: List[dict]) -> 'DataSet':
+    def rename_keys(self, mapping: dict) -> 'DataSet':
         """
-        Renames keys in the data set.
+        Renames keys in the data set where the mapping keys are the old key names and the key values are the new key names.
+
+        Example
+        ```python
+        rename_keys({
+            'old_key': 'new_key',
+            'another_old_key': 'another_new_key'
+        })
+        ```
 
         Arguments
-        mappings (List[dict]): A list of dictionaries containing the old and new key names.
+        mapping (dict): A dictionary of old key names and new key names.
         """
 
         for record in self:
-            for mapping in mappings:
-                record.assign(mapping['new'], record.walk(mapping['old']))
-                record.drop(mapping['old'])
+            for old, new in mapping.items():
+                record.assign(new, record.drop(old))
 
         return self
 

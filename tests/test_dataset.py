@@ -134,7 +134,7 @@ class TestDataSet(unittest.TestCase):
         self.assertEqual(self.dataset[-1]['_id'], 'Totals')
 
     def test_rename_keys(self):
-        self.dataset.rename_keys([{'old': 'name', 'new': 'full_name'}])
+        self.dataset.rename_keys({'name': 'full_name'})
         for record in self.dataset:
             self.assertIn('full_name', record)
             self.assertNotIn('name', record)

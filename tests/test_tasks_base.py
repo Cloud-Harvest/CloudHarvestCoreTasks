@@ -253,12 +253,9 @@ class TestBaseHarvestTaskChain(BaseTestCase):
                             'stages': [
                                 {
                                     "rename_keys": {
-                                        'mappings': [
-                                            {
-                                                "old": "tags",
-                                                "new": "Tags",
-                                            }
-                                        ]
+                                        'mapping': {
+                                            "tags": "Tags",
+                                        }
                                     }
                                 }
                             ]

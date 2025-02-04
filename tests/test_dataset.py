@@ -139,6 +139,37 @@ class TestDataSet(unittest.TestCase):
             self.assertIn('full_name', record)
             self.assertNotIn('name', record)
 
+    def test_merge_datasets(self):
+        # Originally created new method `merge_datasets` however, it was determined that add_records should work
+        # the same way. This test is to ensure that add_records method works in the same way that merge_datasets
+        # would have worked if it were retained.
+        dataset1 = DataSet([
+            {'key1': 'value1', 'key2': 'value2'},
+            {'key1': 'value3', 'key2': 'value4'}
+        ])
+
+        dataset2 = DataSet([
+            {'key1': 'value5', 'key2': 'value6'},
+            {'key1': 'value7', 'key2': 'value8'}
+        ])
+
+        dataset3 = DataSet([
+            {'key1': 'value9', 'key2': 'value10'}
+        ])
+
+        dataset1.add_records([dataset2, dataset3])
+
+        expected_result = [
+            {'key1': 'value1', 'key2': 'value2'},
+            {'key1': 'value3', 'key2': 'value4'},
+            {'key1': 'value5', 'key2': 'value6'},
+            {'key1': 'value7', 'key2': 'value8'},
+            {'key1': 'value9', 'key2': 'value10'}
+        ]
+
+        self.assertEqual(len(dataset1), 5)
+        self.assertEqual(dataset1, expected_result)
+
     def test_remove_duplicate_records(self):
         from copy import copy
         self.dataset.append(copy(self.dataset[0]))

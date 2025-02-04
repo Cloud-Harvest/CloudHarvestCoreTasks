@@ -537,10 +537,10 @@ class DataSet(List[WalkableDict]):
     from .functions import CAST_TYPES
 
     def __init__(self, *args):
+        super().__init__()
+
         if args:
             self.add_records(args)
-
-        super().__init__()
 
         self.maths_results = WalkableDict()
 
@@ -610,7 +610,7 @@ class DataSet(List[WalkableDict]):
         if isinstance(records, WalkableDict):
             self.append(records)
 
-        if isinstance(records, dict):
+        elif isinstance(records, dict):
             self.append(WalkableDict(records))
 
         elif isinstance(records, (list, tuple)):

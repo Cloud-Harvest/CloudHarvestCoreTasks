@@ -278,6 +278,34 @@ class TestDataSetTask(unittest.TestCase):
             for record in result["data"]
         ]
 
+class TestHttpTask(unittest.TestCase):
+    def setUp(self):
+        self.task_configuration = {
+            'chain': {
+                'name': 'Test Chain',
+                'description': 'This is a test chain',
+                'tasks': [
+                    {
+                        'http':
+                            {
+                                'name': 'Test HTTP Task',
+                                'description': 'This is a test HTTP task',
+                                'method': 'GET',
+                                'url': 'https://127.0.0.1:8000/',
+                                'verify': False
+                            }
+                    }
+                ]
+            }
+        }
+
+    def test_method(self):
+        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
+        task_chain = task_chain_from_dict(template=self.task_configuration)
+        task_chain.run()
+        self.assertFalse(task_chain.errors)
+        self.assertTrue(task_chain.result['data']['message'] == 'Welcome to the CloudHarvest API.')
+
 
 class TestJsonTask(unittest.TestCase):
     def setUp(self):

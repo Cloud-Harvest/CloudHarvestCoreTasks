@@ -8,6 +8,7 @@ pytest
 python-dateutil
 PyYAML
 redis
+requests
 rich-argparse
 setuptools
 wheel

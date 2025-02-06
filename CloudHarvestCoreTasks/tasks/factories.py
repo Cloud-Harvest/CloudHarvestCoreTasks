@@ -131,39 +131,6 @@ def task_from_dict(task_configuration: dict or BaseTask,
     instantiated_class.original_template = task_configuration[class_name]
 
     return instantiated_class
-#
-#
-# def replace_vars_in_dict(nested_dict: dict, vars: dict):
-#     """
-#     Walks through a nested dictionary and replaces strings starting with 'var.' with the corresponding value
-#     from the vars dictionary.
-#
-#     Args:
-#         nested_dict (dict): The nested dictionary to process.
-#         vars (dict): The task chain containing the variables.
-#
-#     Returns:
-#         dict: The processed dictionary with replaced values.
-#     """
-#
-#     def replace_vars(value):
-#         """
-#         Recursively replaces 'var.' strings with the corresponding value from task_chain.variables.
-#         """
-#
-#         if isinstance(value, str) and value.startswith('var.'):
-#             return vars.get(value[4:], value)
-#
-#         elif isinstance(value, dict):
-#             return {k: replace_vars(v) for k, v in value.items()}
-#
-#         elif isinstance(value, list):
-#             return [replace_vars(item) for item in value]
-#
-#         else:
-#             return value
-#
-#     return replace_vars(nested_dict)
 
 
 def replace_variable_path_with_value(original_string: str,

@@ -830,22 +830,27 @@ class BaseTaskChain(List[BaseTask]):
     @property
     def result(self) -> dict:
         """
-        Returns either `var.result` or the result of the last task in the task chain.
+        Returns the result of the task chain.
         """
 
         result = None
 
         try:
-            result = self.variables.get('result') or self[-1].result
+            data = self.variables.get('result') or self[-1].result
+
+            result = {
+                'data': data,
+                'errors': self.errors,
+                'meta': self.meta,
+                'metrics': self.performance_metrics,
+                'template': self.original_template
+            }
 
         except IndexError:
             result = None
 
         finally:
-            return {
-                'data': result,
-                'meta': self.meta
-            }
+            return result
 
     @property
     def total(self) -> int:
@@ -1020,7 +1025,7 @@ class BaseTaskChain(List[BaseTask]):
         """
 
         self.status = TaskStatusCodes.error
-        self.meta['Error'] = ex.args
+        self.meta['error'] = ex.args
 
         if self.pool.queue_size:
             self.pool.terminate()
@@ -1058,8 +1063,8 @@ class BaseTaskChain(List[BaseTask]):
                 client.hset(
                     name=self.id,
                     mapping={
-                        'data': dumps(self.result['data'], default=str),
-                        'meta': dumps(self.performance_metrics, default=str)
+                        key: dumps(value, default=str)
+                        for key, value in self.result.items()
                     }
                 )
 

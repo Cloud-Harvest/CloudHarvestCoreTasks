@@ -46,8 +46,7 @@ class ReportTaskChain(BaseTaskChain):
     def run(self) -> 'ReportTaskChain':
         super().run()
 
-        # Strip unused keys from the template
-        headers = self.headers
-
+        # Add the headers to the metadata
+        self.meta['headers'] = self.headers
 
         return self

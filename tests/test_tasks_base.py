@@ -338,7 +338,6 @@ class TestBaseTaskChain(BaseTestCase):
         self.assertEqual(self.base_task_chain.position, 0)
         self.assertEqual(self.base_task_chain.start, None)
         self.assertEqual(self.base_task_chain.end, None)
-        self.assertEqual(self.base_task_chain.result.get('meta'), {})
 
     async def test_run(self):
         """

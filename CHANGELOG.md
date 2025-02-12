@@ -4,6 +4,8 @@
   - `maths_records()` performs a mathematical operation on all values for one or more keys and places the output in the maths_results attribute for later retrieval
   - `append_record_maths_results()` appends the maths_results to the record
 - Added the `HttpTask`
+- `BaseTaskChain.results` now returns more keys: `data`, `errors`, `meta`, `metrics`, and `template`
+- `ReportTaskChain` now adds `headers` to the `meta` attribute
 
 # 0.5.0
 - Replaced `HarvestRecordSet` with `DataSet(List[WalkableDict])`

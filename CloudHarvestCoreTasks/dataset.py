@@ -1,24 +1,6 @@
-import operator
-from typing import Any, List, Literal, Tuple
-from re import findall
+from typing import Any, List, Literal
 
 # VARIABLES-------------------------------------------------------------------------------------------------------------
-# The order of _MATCH_OPERATIONS's keys is important. The keys should be ordered from longest to shortest to ensure that
-# the longest match is attempted first. For example, '==' should be before '=' to ensure that '==' is matched
-# before '='. This allows us to perform split() operations on the syntax without accidentally splitting on a substring
-# that is part of the operator.
-MATCH_OPERATIONS = {
-        '==': operator.eq,  # Checks if 'a' is equal to 'b'
-        '>=': operator.ge,  # Checks if 'a' is greater than or equal to 'b'
-        '=>': operator.ge,  # Checks if 'a' is greater than or equal to 'b'
-        '<=': operator.le,  # Checks if 'a' is less than or equal to 'b'
-        '=<': operator.le,  # Checks if 'a' is less than or equal to 'b'
-        '!=': operator.ne,  # Checks if 'a' is not equal to 'b'
-        '>': operator.gt,   # Checks if 'a' is greater than 'b'
-        '<': operator.lt,   # Checks if 'a' is less than 'b'
-        '=': findall        # Checks if 'a' contains 'b'
-    }
-
 # The following operations are supported by the perform_operation() method:
 VALID_MATHS_OPERATIONS = Literal['add', 'subtract', 'multiply', 'divide', 'average', 'minimum', 'maximum']
 
@@ -47,359 +29,6 @@ def requires_flatten(method, preserve_lists: bool = False):
     return wrapper
 
 # CLASSES---------------------------------------------------------------------------------------------------------------
-class DataSetMatch:
-    """
-    The HarvestMatch class is used to perform matching operations on a record based on a provided syntax.
-
-    Attributes:
-        syntax (str): The matching syntax to be used.
-        key (str): The key to be used in the matching operation.
-        value (str): The value to be used in the matching operation.
-        operator (str): The operator to be used in the matching operation.
-        final_match_operation (str): The final matching operation after processing.
-
-    Methods:
-        as_mongo_filter() -> dict:
-            Converts the matching operation into a MongoDB match operation.
-
-        match() -> bool:
-            Performs the matching operation and returns the result.
-
-        get_operator_key() -> str:
-            Retrieves the operator key from the matching syntax.
-    """
-
-    def __init__(self, syntax: str):
-        """
-        Constructs a new HarvestMatch instance.
-
-        Args:
-            syntax (str): The matching syntax to be used.
-        """
-
-        self.syntax = syntax
-        self.key = None
-        self.value = None
-
-        self.operator = self.get_operator_key()
-        self.final_match_operation = None
-
-    def as_mongo_filter(self) -> dict:
-        """
-        Converts the matching operation into a MongoDB match operation.
-
-        Returns:
-            dict: A dictionary representing the MongoDB match operation.
-        """
-
-        if self.key is None and self.value is None:
-            self.key, self.value = self.syntax.split(self.operator, maxsplit=1)
-
-            # strip whitespace from the key, value, and operator
-            for v in ['key', 'value', 'operator']:
-                if hasattr(getattr(self, v), 'strip'):
-                    setattr(self, v, getattr(self, v).strip())
-
-            # fuzzy cast the value to the appropriate type
-            from .functions import fuzzy_cast
-            self.value = fuzzy_cast(self.value)
-
-            if self.value is None:
-                return {
-                    self.key: None
-                }
-
-        match self.operator:
-            case '=':
-                result = {
-                    self.key: {
-                        "$regex": str(self.value),
-                        "$options": "i"
-                    }
-                }
-
-            case '<=' | '=<':
-                result = {
-                    self.key: {
-                        "$lte": self.value
-                    }
-                }
-
-            case '>=' | '=>':
-                result = {
-                    self.key: {
-                        "$gte": self.value
-                    }
-                }
-
-            case '==':
-                result = {
-                    self.key: self.value
-                }
-
-            case '!=':
-                result = {
-                    self.key: {
-                        "$ne": self.value
-                    }
-                }
-
-            case '<':
-                result = {
-                    self.key: {
-                        "$lt": self.value
-                    }
-                }
-
-            case '>':
-                result = {
-                    self.key: {
-                        "$gt": self.value
-                    }
-                }
-
-            case _:
-                raise ValueError('No valid matching statement returned')
-
-        return result
-
-    def as_sql_filter(self) -> tuple:
-        """
-        Converts the matching operation into an SQL WHERE clause condition.
-
-        Returns:
-            str: A string representing the SQL WHERE clause condition.
-        """
-
-        if self.key is None and self.value is None:
-            self.key, self.value = self.syntax.split(self.operator, maxsplit=1)
-
-            # strip whitespace from the key, value, and operator
-            for v in ['key', 'value', 'operator']:
-                if hasattr(getattr(self, v), 'strip'):
-                    setattr(self, v, getattr(self, v).strip())
-
-            # fuzzy cast the value to the appropriate type
-            from .functions import fuzzy_cast
-            self.value = fuzzy_cast(self.value)
-
-        # Enclose string values in single quotes and self.operator is not '='
-        value = f"'{self.value}'" if isinstance(self.value, str) and self.operator != '=' else self.value
-
-        from uuid import uuid4
-        key_uuid = str(uuid4()).replace('-', '')
-        value_uuid = str(uuid4()).replace('-', '')
-
-        param_key = f'%({key_uuid})s'
-        param_value = f'%({value_uuid})s'
-
-        match self.operator:
-            case '=':
-                result = f"{param_key} ILIKE '%{param_value}%'"
-
-            case '<=' | '=<':
-                result = f"{param_key} <= {param_value}"
-
-            case '>=' | '=>':
-                result = f"{param_key} >= {param_value}"
-
-            case '==':
-                result = f"{param_key} = {param_value}"
-
-            case '!=':
-                result = f"{param_key} != {param_value}"
-
-            case '<':
-                result = f"{param_key} < {param_value}"
-
-            case '>':
-                result = f"{param_key} > {param_value}"
-
-            case _:
-                raise ValueError('No valid matching statement returned')
-
-        return result, {
-            key_uuid: self.key,
-            value_uuid: value
-        }
-
-    def match(self, record: 'WalkableDict') -> bool:
-        """
-        Performs the matching operation and returns the result.
-
-        Arguments:
-            record (dict): The record to be matched against.
-
-        Returns:
-            bool: The result of the matching operation.
-        """
-
-        self.key, self.value = self.syntax.split(self.operator, maxsplit=1)
-
-        from .functions import is_bool, is_datetime, is_null, is_number
-        matching_value = self.value
-        record_key_value = record.walk(self.key)
-
-        # convert types if they do not match
-        if type(matching_value) is not type(record_key_value):
-            if is_bool(matching_value):
-                cast_variables_as = 'bool'
-
-            elif is_datetime(matching_value):
-                cast_variables_as = 'datetime'
-
-            elif is_null(matching_value):
-                cast_variables_as = 'null'
-
-            elif is_number(matching_value):
-                cast_variables_as = 'float'
-
-            else:
-                cast_variables_as = 'str'
-
-            from .functions import cast
-            matching_value = cast(matching_value, cast_variables_as)
-            record_key_value = cast(record_key_value, cast_variables_as)
-
-        from re import findall, IGNORECASE
-        if self.operator == '=':
-            result = findall(pattern=matching_value, string=record_key_value, flags=IGNORECASE)
-
-        else:
-            result = MATCH_OPERATIONS[self.operator](record_key_value, matching_value)
-
-        self.final_match_operation = f'{record_key_value}{self.operator}{matching_value}'
-
-        return result
-
-    def get_operator_key(self):
-        """
-        Retrieves the operator key from the matching syntax.
-
-        Returns:
-            str: The operator key.
-
-        Raises:
-            ValueError: If no valid operator is found in the syntax.
-        """
-
-        for op in MATCH_OPERATIONS.keys():
-            if op in self.syntax:
-                return op
-
-        raise ValueError('No valid operator found in syntax. Valid operators are: ' + ', '.join(MATCH_OPERATIONS.keys()))
-
-
-class DataSetMatchSet(list):
-    """
-    The HarvestMatchSet class is a list of HarvestMatch instances. It is used to perform matching operations on a record
-    based on a list of provided syntaxes.
-
-    Attributes:
-        matches (List[DataSetMatch]): The list of HarvestMatch instances.
-
-    Methods:
-        as_mongo_filter() -> dict:
-            Converts the matching operations of all HarvestMatch instances into MongoDB match operations.
-    """
-
-    def __init__(self, matches: List[str]):
-        """
-        Constructs a new HarvestMatchSet instance.
-
-        Args:
-            matches (List[str]): The list of matching syntaxes to be used.
-        """
-
-        super().__init__()
-
-        if isinstance(matches, str):
-            self.matches = [DataSetMatch(syntax=matches)]
-
-        elif isinstance(matches, list):
-            self.matches = [DataSetMatch(syntax=match) for match in matches]
-
-        else:
-            raise ValueError('Invalid type for matches. Expected str or list of str, got ' + type(matches).__name__)
-
-    def as_mongo_filter(self) -> dict:
-        """
-        Converts the matching operations of all HarvestMatch instances into MongoDB match operations.
-
-        Returns:
-            dict: A dictionary representing the MongoDB match operations.
-        """
-
-        result = {'$and': []}
-
-        for match in self.matches:
-            match_syntax = match.as_mongo_filter()
-            result['$and'].append(match_syntax)
-
-        # If there's only one match condition, simplify the result
-        if len(result['$and']) == 1:
-            result = result['$and'][0]
-
-        return result
-
-    def as_sql_filter(self) -> Tuple[str, dict]:
-        """
-        Converts the matching operations of all HarvestMatch instances into SQL WHERE clause conditions.
-
-        Returns:
-            tuple: A tuple containing the SQL WHERE clause and the parameters.
-        """
-
-        clauses = []
-        parameters = {}
-
-        for match in self.matches:
-            match_syntax = match.as_sql_filter()
-            clauses.append(match_syntax[0])
-            parameters.update(match_syntax[1])
-
-        # Combine conditions with the specified operator
-        result = ' AND '.join(clauses)
-
-        return result, parameters
-
-    def match(self, record: 'WalkableDict', result_as_bool: bool = False) -> Tuple[List[str], List[str]] or bool:
-        """
-        Performs the matching operation using all Matches in the MatchSet and returns the result. Multiple Matches are
-        treated as an OR expression, meaning that if any of the Matches return True, the MatchSet will return True.
-
-        Arguments:
-            record (dict): The record to be matched against.
-            result_as_bool (bool): If True, return a single boolean value indicating if any match was found.
-
-        Returns:
-            When result_as_bool is True:
-                bool: True if any match was found, False otherwise.
-
-            When result_as_bool is False:
-                tuple: A tuple containing two lists: the first list contains the final match operations that evaluated to True,
-                and the second list contains the final match operations that evaluated to False.
-        """
-
-        match_true = []
-        match_false = []
-
-        for match in self.matches:
-            result = match.match(record)
-
-            if result:
-                match_true.append(match.final_match_operation)
-
-            else:
-                match_false.append(match.final_match_operation)
-
-        if result_as_bool:
-            return len(match_true) > 0 and len(match_false) == 0
-
-        else:
-            return match_true, match_false
-
-
 class WalkableDict(dict):
 
     def __init__(self, *args, **kwargs):
@@ -414,6 +43,12 @@ class WalkableDict(dict):
         value (Any): The value to assign.
         separator (str, optional): The separator to use when splitting the key. Defaults to '.'.
         """
+
+        # If the key does not contain the separator, bypass the walking logic and return the value directly
+        # This is a performance optimization for top-level keys
+        if separator not in key:
+            self[key] = value
+            return self
 
         # Split the key into individual path using the separator
         path = key.split(separator)
@@ -462,6 +97,10 @@ class WalkableDict(dict):
         default (Any, optional): The default value to return if the key does not exist. Defaults to None.
         separator (str, optional): The separator to use when splitting the key. Defaults to '.'.
         """
+        # If the key does not contain the separator, bypass the walking logic and return the value directly
+        # This is a performance optimization for top-level keys
+        if separator not in key:
+            return self.pop(key, default)
 
         # Split the key into individual path using the separator
         path = key.split(separator)
@@ -512,6 +151,11 @@ class WalkableDict(dict):
         separator (str, optional): The separator to use when walking the self. Defaults to '.'.
         """
 
+        # If the key does not contain the separator, bypass the walking logic and return the value directly
+        # This is a performance optimization for top-level keys
+        if separator not in key:
+            return self.get(key) or default
+
         # Split the key into individual path using the separator
         path = key.split(separator)
         result = default
@@ -534,7 +178,8 @@ class WalkableDict(dict):
 
 
 class DataSet(List[WalkableDict]):
-    from .functions import CAST_TYPES
+    from functions import CAST_TYPES
+    from filters import MatchSetGroup
 
     def __init__(self, *args):
         super().__init__()
@@ -646,7 +291,7 @@ class DataSet(List[WalkableDict]):
 
         target_key = target_key or source_key
 
-        from .functions import cast
+        from functions import cast
 
         [
             record.assign(target_key, cast(record.walk(source_key), target_type))
@@ -713,7 +358,7 @@ class DataSet(List[WalkableDict]):
 
         target_key = target_key or source_key
 
-        from .functions import key_value_list_to_dict
+        from functions import key_value_list_to_dict
 
         for record in self:
             # Gets the list of dictionaries from the source key
@@ -903,7 +548,19 @@ class DataSet(List[WalkableDict]):
 
         return self
 
-    def match_and_remove(self, matching_expressions: list or str or DataSetMatchSet, invert_results: bool = False) -> 'DataSet':
+    def limit(self, limit: int) -> 'DataSet':
+        """
+        Limits the number of records in the data set.
+
+        Arguments
+        limit (int): The maximum number of records to keep.
+        """
+
+        self[:] = self[:limit]
+
+        return self
+
+    def match_and_remove(self, matching_expressions: MatchSetGroup or List[List[str]], invert_results: bool = False) -> 'DataSet':
         """
         Evaluates expressions against the data set and removes records that do not match the expressions.
 
@@ -911,24 +568,9 @@ class DataSet(List[WalkableDict]):
         matching_expressions (list or str or HarvestMatchSet): The expressions to match the records by.
         invert_results (bool, optional): When true, the results are inverted. Defaults to False.
         """
+        from filters import match_records
 
-        match_set = matching_expressions
-
-        # If the match_set is not already a HarvestMatchSet, convert it to a HarvestMatchSet
-        if not isinstance(matching_expressions, DataSetMatchSet):
-            match_set = DataSetMatchSet(matching_expressions)
-
-        # Create a list of matched records
-        matched_records = [
-            record
-            for record in self
-            if (invert_results is False and match_set.match(record, result_as_bool=True))           # Only matched records will be kept
-               or (invert_results is True and not match_set.match(record, result_as_bool=False))    # Only unmatched records will be kept
-        ]
-
-        # Clear the data set and add the matched records
-        self.clear()
-        self.add_records(matched_records)
+        self[:] = list(match_records(dataset=self, match_set_group=matching_expressions, invert_results=invert_results))
 
         return self
 
@@ -1135,7 +777,6 @@ class DataSet(List[WalkableDict]):
 
         return self
 
-    @requires_flatten
     def sort_records(self, keys: List[str]) -> 'DataSet':
         """
         Sort the records in the record set by one or more keys.
@@ -1150,7 +791,7 @@ class DataSet(List[WalkableDict]):
                 key, value = s.split(':')
                 key = key.strip()
 
-                if value.lower() == 'desc':
+                if value.lower() in ('dsc', 'desc'):
                     order = -1
                 else:
                     order = 1
@@ -1160,10 +801,14 @@ class DataSet(List[WalkableDict]):
 
             sorted_keys[key] = order
 
-        super().sort(key=lambda record: [
-            (record[key] if sorted_keys[key] == 1 else -record[key])
-            for _key in sorted_keys
-        ])
+        from natsort import natsorted, ns
+        self[:] = natsorted(
+            self,
+            key=lambda record: [
+                record.walk(k, '') if direction == 1 else record.walk(k, '')[::-1]
+                for k, direction in sorted_keys.items()
+            ]
+        )
 
         return self
 

@@ -37,6 +37,22 @@ class TestDataSet(unittest.TestCase):
                 'notes': 'Cousin',
                 'age': 35,
                 'active': False
+            },
+            {
+                'name': 'Jane Smith',
+                'address': {
+                    'street': '789 Oak St',
+                    'city': 'Newtown',
+                    'state': 'NY',
+                    'zip': '11223'
+                },
+                'dob': '1992-07-20',
+                'email': 'jane.smith2@example.com',
+                'phone': '555-9876',
+                'tags': ['friend'],
+                'notes': 'Met at school',
+                'age': 28,
+                'active': True
             }
         ])
 
@@ -98,7 +114,7 @@ class TestDataSet(unittest.TestCase):
             self.assertIn('city', record['address'])
 
     def test_match_and_remove(self):
-        self.dataset.match_and_remove(['name == "John Doe"'])
+        self.dataset.match_and_remove([['name=="John Doe"']])
         for record in self.dataset:
             self.assertNotEqual(record['name'], 'John Doe')
 
@@ -121,7 +137,7 @@ class TestDataSet(unittest.TestCase):
                                    default_value=None)
 
         self.assertIn('average_age', self.dataset.maths_results)
-        self.assertEqual(self.dataset.maths_results['average_age'], 32.5)
+        self.assertEqual(self.dataset.maths_results['average_age'], sum([record['age'] for record in self.dataset]) / len(self.dataset))
 
     def test_append_maths_results(self):
         self.dataset.maths_records(source_key='age',
@@ -174,7 +190,37 @@ class TestDataSet(unittest.TestCase):
         from copy import copy
         self.dataset.append(copy(self.dataset[0]))
         self.dataset.remove_duplicate_records()
-        self.assertEqual(len(self.dataset), 2)
+        self.assertEqual(len(self.dataset), 3)
+
+    def test_sort_records(self):
+        # Sort by name in ascending order
+        self.dataset.sort_records(keys=['name'])
+        self.assertEqual(self.dataset[0]['name'], 'Jane Smith')
+
+        # Sort by name in descending order
+        self.dataset.sort_records(keys=['name:desc'])
+        self.assertEqual(self.dataset[0]['name'], 'John Doe')
+
+        # Sort by nested value in ascending order
+        self.dataset.sort_records(keys=['address.city'])
+        self.assertEqual(self.dataset[0].walk('address.city'), 'Anytown')
+
+        # Sort by nested value in descending order
+        self.dataset.sort_records(keys=['address.city:desc'])
+        self.assertEqual(self.dataset[0].walk('address.city'), 'Othertown')
+
+        # Sort by multiple keys, including nested keys
+        self.dataset.sort_records(keys=['name', 'address.state:desc'])
+
+        # Jane Smith of NY should be first
+        self.assertEqual(self.dataset[0]['name'], 'Jane Smith') and self.assertEqual(self.dataset[0].walk('address.state'), 'NY')
+
+        # Jane Smith of TX should be second
+        self.assertEqual(self.dataset[1]['name'], 'Jane Smith') and self.assertEqual(self.dataset[1].walk('address.state'), 'TX')
+
+        # John Doe should be last
+        self.assertEqual(self.dataset[2]['name'], 'John Doe')
+
 
     def test_unwind_and_wind(self):
         self.dataset.unwind('tags')

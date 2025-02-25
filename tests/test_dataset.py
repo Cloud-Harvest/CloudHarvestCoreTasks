@@ -116,7 +116,7 @@ class TestDataSet(unittest.TestCase):
     def test_match_and_remove(self):
         self.dataset.match_and_remove([['name=="John Doe"']])
         for record in self.dataset:
-            self.assertNotEqual(record['name'], 'John Doe')
+            self.assertEqual(record['name'], 'John Doe')
 
     def test_maths_keys(self):
         self.dataset.maths_keys(source_keys=['age', 'age'],
@@ -221,6 +221,38 @@ class TestDataSet(unittest.TestCase):
         # John Doe should be last
         self.assertEqual(self.dataset[2]['name'], 'John Doe')
 
+        # Reverse sort by multiple keys, including nested keys
+        self.dataset.sort_records(keys=['name:desc', 'address.zip:desc'])
+        self.assertEqual(self.dataset[0]['name'], 'John Doe')
+        self.assertEqual(self.dataset[0].walk('address.zip'), '12345')
+
+        self.assertEqual(self.dataset[1]['name'], 'Jane Smith')
+        self.assertEqual(self.dataset[1].walk('address.zip'), '67890')
+
+        self.assertEqual(self.dataset[2]['name'], 'Jane Smith')
+        self.assertEqual(self.dataset[2].walk('address.zip'), '11223')
+
+        # Resort by name and zip in ascending order
+        self.dataset.sort_records(keys=['name', 'address.zip'])
+        self.assertEqual(self.dataset[0]['name'], 'Jane Smith')
+        self.assertEqual(self.dataset[0].walk('address.zip'), '11223')
+
+        self.assertEqual(self.dataset[1]['name'], 'Jane Smith')
+        self.assertEqual(self.dataset[1].walk('address.zip'), '67890')
+
+        self.assertEqual(self.dataset[2]['name'], 'John Doe')
+        self.assertEqual(self.dataset[2].walk('address.zip'), '12345')
+
+        # Resort name:desc and zip:asc
+        self.dataset.sort_records(keys=['name:desc', 'address.zip'])
+        self.assertEqual(self.dataset[0]['name'], 'John Doe')
+        self.assertEqual(self.dataset[0].walk('address.zip'), '12345')
+
+        self.assertEqual(self.dataset[1]['name'], 'Jane Smith')
+        self.assertEqual(self.dataset[1].walk('address.zip'), '11223')
+
+        self.assertEqual(self.dataset[2]['name'], 'Jane Smith')
+        self.assertEqual(self.dataset[2].walk('address.zip'), '67890')
 
     def test_unwind_and_wind(self):
         self.dataset.unwind('tags')
@@ -275,9 +307,20 @@ class TestWalkableDict(unittest.TestCase):
             self.assertEqual(record.walk('address.city'), record['address']['city'])
 
     def test_assign(self):
+        # Test basic nested assignment of an existing value
         for record in self.dataset:
             record.assign('address.city', 'New City')
             self.assertEqual(record['address']['city'], 'New City')
+
+        # Test nested assignment of a missing path
+        for record in self.dataset:
+            record.assign('address.county', 'New County')
+            self.assertEqual(record['address']['county'], 'New County')
+
+        # Test a deeply nested assignment on a path which does not exist
+        for record in self.dataset:
+            record.assign('do.you.like.testing.nested.objects.i.do', 'Yes')
+            self.assertEqual(record['do']['you']['like']['testing']['nested']['objects']['i']['do'], 'Yes')
 
     def test_drop(self):
         for record in self.dataset:

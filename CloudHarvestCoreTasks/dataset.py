@@ -38,54 +38,45 @@ class WalkableDict(dict):
         """
         Assigns a value to a key in a self.
 
-        Arguments
+        Arguments:
         key (str): The key to assign the value to.
         value (Any): The value to assign.
         separator (str, optional): The separator to use when splitting the key. Defaults to '.'.
         """
+        def recursive_assign(target, path):
+            part = path[0]
+            # If this is the last part of the path, assign the value
+            if len(path) == 1:
+                if isinstance(target, dict):
+                    target[part] = value
+                elif isinstance(target, list) and part.isdigit():
+                    index = int(part)
+                    if 0 <= index < len(target):
+                        target[index] = value
+                return
 
-        # If the key does not contain the separator, bypass the walking logic and return the value directly
-        # This is a performance optimization for top-level keys
+            # If the target is a dictionary, ensure the next part exists
+            if isinstance(target, dict):
+                if part not in target:
+                    target[part] = {} if not path[1].isdigit() else []
+                recursive_assign(target[part], path[1:])
+
+            # If the target is a list, ensure the next part exists
+            elif isinstance(target, list) and part.isdigit():
+                index = int(part)
+                if 0 <= index < len(target):
+                    if not isinstance(target[index], (dict, list)):
+                        target[index] = {} if not path[1].isdigit() else []
+                    recursive_assign(target[index], path[1:])
+
+        # If the key does not contain the separator, assign the value directly
         if separator not in key:
             self[key] = value
             return self
 
-        # Split the key into individual path using the separator
-        path = key.split(separator)
-        target = self
-
-        # Iterate through each key in the path except the last one
-        for part in path[:-1]:
-            if isinstance(target, dict):
-                # Get the next nested dictionary
-                target = target.get(part)
-
-            elif isinstance(target, list) and part.isdigit():
-                # If the current target is a list and the part is an integer, treat it as an index
-                index = int(part)
-
-                if 0 <= index < len(target):
-                    target = target[index]
-
-                else:
-                    # If the index is out of bounds, return the original self
-                    return self
-
-            else:
-                # If the path cannot be resolved, return the original self
-                return self
-
-        # Assign the value to the last key in the path
-        last_key = path[-1]
-        if isinstance(target, dict):
-            target[last_key] = value
-
-        elif isinstance(target, list) and last_key.isdigit():
-            index = int(last_key)
-
-            if 0 <= index < len(target):
-                target[index] = value
-
+        # Split the key into parts and recursively assign the value
+        p = key.split(separator)
+        recursive_assign(self, p)
         return self
 
     def drop(self, key: str, default: Any = None, separator: str = '.') -> Any:
@@ -179,7 +170,6 @@ class WalkableDict(dict):
 
 class DataSet(List[WalkableDict]):
     from functions import CAST_TYPES
-    from filters import MatchSetGroup
 
     def __init__(self, *args):
         super().__init__()
@@ -505,7 +495,6 @@ class DataSet(List[WalkableDict]):
 
         return self
 
-    @requires_flatten
     def drop_keys(self, keys: List[str] or str) -> 'DataSet':
         """
         Drops keys from the data set.
@@ -560,17 +549,24 @@ class DataSet(List[WalkableDict]):
 
         return self
 
-    def match_and_remove(self, matching_expressions: MatchSetGroup or List[List[str]], invert_results: bool = False) -> 'DataSet':
+    def match_and_remove(self, matching_expressions: List[List[str]], invert_results: bool = False) -> 'DataSet':
         """
         Evaluates expressions against the data set and removes records that do not match the expressions.
 
         Arguments
-        matching_expressions (list or str or HarvestMatchSet): The expressions to match the records by.
+        matching_expressions (list or str or MatchSetGroup): The expressions to match the records by.
         invert_results (bool, optional): When true, the results are inverted. Defaults to False.
         """
-        from filters import match_records
+        from filters import MatchSetGroup
 
-        self[:] = list(match_records(dataset=self, match_set_group=matching_expressions, invert_results=invert_results))
+        if not isinstance(matching_expressions, MatchSetGroup):
+            matching_expressions = MatchSetGroup(matching_expressions)
+
+        self[:] = [
+            record
+            for record in self
+            if matching_expressions.evaluate(record) ^ invert_results
+        ]
 
         return self
 
@@ -774,6 +770,30 @@ class DataSet(List[WalkableDict]):
 
             finally:
                 record.assign(target_key, source_data)
+
+        return self
+
+    def set_keys(self, keys: List[str]) -> 'DataSet':
+        """
+        Rebuilds the data set with only the provided keys. Note that the keys will not be ordered as provided. This would
+        require an OrderedDict; however, WalkableDict is not an OrderedDict. Further, since we intend to transit the
+        data set through Agent or API channels, we can expect the keys to be reordered during the JSON encode/decode
+        process. Therefore, it is incumbent upon the consumer to reorder the keys, if applicable.
+
+        Arguments
+        keys (List[str]): The keys to keep.
+        """
+
+        results = []
+        for record in self:
+            new_record = WalkableDict()
+            for key in keys:
+                new_record.assign(key, record.walk(key))
+
+            results.append(new_record)
+
+        self.clear()
+        self.add_records(results)
 
         return self
 

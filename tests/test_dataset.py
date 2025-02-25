@@ -192,6 +192,11 @@ class TestDataSet(unittest.TestCase):
         self.dataset.remove_duplicate_records()
         self.assertEqual(len(self.dataset), 3)
 
+    def test_set_keys(self):
+        self.dataset.set_keys(keys=['name', 'address.city'])
+        for record in self.dataset:
+            self.assertEqual(len(record.keys()), 2)
+
     def test_sort_records(self):
         # Sort by name in ascending order
         self.dataset.sort_records(keys=['name'])

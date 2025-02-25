@@ -5,19 +5,10 @@ This module defines the core classes and functionality for managing tasks and ta
 from CloudHarvestCorePluginManager.decorators import register_definition
 from datetime import datetime, timezone
 from threading import Thread
-from typing import Any, Dict, List, Literal, Tuple
+from typing import Any, Dict, List, Literal
 from logging import getLogger
 
 _log_levels = Literal['debug', 'info', 'warning', 'error', 'critical']
-USER_FILTERS = {
-    'add_keys': [],
-    'count': False,
-    'exclude_keys': [],
-    'headers': [],
-    'limit': None,
-    'matches': [],
-    'sort': None
-}
 
 logger = getLogger('harvest')
 
@@ -60,7 +51,7 @@ class BaseTask:
     # By default, the user filter class is HarvestRecordSetUserFilter. This is because most tasks which return data do
     # so after the overarching data set has been retrieved. An example of this include the FileTask which reads a file
     # and returns the data.
-    USER_FILTER_STAGE = 'complete'
+    FILTER_STAGE = None
 
     def __init__(self,
                  name: str,
@@ -73,7 +64,7 @@ class BaseTask:
                  task_chain: 'BaseTaskChain' = None,
                  result_as: (dict or str) = None,
                  retry: dict = None,
-                 user_filters:dict = None,
+                 filters:dict = None,
                  when: str = None,
                  **kwargs):
 
@@ -117,7 +108,7 @@ class BaseTask:
                 >>>     'name': 'variable_name',
                 >>>     'mode': 'append', 'extend', 'merge', 'overwrite'    # The mode to store the result in the variable. 'overwrite' is the default.
                 >>> }
-            user_filters (dict): A dictionary of user filters to apply to the data.
+            filters (dict): A dictionary of user filters to apply to the data.
                 >>> user_filters = {
                 >>>     'accepted': '*',                        # Regex pattern to match the filters allowed in this Task.
                 >>>     'add_keys': ['new_key'],                # Keys to add to the data.
@@ -158,8 +149,8 @@ class BaseTask:
         self.start = None
         self.end = None
 
-        # Defaults < task-chain < user
-        self.user_filters = USER_FILTERS | self.task_chain.user_filters if self.task_chain else {} | (user_filters or {})
+        # Defaults < user
+        self.filters = filters
 
     @property
     def duration(self) -> float:
@@ -194,20 +185,12 @@ class BaseTask:
         except ValueError:
             return -1
 
-    def apply_user_filters(self):
+    def apply_filters(self) -> 'BaseTask':
         """
         Applies user filters to the Task. The default user filter class is HarvestRecordSetUserFilter which is executed
         when on_complete() is called. This method should be overwritten in subclasses to provide specific functionality.
         """
-
-        # If the user filters not configured for this Task, return
-        if self.user_filters.get('accepted') is None or self.ignore_user_filters:
-            return
-
-        from ..user_filters import DataSetUserFilter
-
-        with DataSetUserFilter(recordset=self.result, **self.user_filters) as user_filter:
-            self.result = user_filter.apply()
+        return self
 
     def method(self, *args, **kwargs) -> 'BaseTask':
         """
@@ -378,8 +361,8 @@ class BaseTask:
             self.task_chain.variables[self.result_as] = self.result
 
         # Apply user filters if the user filter stage is set to 'complete'
-        if self.USER_FILTER_STAGE == 'complete':
-            self.apply_user_filters()
+        if self.FILTER_STAGE == 'complete':
+            self.apply_filters()
 
         # Run the on_complete directive
         self._run_on_directive('complete')
@@ -448,8 +431,8 @@ class BaseTask:
 
         self._run_on_directive('start')
 
-        if self.USER_FILTER_STAGE == 'start':
-            self.apply_user_filters()
+        if self.FILTER_STAGE == 'start':
+            self.apply_filters()
 
         return self
 
@@ -627,7 +610,6 @@ class BaseTaskChain(List[BaseTask]):
 
     def __init__(self,
                  template: dict,
-                 user_filters: dict = None,
                  variables: dict = None,
                  *args, **kwargs):
         """
@@ -639,7 +621,6 @@ class BaseTaskChain(List[BaseTask]):
                 tasks(List[dict]): A list of task configurations for the tasks in the chain.
                 description(str, optional): A brief description of what the task chain does. Defaults to None.
                 max_workers(int, optional): The maximum number of concurrent workers that are permitted.
-            user_filters(dict, optional): A dictionary of user filters to apply to the data. Defaults to None.
             variables(dict, optional): Variables that can be used by the tasks in the chain. The dictionary is merged
                                         with into the BaseTaskChain.variables attribute. Defaults to None.
         """
@@ -669,7 +650,6 @@ class BaseTaskChain(List[BaseTask]):
 
         self.start = None
         self.end = None
-        self.user_filters = USER_FILTERS | (user_filters or {})
 
         self.meta = {}
 
@@ -1508,154 +1488,6 @@ class BaseTaskPool:
 
         return []
 
-
-class BaseUserFilters:
-    from ..dataset import DataSet
-
-    def __init__(self,
-                 permitted: List[str] = '*',
-                 add_keys: List[str] = None,
-                 count: bool = False,
-                 exclude_keys: List[str] = None,
-                 headers: List[str] = None,
-                 limit: int = None,
-                 matches: List[List[str]] or List[str] = None,
-                 sort: List[str] = None,
-                 **kwargs):
-
-        """
-        Initializes a new instance of the BaseUserFilters class. This class is used to store information provided by the
-        user which indicates what restrictions on data should be applied.
-
-        Arguments
-        accepted (List[str]): A list of the filters which may be applied to a Task.
-        add_keys (List[str], optional): A list of keys to add to the data.
-        count (bool, optional): A flag indicating whether the result should be a count of the data, not the data itself.
-        exclude_keys (List[str], optional): A list of keys to exclude from the data.
-        headers (List[str], optional): A list of headers to include in the data. Other keys will be removed.
-        limit (int, optional): The maximum number of records to return.
-        matches (List[List[str]] or List[str], optional): A list of HarvestMatchSets to apply to the data.
-        sort (List[str], optional): A list of keys to sort the data by.
-        """
-        from ..matching import DataSetMatchSet
-
-        self.permitted = [permitted] if isinstance(permitted, str) else permitted
-        self.add_keys = add_keys or []
-        self.count = count
-        self.exclude_keys = exclude_keys or []
-        self.headers = headers or []
-        self.limit = limit
-        self.matches = DataSetMatchSet(matches or [])
-        self.sort = sort
-
-    def apply(self, data: List[dict]) -> List[dict]:
-        """
-        Applies the user filters to the data.
-
-        Arguments
-        data (List[dict]): The data to filter.
-
-        Returns
-        List[dict]: The filtered data.
-        """
-
-        from ..dataset import DataSet
-        data = DataSet().add_records(data)
-
-        # Apply the filters
-        data = self._apply_add_keys(data)
-        data = self._apply_count(data)
-        data = self._apply_exclude_keys(data)
-        data = self._apply_headers(data)
-        data = self._apply_limit(data)
-        data = self._apply_matches(data)
-        data = self._apply_sort(data)
-
-        return data
-
-    def _apply_add_keys(self, data: DataSet) -> DataSet:
-        """
-        Applies the add_keys filter to the data.
-
-        Arguments
-        data (DataSet): The data to filter.
-
-        Returns
-        DataSet: The filtered data.
-        """
-
-        if 'add_keys' not in self.permitted and self.permitted != '*':
-            return data
-
-        for record in data:
-            for key in self.add_keys:
-                if key not in record.keys():
-                    record[key] = None
-
-        # Add the keys to the headers
-        for ak in self.add_keys:
-            if ak not in self.headers:
-                self.headers.append(ak)
-
-        return data
-
-    def _apply_count(self, data: DataSet) -> int or DataSet:
-        """
-        Applies the count filter to the data.
-
-        Arguments
-        data (DataSet): The data to filter.
-
-        Returns
-        If permitted:
-            int: The count of the data.
-        Else:
-            DataSet: The data.
-        """
-
-        if 'count' not in self.permitted and self.permitted != '*':
-            return data
-
-        return len(data) if self.count else data
-
-    def _apply_exclude_keys(self, data: DataSet) -> DataSet:
-        """
-        Applies the exclude_keys filter to the data.
-
-        Arguments
-        data (DataSet): The data to filter.
-
-        Returns
-        DataSet: The filtered data.
-        """
-
-        [
-            record.drop(e)
-            for e in self.exclude_keys if e not in self.add_keys
-            for record in data
-        ]
-
-        # Remove the keys from the headers
-        for ek in self.exclude_keys:
-            if ek in self.headers:
-                self.headers.remove(ek)
-
-        return data
-
-    def _apply_headers(self, data: DataSet) -> DataSet:
-        """
-        Applies the headers filter to the data.
-
-        Arguments
-        data (DataSet): The data to filter.
-
-        Returns
-        DataSet: The filtered data.
-        """
-
-        data.clean_keys(base_keys=self.headers, add_keys=self.add_keys, exclude_keys=self.exclude_keys)
-
-        return data
 
 class BaseHarvestException(BaseException):
     """

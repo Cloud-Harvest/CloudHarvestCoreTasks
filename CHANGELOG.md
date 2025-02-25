@@ -6,6 +6,12 @@
 - Added the `HttpTask`
 - `BaseTaskChain.results` now returns more keys: `data`, `errors`, `meta`, `metrics`, and `template`
 - `ReportTaskChain` now adds `headers` to the `meta` attribute
+- Vastly improved how filtering is applied
+  - Created new classes for different types of filters: `DataSetFilter`, `MongoFilter`, and `SqlFilter`
+  - Filtering methods are now defined and ordered using the `BaseFilter.ORDER_OF_OPERATIONS` tuple
+  - Filters call `apply()` which iterates based on the `ORDER_OF_OPERATIONS`
+- Added a performance optimization for `WalkableDict` where walking logic is now bypassed if now separator is in the key name
+- `DataSet.sort()` now correctly sorts by multiple keys and in reverse order
 
 # 0.5.0
 - Replaced `HarvestRecordSet` with `DataSet(List[WalkableDict])`

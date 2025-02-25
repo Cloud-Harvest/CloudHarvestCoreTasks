@@ -24,7 +24,7 @@ from .base import (
     TaskStatusCodes
 )
 
-from ..user_filters import MongoUserFilter
+from ..filters import MongoFilter
 
 logger = getLogger('harvest')
 
@@ -301,6 +301,24 @@ class DataSetTask(BaseTask):
         self.data = data if isinstance(data, DataSet) else DataSet().add_records(data)
         self.stages = stages
         self.stage_position = 0
+
+        from filters import DataSetFilter
+        self.filters = DataSetFilter(self.filters)
+
+    def apply_filters(self) -> 'DataSetTask':
+        """
+        Applies user filters to the Task. The default user filter class is HarvestRecordSetUserFilter which is executed
+        when on_complete() is called. This method should be overwritten in subclasses to provide specific functionality.
+        """
+
+        # If the user filters not configured for this Task, return
+        if self.filters.accepted is None or self.ignore_user_filters:
+            pass
+
+        else:
+            self.filters.apply()
+
+        return self
 
     def method(self):
         """
@@ -803,15 +821,18 @@ class HttpTask(BaseTask):
 
 @register_definition(name='json', category='task')
 class JsonTask(BaseTask):
-    def __init__(self, mode: Literal['serialize', 'deserialize'], data: Any = None, default_type: type = str,
+    def __init__(self, mode: Literal['serialize', 'deserialize'], data: Any, default_type: type = str,
                  parse_datetimes: bool = False, *args, **kwargs):
         """
         Initializes a new instance of the JsonTask class.
 
         Args:
-            data (Any, optional): The data to load or dump. Defaults to None.
             mode (Literal['serialize', 'deserialize']): The mode in which to operate. 'load' reads a JSON file, 'dump' writes a JSON file.
+            data (Any): The data to load or dump. Defaults to None.
             default_type (type, optional): The default type to use when loading JSON data. Defaults to str.
+            parse_datetimes (bool, optional): A boolean indicating whether to parse datetimes in the JSON data.
+                Attempts to parse a string as a datetime object. If the string cannot be parsed, it is returned as-is.
+                Defaults to False.
             *args: Variable length argument list.
             **kwargs: Arbitrary keyword arguments.
         """
@@ -888,11 +909,9 @@ class MongoTask(BaseDataTask):
     """
     The MongoTask class is a subclass of the BaseDataTask class. It represents a task that interacts with a MongoDB database.
     """
-    from ..user_filters import MongoUserFilter
 
     # The user filter class and stage are used to apply user filters to the database query results.
-    USER_FILTER_CLASS = MongoUserFilter
-    USER_FILTER_STAGE = 'start'
+    FILTER_STAGE = 'start'
 
     def __init__(self, collection: str = None, result_attribute: str = None, *args, **kwargs):
         """
@@ -909,41 +928,22 @@ class MongoTask(BaseDataTask):
         self.collection = collection
         self.result_attribute = result_attribute
 
-    # def is_connected(self) -> bool:
-    #     """
-    #     Checks if the task is connected to the database.
-    #
-    #     Returns:
-    #         bool: True if the task is connected to the database, otherwise False.
-    #     """
-    #     from pymongo import MongoClient
-    #     silo_config = self.silo.__dict__()
-    #     silo_config.pop('engine')
-    #     silo_config.pop('database')
-    #
-    #     silo_extend = silo_config.pop('extended_db_configuration', {})
-    #     connection_config = silo_config | silo_extend
-    #     client = MongoClient(**connection_config)
-    #     si = client.server_info()
-    #
-    #     return True
+        from filters import MongoFilter
+        self.filters = MongoFilter(self.filters)
 
-    def apply_user_filters(self) -> 'BaseTask':
+    def apply_filters(self) -> 'MongoTask':
         """
         Applies user filters to the database configuration.
         """
-        if self.user_filters.get('accepted') is None or self.ignore_user_filters:
+
+        if self.filters.accepted is None or self.ignore_user_filters:
             return self
 
-        pipeline = self.arguments.get('pipeline')
-        with MongoUserFilter(pipeline=pipeline, **self.user_filters) as ufc:
-            ufc.apply()
+        with MongoFilter() as mongo_filter:
+            mongo_filter.pipeline = self.arguments.get('pipeline')
+            mongo_filter.apply()
 
-            if pipeline:
-                self.arguments['pipeline'] = ufc.result
-
-            else:
-                self.arguments = ufc.result
+        return self
 
     def method(self, *args, **kwargs):
         """

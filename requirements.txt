@@ -2,6 +2,7 @@ CloudHarvestCorePluginManager @ git+https://github.com/Cloud-Harvest/CloudHarves
 Flask
 flatten-json
 Jinja2
+natsort
 pandas
 pymongo
 pytest

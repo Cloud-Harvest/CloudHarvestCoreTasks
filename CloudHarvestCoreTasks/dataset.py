@@ -186,18 +186,6 @@ class DataSet(List[WalkableDict]):
         self.clear()
         return None
 
-    def key_values(self, source_key: str, missing_value: Any = None):
-        """
-        Consolidates the values of a key in the data set.
-
-        Arguments
-        source_key (str): The key to consolidate.
-        missing_value (Any): The value to use when a key is missing.
-        """
-
-        for record in self:
-            yield record.walk(source_key, missing_value)
-
     @property
     def keys(self):
         """
@@ -287,50 +275,6 @@ class DataSet(List[WalkableDict]):
             record.assign(target_key, cast(record.walk(source_key), target_type))
             for record in self
         ]
-
-        return self
-
-    @requires_flatten
-    def clean_keys(self,
-                   base_keys: list = None,
-                   add_keys: list = None,
-                   exclude_keys: list = None) -> 'DataSet':
-        """
-        Clean the keys of the record set by consolidating keys from multiple sources and excluding keys. In
-        this method, 'header' is synonymous with 'key'.
-
-        Arguments
-        base_keys (list, optional): A list of keys to use as the base keys. Defaults to a consolidated list of all keys in the HarvestRecordSet.
-        add_keys (list, optional): A list of keys to add to the base keys. Defaults to None.
-        exclude_keys (list, optional): A list of keys to exclude from the record set. Defaults to None.
-        """
-
-        # Combine the base keys with any additional keys
-        keys = (base_keys or list(self.keys)) + (add_keys or [])
-
-        # Remove any keys that are in the exclude list
-        for header in exclude_keys or []:
-            if header in keys:
-                keys.remove(header)
-
-        # Generates a list of keys where subsequent instances of the header name are removed
-        consolidated_keys = []
-
-        # Adds all keys to the consolidated list
-        for header in keys:
-            if header not in consolidated_keys:
-                consolidated_keys.append(header)
-
-        for record in self:
-            # Removes all keys that are not in the consolidated list
-            for key in list(record.keys()):
-                if key not in consolidated_keys:
-                    record.drop(key)
-
-            # Adds all keys that are in the consolidated list but not in the record
-            for key in consolidated_keys:
-                if key not in record:
-                    record[key] = None
 
         return self
 
@@ -434,7 +378,7 @@ class DataSet(List[WalkableDict]):
         from copy import copy
 
         if source_index < len(self):
-            if target_index < len(self):
+            if target_index and target_index < len(self):
                 self.insert(target_index, copy(self[source_index]))
 
             else:
@@ -636,32 +580,26 @@ class DataSet(List[WalkableDict]):
 
         return self
 
-    def nest_records(self,
-                     target_key: str,
-                     key_pattern: str = None,
-                     nest_type: Literal['dict', 'list'] = 'dict') -> 'DataSet':
+    def nest_keys(self, source_keys: List[str], target_key: str = None, preserve_original_keys: bool = False) -> 'DataSet':
         """
         Nest keys in the record set under a new key.
 
-        :param target_key: the key to nest the keys under
-        :param key_pattern: the pattern to match keys to nest, defaults to None
-        :param nest_type: the type of nesting to use, either 'dict' or 'list', defaults to 'dict'
+        :param source_keys: the keys to nest under the target_key
+        :param target_key: the key to nest the keys under. When not provided, the source keys are placed at the top level of the record
+        :param preserve_original_keys: when true, the original keys are preserved in the record
         """
 
         for record in self:
-            nested_result = {} if nest_type == 'dict' else []
+            nested_result = {
+                key: record.walk(key) if preserve_original_keys else record.drop(key, None)
+                for key in source_keys
+            }
 
-            for key in list(record.keys()):
-                if key_pattern:
-                    from re import match
-                    if match(key_pattern, key):
-                        if isinstance(nested_result, dict):
-                            nested_result[key] = record.pop(key, None)
+            if target_key:
+                record.assign(target_key, nested_result)
 
-                        else:
-                            nested_result.append({key: record.pop(key, None)})
-
-            record[target_key] = nested_result
+            else:
+                record.update(nested_result)
 
         return self
 
@@ -707,19 +645,6 @@ class DataSet(List[WalkableDict]):
                 source_data = list(set(record.get(source_key)))
 
             record.assign(target_key, source_data)
-
-        return self
-
-    def remove_record(self, index: int = None) -> 'DataSet':
-        """
-        Removes a record from the data set based on the record's index.
-
-        Arguments
-        index (int, optional): The index of the record to remove
-        """
-
-        if index < len(self):
-            self.pop(index)
 
         return self
 
@@ -794,6 +719,19 @@ class DataSet(List[WalkableDict]):
 
         self.clear()
         self.add_records(results)
+
+        return self
+
+    def slice_records(self, start_index: int = None, end_index: int = None) -> 'DataSet':
+        """
+        Only keeps the records between the start and end index.
+
+        Arguments
+        start_index (int, optional): The starting index. Defaults to None.
+        end_index (int, optional): The ending index. Defaults to None.
+        """
+
+        self[:] = self[start_index:end_index]
 
         return self
 
@@ -899,33 +837,6 @@ class DataSet(List[WalkableDict]):
 
         return self
 
-    def to_redis(self, name_key: str) -> 'DataSet':
-        """
-        Convert the data set to a Redis-compatible format. This permanently modifies the record set.
-
-        :param name_key: The key to store the record set under
-        """
-        from json import dumps
-
-        result = [
-            WalkableDict({
-                record[name_key]: {
-                    key: dumps(value, default=str)
-                    for key, value in record.items()
-                }
-                for record in self
-            })
-
-        ]
-
-        # Remove the original records
-        self.clear()
-
-        # Add the new records
-        self.add_records(result)
-
-        return self
-
     def unflatten(self, separator: str = '.') -> 'DataSet':
         """
         Unflattens all records in the data set.
@@ -948,43 +859,6 @@ class DataSet(List[WalkableDict]):
 
         return self
 
-    def unnest_records(self, key_pattern: str = None, nest_level: int = 0, delimiter: str = '.') -> 'DataSet':
-        """
-        Removes the indicated layers of nesting from records.
-
-        Arguments:
-        key_pattern (str): The pattern to match keys to denormalize. When not provided, all keys are affected.
-        nest_level (int): The number of layers to remove from the key. Defaults to 0.
-        delimiter (str): The delimiter used to separate keys. Defaults to '.'.
-        """
-        from flatten_json import flatten, unflatten_list
-
-        # Flatten the records
-        flat_records = [
-            flatten(nested_dict=record, separator=delimiter)
-            for record in self
-        ]
-
-        # Denormalize the keys
-        for record in flat_records:
-            for key in list(record.keys()):
-                if key_pattern:
-                    from re import fullmatch
-                    if fullmatch(key_pattern, key):
-                        new_key = delimiter.join(key.split(delimiter)[-nest_level:])
-                        record[new_key] = record.pop(key, None)
-
-        # Unflatten the records
-        result = [
-            unflatten_list(record, separator=delimiter)
-            for record in flat_records
-        ]
-
-        self.clear()
-        self.add_records(result)
-
-        return self
-
     def unwind(self, source_key: str, preserve_null_and_empty_keys: bool = False) -> 'DataSet':
         """
         Unwind a list of records in the data set into separate records.
@@ -996,13 +870,13 @@ class DataSet(List[WalkableDict]):
 
         new_records = []
         for record in self:
-            if source_key not in record.keys() and preserve_null_and_empty_keys is False:
+            if not record.walk(source_key) and preserve_null_and_empty_keys is False:
                 continue
 
-            elif isinstance(record.get(source_key), (list or tuple)):
+            elif isinstance(record.walk(source_key), (list or tuple)):
                 for item in record[source_key]:
-                    new_record = record.copy()
-                    new_record[source_key] = item
+                    new_record = WalkableDict(record.copy())
+                    new_record.assign(source_key, item)
                     new_records.append(new_record)
 
             else:
@@ -1032,7 +906,7 @@ class DataSet(List[WalkableDict]):
 
         for record in self:
             # Get the value of this record's source key
-            source_key_value = record.pop(source_key, None)
+            source_key_value = record.drop(source_key, None)
 
             # Generate a dictionary key from the record
             record_index_key = dumps(record, default=str)
@@ -1053,11 +927,11 @@ class DataSet(List[WalkableDict]):
         new_records = []
 
         for jsonified_record, source_key_values in record_index.items():
-            # Convert the record back to a dictionary
-            record = loads(jsonified_record)
+            # Convert the record back to a WalkableDict
+            record = WalkableDict(loads(jsonified_record))
 
             # Add the source key values to the record
-            record[source_key] = source_key_values
+            record.assign(source_key, source_key_values)
 
             # Add the record to the new records
             new_records.append(record)
@@ -1067,6 +941,18 @@ class DataSet(List[WalkableDict]):
         self.add_records(new_records)
 
         return self
+
+    def values(self, source_key: str, default: Any = None):
+        """
+        Consolidates the values of a key in the data set.
+
+        Arguments
+        source_key (str): The key to consolidate.
+        missing_value (Any): The value to use when a key is missing.
+        """
+
+        for record in self:
+            yield record.walk(source_key, default)
 
 
 def perform_maths_operation(operation: VALID_MATHS_OPERATIONS, values: List[Any]) -> int or float or None:

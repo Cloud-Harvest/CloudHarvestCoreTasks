@@ -64,16 +64,16 @@ class TestDataSet(unittest.TestCase):
             self.assertIn('new_key', record)
             self.assertEqual(record['new_key'], 'default')
 
+    def test_add_records(self):
+        self.dataset.add_records([{'name': 'Add 1'}, {'name': 'Add 2'}])
+        self.assertEqual(len(self.dataset), 5)
+        self.assertEqual(self.dataset[3]['name'], 'Add 1')
+        self.assertEqual(self.dataset[4]['name'], 'Add 2')
+
     def test_cast_key(self):
         self.dataset.cast_key('age', 'str')
         for record in self.dataset:
             self.assertIsInstance(record['age'], str)
-
-    def test_clean_keys(self):
-        self.dataset.clean_keys(add_keys=['new_key'], exclude_keys=['phone'])
-        for record in self.dataset:
-            self.assertIn('new_key', record)
-            self.assertNotIn('phone', record)
 
     def test_convert_list_of_dict_to_dict(self):
         for record in self.dataset:
@@ -101,6 +101,11 @@ class TestDataSet(unittest.TestCase):
         for record in self.dataset:
             self.assertIn('full_name', record)
             self.assertEqual(record['full_name'], record['name'])
+
+    def test_copy_record(self):
+        self.dataset.copy_record(source_index=0)
+        self.assertEqual(len(self.dataset), 4)
+        self.assertEqual(self.dataset[-1], self.dataset[0])
 
     def test_flatten_and_unflatten(self):
         self.dataset.flatten()
@@ -186,6 +191,16 @@ class TestDataSet(unittest.TestCase):
         self.assertEqual(len(dataset1), 5)
         self.assertEqual(dataset1, expected_result)
 
+    def test_nest_keys(self):
+        self.dataset.nest_keys(source_keys=['name', 'dob'], target_key='person')
+
+        for record in self.dataset:
+            self.assertIn('person', record)
+            self.assertIn('name', record['person'])
+            self.assertIn('dob', record['person'])
+            self.assertNotIn('name', record)
+            self.assertNotIn('dob', record)
+
     def test_remove_duplicate_records(self):
         from copy import copy
         self.dataset.append(copy(self.dataset[0]))
@@ -261,11 +276,13 @@ class TestDataSet(unittest.TestCase):
 
     def test_unwind_and_wind(self):
         self.dataset.unwind('tags')
+        self.assertEqual(len(self.dataset), 4)
         for record in self.dataset:
             self.assertIsInstance(record['tags'], str)
 
         self.dataset.wind('tags')
 
+        self.assertEqual(len(self.dataset), 3)
         for record in self.dataset:
             self.assertIsInstance(record['tags'], list)
 

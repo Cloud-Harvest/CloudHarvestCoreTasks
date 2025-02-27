@@ -3,134 +3,208 @@ The BaseTask is the base class for all tasks in the pipeline. It provides the ba
 logging, error handling, and task execution. Many methods in the BaseTask are meant to be overridden by subclasses to
 provide custom behavior. The BaseTask is not meant to be used directly, but rather to be subclassed by other tasks.
 
-# Table of Contents
+* [Configuration](#configuration)
+* [Directives](#directives)
+  * [`on` Directive](#on-directive)
+  * [`result_as` Directive](#result_as-directive)
+  * [`retry` Directive](#retry-directive)
+* [Example](#example)
 
-- [Base Task](#base-task)
-    - [Python](#python)
-        - [Attributes](#attributes)
-            - [On](#on)
-            - [Retry](#retry)
-            - [When](#when)
-        - [Methods](#methods)
-        - [Code Example](#code-example)
-    - [Configuration](#configuration)
-        - [Arguments](#arguments)
-        - [Example](#example)
-
-# Python
-## Attributes
-
-| Attribute           | Description                                                                                                                                                 |
-|---------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `blocking`          | When `True`, Tasks in the TaskChain wait until this Task completes before continuing. When `False`, the Task will run asynchronously.                       |
-| `description`       | A brief description of what the task does.                                                                                                                  |
-| `end`               | The end time of the task.                                                                                                                                   |
-| `in_data`           | The input data for the task. Commonly used with the `recordset` and `file` Tasks.                                                                           |
-| `meta`              | Metadata associated with the task.                                                                                                                          |
-| `name`              | The name of the task. It can be anything that helps the user identify what the Task does.                                                                   |
-| `on`                | A dictionary of directives to run on specific events (e.g., `error`).                                                                                       |
-| `original_template` | The original template of the task configuration. This is used in scenarios where the Task must be templated multiple times, such as with the `ForEachTask`. |
-| `out_data`          | The output data of the task.                                                                                                                                |
-| `result_as`         | The name under which the result will be stored in the task chain's variables. This makes the output of a Task available to other Tasks in the TaskChain.    |
-| `retry`             | A dictionary containing retry configuration.                                                                                                                |
-| `start`             | The start time of the task.                                                                                                                                 |
-| `status`            | The current status of the task.                                                                                                                             |
-| `task_chain`        | The task chain that the task belongs to. Added automatically if the Task is created as part of a chain of Tasks.                                            |
-| `when`              | A condition that determines if the task should run.                                                                                                         |
-| `with_vars`         | A list of variables from the parent task chain that templated tasks will use.                                                                               |
-
-### On
-A dictionary of directives to run on specific events. The key is the event directive and the value is a Task configuration.
-
-| Key        | Description                                                                                                                                                                                                                                                 |
-|------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `start`    | The Task configuration to run when the task starts.                                                                                                                                                                                                         |
-| `complete` | The Task configuration to run when the task completes. Typically, this would just be the next task in the TaskChain however, users can deeply nest Tasks, so it may be advantageous to execute an `on_complete()` after an asynchronous task has completed. |
-| `error`    | The Task configuration to run when the task errors.                                                                                                                                                                                                         |
-| `skipped`  | The Task configuration to run when the task is skipped.                                                                                                                                                                                                     |
-
-### Retry
-A dictionary containing retry configuration.
-
-> Note: Tasks which retry will call `on_start()`, regardless if `on_start()` has already been called. However,
-> `on_complete()`, `on_error()`, and `on_skipped()` will only be called once per task, even if the task is retried,
-> when those method conditions are met.
-
-The retry configuration can contain the following keys:
-
-| Key                   | Default | Description                                                                                                                           |
-|-----------------------|---------|---------------------------------------------------------------------------------------------------------------------------------------|
-| `delay_seconds`       | 1.0     | The number of seconds to wait before retrying the task.                                                                               |
-| `max_attempts`        | 1       | The maximum number of attempts to make before failing the task. A value of 1 means that the task will not be retried.                 |
-| `when_error_like`     | None    | When provided, the task will only be retried if the error message is similar to the provided value. This is a regular expression.     |
-| `when_error_not_like` | None    | When provided, the task will only be retried if the error message is not similar to the provided value. This is a regular expression. |
-
-### When
-A condition that determines if the task should run. The condition is a string that is evaluated as a Python expression using
-`jinja2` templating. The task will only run if the condition evaluates to `True`.
-
-## Methods
-
-| Method                | Description                                                                        |
-|-----------------------|------------------------------------------------------------------------------------|
-| `__init__()`          | Initializes a new instance of the `BaseTask` class.                                |
-| `duration`            | Returns the duration of the task.                                                  |
-| `position`            | Returns the position of the task in the task chain.                                |
-| `method()`            | The main method to be overridden by subclasses to provide specific functionality.  |
-| `run()`               | Runs the task.                                                                     |
-| `_run_on_directive()` | Runs a directive based on an `on` event.                                           |
-| `on_complete()`       | Method to run when a task completes.                                               |
-| `on_error()`          | Method to run when a task errors.                                                  |
-| `on_skipped()`        | Method to run when a task is skipped.                                              |
-| `on_start()`          | Method to run when a task starts but before `method()` is called.                  |
-| `terminate()`         | Terminates the task.                                                               |
-
-## Code Example
-
-```python
-from tasks.base import BaseTask
-
-
-class CustomTask(BaseTask):
-    def method(self):
-        # Custom task logic here
-        self.output = "Task completed"
-
-
-# Example usage
-custom_task = CustomTask(name="Example Task")
-custom_task.run()
-print(custom_task.output)  # Output: Task completed
-```
-
-# Configuration
+## Configuration
 There is no configuration path for the BaseTask as it should not be called directly.
 
-## Arguments
+## Directives
 The standard arguments for all tasks which inherit BaseTask are as follows:
 
-| Attribute           | Optional | Default     | Description                                                                                                                                                 |
-|---------------------|----------|-------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `name`              | No       | N/A         | The name of the task. It can be anything that helps the user identify what the Task does.                                                                   |
-| `blocking`          | Yes      | `False`     | When `True`, Tasks in the TaskChain wait until this Task completes before continuing. When `False`, the Task will run asynchronously.                       |
-| `description`       | Yes      | `""`        | A brief description of what the task does.                                                                                                                  |
-| `in_data`           | Yes      | `None`      | The input data for the task. Commonly used with the `recordset` and `file` Tasks.                                                                           |
-| `on`                | Yes      | `{}`        | A dictionary of directives to run on specific events (e.g., `error`).                                                                                       |
-| `result_as`         | Yes      | `""`        | The name under which the result will be stored in the task chain's variables. This makes the output of a Task available to other Tasks in the TaskChain.    |
-| `retry`             | Yes      | `{}`        | A dictionary containing retry configuration.                                                                                                                |
-| `when`              | Yes      | `""`        | A condition that determines if the task should run.                                                                                                         |
-| `with_vars`         | Yes      | `[]`        | A list of variables from the parent task chain that templated tasks will use.                                                                               |
+| Directive                           | Optional | Default | Description                                                                                                                                              |
+|-------------------------------------|----------|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `name`                              | No       | N/A     | The name of the task. It can be anything that helps the user identify what the Task does.                                                                |
+| `blocking`                          | Yes      | `False` | When `True`, Tasks in the TaskChain wait until this Task completes before continuing. When `False`, the Task will run asynchronously.                    |
+| `data`                              | Yes      | `None`  | The input data for the task.                                                                                                                             |
+| `description`                       | Yes      | `""`    | A brief description of what the task does.                                                                                                               |
+| `ignore_filters`                    | Yes      | `False` | Prevents the `filters` directive from being executed.                                                                                                    |
+| `iterate`                           | Yes      | `None`  | Performs the same task for each item in a variable.                                                                                                      |
+| [`on`](#on-directive)               | Yes      | `{}`    | A dictionary of directives to run on specific events (e.g., `error`).                                                                                    |
+| [`result_as`](#result_as-directive) | Yes      | `""`    | The name under which the result will be stored in the task chain's variables. This makes the output of a Task available to other Tasks in the TaskChain. |
+| [`retry`](#retry-directive)         | Yes      | `{}`    | A dictionary containing retry configuration.                                                                                                             |
+| [`filters`](../filters.md)          | Yes      | `{}`    | Modifies the output of some tasks. See [filtering](../filters.md) for more information.                                                                  |
+| `when`                              | Yes      | `""`    | A condition that determines if the task should run. Uses Jinja2 formatting: `when: {{ var.variable_name == "value" }}`                                   |
 
-## Example
+### `on` Directive
+Executes a Task when a specific event occurs. Each event is a key in the dictionary, and the value is a list of Tasks to
+run when the event occurs.
+
+| Directive  | Optional | Default | Description                                                                                                                                                                |
+|------------|----------|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `complete` | Yes      | `None`  | A Task to run when the Task completes successfully. This event may be redundant in a Task Chain. Instead, consider simply adding another Task in the chain after this one. |
+| `error`    | Yes      | `None`  | A Task to run when the Task encounters an error.                                                                                                                           |
+| `skipped`  | Yes      | `None`  | A Task to run when the Task is skipped.                                                                                                                                    |
+| `start`    | Yes      | `None`  | A Task to run when the Task starts. This event may be redundant in the Task Chain. Instead, consider simply adding another Task in the chain before this one.              |
+
+```yaml
+error:
+  name: An Error Task
+  description: A task which always fails.
+  on:
+    error:
+     - dummy:
+         name: Error Handler Task
+         description: A task to run when the Task encounters an error.
+```
+
+### `result_as` Directive
+The `result_as` directive allows you to specify the name under which the result will be stored in the task chain's variables. 
+This makes the output of a Task available to other Tasks in the TaskChain. Information stored in this way can be accessed 
+by referencing the value of `result_as` and the `vars.` prefix. Therefore, if the `result_as` directive is set to `my_task_results`,
+the output of the Task can be accessed using `vars.my_task_results`.
+
+> If the same `result_as` name is used in multiple tasks, the value will be overwritten by the most recent task to use that name.
+
+Optionally, `result_as` accepts a dictionary with the following keys: `name` (as described above) and `mode`:
+
+### `result_as` Modes
+When not specified, the default mode is `overwrite`.
+
+| Directive   | Description                                                                          |
+|-------------|--------------------------------------------------------------------------------------|
+| `append`    | Appends the result to the existing value of the variable. Expects a list.            |
+| `extend`    | Extends the existing value of the variable with the result. Expects a list.          |
+| `merge`     | Merges the existing value of the variable with the result. Expects a dictionary.     |
+| `overwrite` | Overwrites the existing value of the variable with the result. Expects a dictionary. |
+
+### `retry` Directive
+The `retry` directive allows you to specify how many times a task should be retried and how long to wait between retries.
+
+| Directive             | Optional | Default | Description                                              |
+|-----------------------|----------|---------|----------------------------------------------------------|
+| `delay_seconds`       | Yes      | `1.0`   | The number of seconds to delay before retrying the task. |
+| `max_attempts`        | Yes      | `1`     | The maximum number of times to retry the task.           |
+| `when_error_like`     | Yes      | `""`    | A regex pattern to match the error message.              |
+| `when_error_not_like` | Yes      | `""`    | A regex pattern to match the error message.              |
+
 ```yaml
 dummy:
   name: My Dummy Task
   description: A task that does nothing when run.
-  blocking: True
   retry:
     delay_seconds: 5
     max_attempts: 3
-  with_vars:
-    - last_task_results
-  when: "{{ last_task_results.some_key == 'value' }}"
+    when_error_like: ".*Some error text here"
+```
+
+## Example
+The following example describes how to use Tasks in a Report Task Chain to display the status of data collection jobs.
+Note that several of the directives mentioned in this document appear in each Task (`redis` and `dataset`).
+
+```yaml
+report:
+  description: Displays the data collection jobs and their status.
+  headers:
+    - Id
+    - Stage
+    - Name
+    - Description
+    - Status
+    - Records
+    - Duration
+    - Start
+    - End
+
+  tasks:
+    # Data retrieval tasks
+    - redis:
+        name: Get Enqueued tasks
+        description: Displays the status of the tasks that are currently awaiting processing.
+        result_as: harvest_task_queue
+        silo: harvest-task-queue
+        command: get
+        arguments:
+          patterns: "task::*"
+        serialization: true
+
+    - redis:
+        name: Get Active tasks
+        description: Displays the status of the tasks that are currently being processed.
+        result_as: harvest_tasks
+        silo: harvest-tasks
+        command: get
+        arguments:
+          patterns: "task::*"
+        serialization: true
+
+    - redis:
+        name: Get Completed tasks
+        description: Displays the status of the tasks that have been completed.
+        result_as: harvest_task_results
+        silo: harvest-task-results
+        command: get
+        arguments:
+          patterns: "*"
+          keys: "meta"
+        serialization: true
+
+    # Data formatting tasks
+    - dataset:
+        name: Modify enqueued task data
+        description: Formats the data from the enqueued tasks.
+        data: var.harvest_task_queue
+        result_as: harvest_task_queue
+        stages:
+          - add_keys:
+              keys: Stage
+              default_value:  enqueued
+          - splice_key:
+              source_key: _id
+              start: 6        # 'task::' is 6 characters long
+
+    - dataset:
+        name: Modify processing task data
+        description: Formats the data from the processing tasks.
+        data: var.harvest_tasks
+        result_as: harvest_tasks
+        stages:
+          - add_keys:
+              keys: Stage
+              default_value:  processing
+          - splice_key:
+              source_key: _id
+              start: 6
+          - unnest_records:
+              key_pattern: "meta.*"
+              nest_level: 1
+
+    - dataset:
+        name: Modify completed task data
+        description: Formats the data from the completed tasks.
+        data: var.harvest_task_results
+        result_as: harvest_task_results
+        stages:
+          - add_keys:
+              keys: Stage
+              default_value:  completed
+          - unwind:
+              source_key: meta
+          - unnest_records:
+              key_pattern: "meta.*"
+              nest_level: 1
+          - match_and_remove:
+              matching_expressions:
+                - 'Position==Total'
+
+    - dataset:
+        name: Consolidate data
+        description: Combines the data from the enqueued, active, and completed tasks.
+        result_as: harvest_jobs
+        stages:
+          - add_records:
+              records:
+                - var.harvest_task_queue
+                - var.harvest_tasks
+                - var.harvest_task_results
+          - rename_keys:
+              mapping:
+                _id: Id
+          - title_keys:
+              remove_characters:
+                - "_"
 ```

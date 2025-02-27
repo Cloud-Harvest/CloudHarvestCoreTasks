@@ -1,4 +1,4 @@
-# User Filters
+# Filters
 Harvest is, by design, a data collecting and reporting framework. To that end, is both unfortunate and unavoidable that
 users will wish to interact with the data in unanticipated ways. Therefore, Harvest provides a mechanism for users to
 filter outputs in dynamic ways.

@@ -5,7 +5,7 @@ This module defines the core classes and functionality for managing tasks and ta
 from CloudHarvestCorePluginManager.decorators import register_definition
 from datetime import datetime, timezone
 from threading import Thread
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, Generator, List, Literal
 from logging import getLogger
 
 _log_levels = Literal['debug', 'info', 'warning', 'error', 'critical']
@@ -58,7 +58,7 @@ class BaseTask:
                  blocking: bool = True,
                  data: Any = None,
                  description: str = None,
-                 ignore_user_filters: bool = False,
+                 ignore_filters: bool = False,
                  iterate: dict = None,
                  on: dict = None,
                  task_chain: 'BaseTaskChain' = None,
@@ -79,14 +79,8 @@ class BaseTask:
             name (str): The name of the task.
             blocking (bool): A boolean indicating whether the task is blocking or not. If True, the task will block the task chain until it completes.
             description (str): A brief description of what the task does.
-            ignore_user_filters (bool): A boolean indicating whether to ignore user filters or not.
-            iterate (dict): A dictionary
-                >>> iterate = {
-                >>>     'variable': 'var.variable_name',    # The name of the variable to iterate over.
-                >>>     'insert_tasks_before_name': str,    # (optional) The name of the task to insert before.
-                >>>     'insert_tasks_after_name': str,     # (optional) The name of the task to insert after.
-                >>>     'insert_tasks_at_position': str,    # (optional) The position to insert the task at.
-                >>> }
+            ignore_filters (bool): A boolean indicating whether to ignore user filters or not.
+            iterate (str): A variable to iterate over.
             on (dict): A dictionary of task configurations for the task to run when it completes, errors, is skipped, or starts.
                 >>> on = {
                 >>>     'complete': [TaskConfiguration],
@@ -109,7 +103,7 @@ class BaseTask:
                 >>>     'mode': 'append', 'extend', 'merge', 'overwrite'    # The mode to store the result in the variable. 'overwrite' is the default.
                 >>> }
             filters (dict): A dictionary of user filters to apply to the data.
-                >>> user_filters = {
+                >>> filters = {
                 >>>     'accepted': '*',                        # Regex pattern to match the filters allowed in this Task.
                 >>>     'add_keys': ['new_key'],                # Keys to add to the data.
                 >>>     'count': True,                          # Returns a count of data instead of the data itself.
@@ -129,7 +123,7 @@ class BaseTask:
         self.blocking = blocking
         self.data = data
         self.description = description
-        self.ignore_user_filters = ignore_user_filters
+        self.ignore_filters = ignore_filters
         self.iterate = iterate or {}
         self.on = on or {}
         self.output = None
@@ -1133,7 +1127,7 @@ class BaseTaskChain(List[BaseTask]):
 
             return self
 
-    def iterate_task(self, original_task_configuration: dict) -> List[dict]:
+    def iterate_task(self, original_task_configuration: dict) -> Generator[dict, None, None]:
         """
         This generator converts a task_configuration with an 'iterate' directive into a list of task configurations
         based on the elements of 'iterate.variable'.
@@ -1166,7 +1160,7 @@ class BaseTaskChain(List[BaseTask]):
         # engine to resolve variables in the iterate directive.
         from .factories import task_from_dict
         task = task_from_dict(task_configuration=original_task_configuration, task_chain=self)
-        iter_var = task.iterate.get('variable')
+        iter_var = task.iterate
 
         # We employ reversed() here because we want the order of the tasks to be the same as the order of the iterated
         # items. This is because the list.insert() operation will insert the new task at the specified position and

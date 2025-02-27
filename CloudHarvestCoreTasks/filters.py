@@ -268,21 +268,21 @@ class Match:
 class MatchSet(List[Match]):
     from dataset import WalkableDict
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args):
         super().__init__()
 
-        for arg in args:
-            if isinstance(arg, MatchSet):
-                self.extend(arg)
+        def add_match(match: Any):
+            if isinstance(match, (list, MatchSet, tuple)):
+                for m in match:
+                    add_match(m)
 
-            elif isinstance(arg, list):
-                for a in arg:
-                    if isinstance(a, Match):
-                        self.append(a)
+            elif isinstance(match, Match):
+                self.append(match)
 
-                    elif isinstance(a, str):
-                        self.append(Match(a))
+            elif isinstance(match, str):
+                self.append(Match(match))
 
+        add_match(args)
 
     def as_dict(self) -> dict:
         """
@@ -315,7 +315,7 @@ class MatchSet(List[Match]):
 class MatchSetGroup(List[MatchSet]):
     from dataset import WalkableDict
 
-    def __init__(self, *args: list or str or MatchSet, **kwargs):
+    def __init__(self, *args):
         super().__init__()
 
         for arg in args:
@@ -324,6 +324,9 @@ class MatchSetGroup(List[MatchSet]):
 
             elif isinstance(arg, list):
                 self.append(MatchSet(*arg))
+
+            elif isinstance(arg, str):
+                self.append(MatchSet(arg))
 
     def as_dict(self) -> dict:
         """

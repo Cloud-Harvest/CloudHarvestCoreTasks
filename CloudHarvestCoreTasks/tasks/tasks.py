@@ -312,7 +312,7 @@ class DataSetTask(BaseTask):
         """
 
         # If the user filters not configured for this Task, return
-        if self.filters.accepted is None or self.ignore_user_filters:
+        if self.filters.accepted is None or self.ignore_filters:
             pass
 
         else:
@@ -936,7 +936,7 @@ class MongoTask(BaseDataTask):
         Applies user filters to the database configuration.
         """
 
-        if self.filters.accepted is None or self.ignore_user_filters:
+        if self.filters.accepted is None or self.ignore_filters:
             return self
 
         with MongoFilter() as mongo_filter:

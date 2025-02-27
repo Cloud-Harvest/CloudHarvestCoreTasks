@@ -1,7 +1,8 @@
 CloudHarvestCorePluginManager @ git+https://github.com/Cloud-Harvest/CloudHarvestCorePluginManager.git@0.4.0
 Flask
-flatten-json
 Jinja2
+deprecated
+flatten-json
 natsort
 pandas
 pymongo

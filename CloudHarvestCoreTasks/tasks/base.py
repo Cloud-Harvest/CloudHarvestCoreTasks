@@ -498,7 +498,7 @@ class BaseDataTask(BaseTask):
             command (str): The command to run on the data provider.
             arguments (dict, optional): Arguments to pass to the command.
             silo (str, optional): The name of the silo to use for the task. Defaults to None.
-\        """
+        """
 
         # Initialize the BaseTask class
         super().__init__(*args, **kwargs)
@@ -1215,8 +1215,8 @@ class BaseHarvestTaskChain(BaseTaskChain):
                  type: str,
                  account: str,
                  region: str,
-                 destination_silo: str,
                  unique_identifier_keys: (str or List[str]),
+                 destination_silo: str = 'harvest-core',
                  extra_matadata_fields: (str or List[str]) = None,
                  mode: Literal['all', 'single'] = 'all',
                  *args, **kwargs):
@@ -1229,8 +1229,8 @@ class BaseHarvestTaskChain(BaseTaskChain):
         type (str): The Service subtype, if applicable (ie RDS instance, EC2 event)
         account (str): The Platform account name or identifier
         region (str): The geographic region name for the Platform
-        destination_silo (str): The name of the destination silo where the harvested data will be stored
         unique_identifier_keys (str or List[str]): The unique filter keys for the harvested data
+        destination_silo (str, optional): The name of the destination silo where the harvested data will be stored
         extra_matadata_fields (str or List[str], optional): Additional metadata fields to include in the harvested data's metadata record
         mode (str, optional): The mode of the harvest task chain. 'all' will harvest all data, 'single' will harvest a single record
 

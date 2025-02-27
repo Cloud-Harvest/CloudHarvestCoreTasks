@@ -15,6 +15,7 @@ from typing import Any, List, Literal
 
 from pymongo import MongoClient
 
+from dataset import WalkableDict
 from .base import (
     BaseDataTask,
     BaseTask,
@@ -187,11 +188,26 @@ class FileTask(BaseTask):
 
                 # If desired_keys is specified, filter the result to just those keys
                 if self.desired_keys:
+                    def copy_keys_to_dict(record: dict):
+                        """
+                        Copies the desired keys from the record to a new dictionary.
+                        """
+
+                        cktd_result = WalkableDict()
+
+                        for key in self.desired_keys:
+                            cktd_result.assign(key, result.get(key))
+
+                        return cktd_result
+
                     if isinstance(result, dict):
-                        self.result = {k: v for k, v in result.items() if k in self.desired_keys}
+                        self.result = copy_keys_to_dict(result)
 
                     elif isinstance(result, list):
-                        self.result = [{k: v for k, v in record.items() if k in self.desired_keys} for record in result]
+                        self.result = [
+                            copy_keys_to_dict(record)
+                            for record in result
+                        ]
 
                 # Return the entire result
                 else:

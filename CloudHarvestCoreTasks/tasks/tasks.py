@@ -15,7 +15,7 @@ from typing import Any, List, Literal
 
 from pymongo import MongoClient
 
-from dataset import WalkableDict
+from ..dataset import WalkableDict
 from .base import (
     BaseDataTask,
     BaseTask,

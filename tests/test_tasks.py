@@ -6,6 +6,7 @@ import unittest
 from data import MONGO_TEST_RECORDS
 from CloudHarvestCorePluginManager import register_all
 
+from ..CloudHarvestCoreTasks.__register__ import *
 from ..CloudHarvestCoreTasks.base import TaskStatusCodes
 from ..CloudHarvestCoreTasks.factories import task_chain_from_dict
 from ..CloudHarvestCoreTasks.tasks import (

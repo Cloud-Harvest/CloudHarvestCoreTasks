@@ -1,4 +1,6 @@
 import unittest
+
+from ..CloudHarvestCoreTasks.__register__ import *
 from CloudHarvestCorePluginManager.registry import register_all
 from ..CloudHarvestCoreTasks.factories import task_chain_from_dict
 from ..CloudHarvestCoreTasks.tasks import DummyTask, WaitTask, TaskStatusCodes

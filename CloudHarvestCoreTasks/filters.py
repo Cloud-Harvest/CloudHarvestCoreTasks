@@ -150,7 +150,7 @@ class BaseFilter:
 
 
 class Match:
-    from .dataset import WalkableDict
+    from dataset import WalkableDict
 
     def __init__(self, syntax: str):
         self.syntax = syntax
@@ -225,12 +225,12 @@ class Match:
             bool: The result of the match.
         """
 
-        from .dataset import WalkableDict
+        from dataset import WalkableDict
 
         if not isinstance(item, WalkableDict):
             item = WalkableDict(item)
 
-        from .functions import is_bool, is_datetime, is_null, is_number
+        from functions import is_bool, is_datetime, is_null, is_number
         matching_value = self.value
         record_key_value = item.walk(self.key)
 
@@ -251,7 +251,7 @@ class Match:
             else:
                 cast_variables_as = 'str'
 
-            from .functions import cast
+            from functions import cast
             matching_value = cast(matching_value, cast_variables_as)
             record_key_value = cast(record_key_value, cast_variables_as)
 
@@ -266,7 +266,7 @@ class Match:
 
 
 class MatchSet(List[Match]):
-    from .dataset import WalkableDict
+    from dataset import WalkableDict
 
     def __init__(self, *args):
         super().__init__()
@@ -313,7 +313,7 @@ class MatchSet(List[Match]):
 
 
 class MatchSetGroup(List[MatchSet]):
-    from .dataset import WalkableDict
+    from dataset import WalkableDict
 
     def __init__(self, *args):
         super().__init__()
@@ -373,7 +373,7 @@ class DataSetFilter(BaseFilter):
 
         super().__init__(*args, **kwargs)
 
-        from .dataset import DataSet
+        from dataset import DataSet
         self.dataset = dataset if isinstance(dataset, DataSet) else DataSet(dataset)
 
     @property
@@ -531,7 +531,7 @@ class MongoFilter(BaseFilter):
                         setattr(match, v, getattr(match, v).strip())
 
                 # fuzzy cast the value to the appropriate type
-                from .functions import fuzzy_cast
+                from functions import fuzzy_cast
                 match.value = fuzzy_cast(match.value)
 
                 if match.value is None:
@@ -723,7 +723,7 @@ class SqlFilter(BaseFilter):
                     setattr(match, v, getattr(match, v).strip())
 
             # fuzzy cast the value to the appropriate type
-            from .functions import fuzzy_cast
+            from functions import fuzzy_cast
             match.value = fuzzy_cast(match.value)
 
         # Enclose string values in single quotes and match.operator is not '='

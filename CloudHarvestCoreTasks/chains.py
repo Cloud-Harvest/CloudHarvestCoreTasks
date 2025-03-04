@@ -3,7 +3,7 @@ This module contains subclasses of BaseTaskChain that are used to represent diff
 """
 
 from CloudHarvestCorePluginManager.decorators import register_definition
-from .base import BaseTaskChain
+from base import BaseTaskChain
 
 
 @register_definition(name='report', category='chain')

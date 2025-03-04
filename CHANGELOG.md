@@ -12,6 +12,7 @@
   - Filters call `apply()` which iterates based on the `ORDER_OF_OPERATIONS`
 - Added a performance optimization for `WalkableDict` where walking logic is now bypassed if now separator is in the key name
 - `DataSet.sort()` now correctly sorts by multiple keys and in reverse order
+- Refactor of the project structure, removing nested directories which were overcomplicating imports
 
 # 0.5.0
 - Replaced `HarvestRecordSet` with `DataSet(List[WalkableDict])`

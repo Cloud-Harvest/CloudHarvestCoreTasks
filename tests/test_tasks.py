@@ -4,10 +4,26 @@ import tempfile
 import unittest
 
 from data import MONGO_TEST_RECORDS
-from ..CloudHarvestCoreTasks.tasks import *
+from CloudHarvestCorePluginManager import register_all
+
+from ..CloudHarvestCoreTasks.base import TaskStatusCodes
+from ..CloudHarvestCoreTasks.factories import task_chain_from_dict
+from ..CloudHarvestCoreTasks.tasks import (
+    DummyTask,
+    ErrorTask,
+    FileTask,
+    JsonTask,
+    WaitTask
+)
+
+class BaseTestCase(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        register_all()
+        super(BaseTestCase, cls).setUpClass()
 
 
-class TestDummyTask(unittest.TestCase):
+class TestDummyTask(BaseTestCase):
     def setUp(self):
         self.dummy_task = DummyTask(name='dummy_task', description='This is a dummy task')
 
@@ -22,12 +38,12 @@ class TestDummyTask(unittest.TestCase):
         self.assertEqual(self.dummy_task.meta['info'], self.dummy_task.meta['info'])
 
 
-class TestErrorTask(unittest.TestCase):
+class TestErrorTask(BaseTestCase):
     def setUp(self):
         self.error_task = ErrorTask(name='error_task', description='This is an error task')
 
     def test_run(self):
-        from ..CloudHarvestCoreTasks.tasks.base import TaskException
+        from base import TaskException
 
         try:
             self.error_task.run()
@@ -36,9 +52,9 @@ class TestErrorTask(unittest.TestCase):
             self.assertIsInstance(ex, TaskException)
             self.assertEqual(self.error_task.status, TaskStatusCodes.error)
 
-class TestFileTask(unittest.TestCase):
+class TestFileTask(BaseTestCase):
     def setUp(self):
-        from ..CloudHarvestCoreTasks.tasks.base import BaseTaskChain
+        from base import BaseTaskChain
         self.temp_files = []
         self.test_task_chain = BaseTaskChain(name='test_task_chain', description='This is a test task chain', template={'name': 'test', 'tasks': []})
         
@@ -207,7 +223,7 @@ class TestFileTask(unittest.TestCase):
         self.assertEqual(task.result, 'This is raw dataset')
 
 
-class TestDataSetTask(unittest.TestCase):
+class TestDataSetTask(BaseTestCase):
     def setUp(self):
         # import required to register class
 
@@ -259,7 +275,7 @@ class TestDataSetTask(unittest.TestCase):
             }
         ]
 
-        from ..CloudHarvestCoreTasks.tasks.base import BaseTaskChain
+        from base import BaseTaskChain
         self.test_data = test_data
         self.chain = BaseTaskChain(template=harvest_dataset_task_template)
         self.chain.variables["test_dataset"] = self.test_data
@@ -278,7 +294,7 @@ class TestDataSetTask(unittest.TestCase):
             for record in result["data"]
         ]
 
-class TestHttpTask(unittest.TestCase):
+class TestHttpTask(BaseTestCase):
     def setUp(self):
         self.task_configuration = {
             'chain': {
@@ -300,14 +316,13 @@ class TestHttpTask(unittest.TestCase):
         }
 
     def test_method(self):
-        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
         task_chain = task_chain_from_dict(template=self.task_configuration)
         task_chain.run()
         self.assertFalse(task_chain.errors)
         self.assertTrue(task_chain.result['data']['message'] == 'Welcome to the CloudHarvest API.')
 
 
-class TestJsonTask(unittest.TestCase):
+class TestJsonTask(BaseTestCase):
     def setUp(self):
         import json
         self.now = datetime.now()
@@ -322,8 +337,6 @@ class TestJsonTask(unittest.TestCase):
         self.test_serialized_json = json.dumps(self.test_deserialized_data, default=str)
 
     def test_method(self):
-        from ..CloudHarvestCoreTasks.tasks import JsonTask
-
         # Test serialization
         task = JsonTask(name='test',
                         description='This is a test task',
@@ -341,7 +354,7 @@ class TestJsonTask(unittest.TestCase):
         task.run()
         self.assertEqual(task.result, self.test_deserialized_data)
 
-class TestMongoTask(unittest.TestCase):
+class TestMongoTask(BaseTestCase):
     def setUp(self):
         from ..CloudHarvestCoreTasks.silos import add_silo, get_silo
 
@@ -392,7 +405,6 @@ class TestMongoTask(unittest.TestCase):
             }
         }
 
-        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
         task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
@@ -424,7 +436,6 @@ class TestMongoTask(unittest.TestCase):
             }
         }
 
-        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
         task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
@@ -432,7 +443,7 @@ class TestMongoTask(unittest.TestCase):
         self.assertIn('command', task_chain.result['data'].keys())
 
 
-class TestRedisTask(unittest.TestCase):
+class TestRedisTask(BaseTestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -479,7 +490,6 @@ class TestRedisTask(unittest.TestCase):
                 ]
             }
         }
-        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
         task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
@@ -506,7 +516,6 @@ class TestRedisTask(unittest.TestCase):
                 ]
             }
         }
-        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
         task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
@@ -532,7 +541,6 @@ class TestRedisTask(unittest.TestCase):
                 ]
             }
         }
-        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
         task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
@@ -560,7 +568,6 @@ class TestRedisTask(unittest.TestCase):
                 ]
             }
         }
-        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
         task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
@@ -591,7 +598,6 @@ class TestRedisTask(unittest.TestCase):
                 ]
             }
         }
-        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
         task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
@@ -625,7 +631,6 @@ class TestRedisTask(unittest.TestCase):
                 ]
             }
         }
-        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
         task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
@@ -663,7 +668,6 @@ class TestRedisTask(unittest.TestCase):
             }
         }
 
-        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
         task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
@@ -696,7 +700,6 @@ class TestRedisTask(unittest.TestCase):
                 ]
             }
         }
-        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
         task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
@@ -722,7 +725,6 @@ class TestRedisTask(unittest.TestCase):
                 ]
             }
         }
-        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
         task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
@@ -753,7 +755,6 @@ class TestRedisTask(unittest.TestCase):
                 ]
             }
         }
-        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
         task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
@@ -786,7 +787,6 @@ class TestRedisTask(unittest.TestCase):
                 ]
             }
         }
-        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
         task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.variables['dict_to_set'] = dict_to_set
 
@@ -799,7 +799,7 @@ class TestRedisTask(unittest.TestCase):
         self.assertEqual(self.connection.hget('test_hash', 'field1'), 'value1')
         self.assertEqual(self.connection.hget('test_hash', 'field2'), 'value2')
 
-class TestPruneTask(unittest.TestCase):
+class TestPruneTask(BaseTestCase):
     def setUp(self):
         """
         Set up the test environment for each test case.
@@ -841,7 +841,6 @@ class TestPruneTask(unittest.TestCase):
         }
 
     def test_run_prune_all_at_end(self):
-        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
         self.task_chain = task_chain_from_dict(task_chain_registered_class_name='report',
                                                template=self.task_configuration)
 
@@ -864,7 +863,6 @@ class TestPruneTask(unittest.TestCase):
             }
         })
 
-        from ..CloudHarvestCoreTasks.tasks.factories import task_chain_from_dict
         self.task_chain = task_chain_from_dict(task_chain_registered_class_name='report',
                                                template=self.task_configuration)
 
@@ -884,7 +882,7 @@ class TestPruneTask(unittest.TestCase):
         self.assertIsNone(self.task_chain.result.get('error'))
         self.assertEqual(str(self.task_chain.status), TaskStatusCodes.complete)
 
-class TestWaitTask(unittest.TestCase):
+class TestWaitTask(BaseTestCase):
     def setUp(self):
         self.task = WaitTask(name='wait_task', description='This is a wait task', when_after_seconds=5)
 

@@ -5,9 +5,23 @@ kicks off the @register_definition decorator, which registers all the classes wi
 to ensure that the TaskRegistry is populated with all the classes that are available to the system.
 """
 
-from silos import (
+from .silos import (
     MongoSilo,
     RedisSilo
 )
 
-from tasks import *
+from .base import BaseTaskChain
+from .chains import ReportTaskChain
+from .tasks import (
+    DataSetTask,
+    DummyTask,
+    ErrorTask,
+    FileTask,
+    HarvestUpdateTask,
+    HttpTask,
+    JsonTask,
+    MongoTask,
+    PruneTask,
+    RedisTask,
+    WaitTask
+)

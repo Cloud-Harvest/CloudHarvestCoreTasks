@@ -58,7 +58,7 @@ workers that can be used to run tasks concurrently.
 ## Code Examples
 
 ```python
-from tasks.base import BaseTaskChain
+from base import BaseTaskChain
 
 template = {
     'name': 'My Task Chain',

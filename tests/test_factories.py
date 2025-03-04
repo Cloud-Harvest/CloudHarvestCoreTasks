@@ -4,7 +4,7 @@ This module contains tests the "tasks.factories" module.
 
 import unittest
 from ..CloudHarvestCoreTasks.tasks import BaseTaskChain
-from ..CloudHarvestCoreTasks.tasks.factories import replace_variable_path_with_value
+from ..CloudHarvestCoreTasks.factories import replace_variable_path_with_value
 
 class TestReplaceVariablePathWithValue(unittest.TestCase):
     def setUp(self):

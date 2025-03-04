@@ -1,6 +1,6 @@
 import unittest
 from datetime import datetime, timezone
-from ..CloudHarvestCoreTasks.tasks import templating
+import templating
 
 
 class TestFilters(unittest.TestCase):
@@ -33,7 +33,7 @@ class TestFilters(unittest.TestCase):
         self.assertEqual(templating.filter_datetime_until(reference_date, result_as_string=True, days=1), expected_date.isoformat())
 
     def test_filter_datetime_now(self):
-        from ..CloudHarvestCoreTasks.tasks.templating import filter_datetime_now
+        from templating import filter_datetime_now
 
         # Test that the function returns a timezone aware datetime object by default
         self.assertIsInstance(filter_datetime_now(), datetime)

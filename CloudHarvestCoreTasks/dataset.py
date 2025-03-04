@@ -169,7 +169,7 @@ class WalkableDict(dict):
 
 
 class DataSet(List[WalkableDict]):
-    from .functions import CAST_TYPES
+    from functions import CAST_TYPES
 
     def __init__(self, *args):
         super().__init__()
@@ -269,7 +269,7 @@ class DataSet(List[WalkableDict]):
 
         target_key = target_key or source_key
 
-        from .functions import cast
+        from functions import cast
 
         [
             record.assign(target_key, cast(record.walk(source_key), target_type))
@@ -292,7 +292,7 @@ class DataSet(List[WalkableDict]):
 
         target_key = target_key or source_key
 
-        from .functions import key_value_list_to_dict
+        from functions import key_value_list_to_dict
 
         for record in self:
             # Gets the list of dictionaries from the source key
@@ -501,7 +501,7 @@ class DataSet(List[WalkableDict]):
         matching_expressions (list or str or MatchSetGroup): The expressions to match the records by.
         invert_results (bool, optional): When true, the results are inverted. Defaults to False.
         """
-        from .filters import MatchSetGroup
+        from filters import MatchSetGroup
 
         if not isinstance(matching_expressions, MatchSetGroup):
             matching_expressions = MatchSetGroup(matching_expressions)

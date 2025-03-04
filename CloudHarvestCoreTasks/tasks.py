@@ -15,8 +15,8 @@ from typing import Any, List, Literal
 
 from pymongo import MongoClient
 
-from .dataset import WalkableDict
-from .base import (
+from CloudHarvestCoreTasks.dataset import WalkableDict
+from CloudHarvestCoreTasks.base import (
     BaseDataTask,
     BaseTask,
     BaseTaskChain,
@@ -24,7 +24,7 @@ from .base import (
     TaskStatusCodes
 )
 
-from .filters import MongoFilter
+from CloudHarvestCoreTasks.filters import MongoFilter
 
 logger = getLogger('harvest')
 
@@ -312,12 +312,12 @@ class DataSetTask(BaseTask):
         """
         super().__init__(*args, **kwargs)
 
-        from .dataset import DataSet
+        from CloudHarvestCoreTasks.dataset import DataSet
         self.data = data if isinstance(data, DataSet) else DataSet().add_records(data)
         self.stages = stages
         self.stage_position = 0
 
-        from .filters import DataSetFilter
+        from CloudHarvestCoreTasks.filters import DataSetFilter
         self.filters = DataSetFilter(self.filters)
 
     def apply_filters(self) -> 'DataSetTask':
@@ -349,7 +349,7 @@ class DataSetTask(BaseTask):
             self: Returns the instance of the HarvestRecordSetTask.
         """
 
-        from .dataset import DataSet
+        from CloudHarvestCoreTasks.dataset import DataSet
 
         for stage in self.stages:
             try:
@@ -458,13 +458,12 @@ class HarvestUpdateTask(BaseTask):
         super().__init__(*args, **kwargs)
 
         # Ensure that the task chain is a BaseHarvestTaskChain
-        from base import BaseHarvestTaskChain
+        from CloudHarvestCoreTasks.base import BaseHarvestTaskChain
         if not isinstance(self.task_chain, BaseHarvestTaskChain):
             raise TaskException(self, 'HarvestTask must be used in a BaseHarvestTaskChain.')
 
         # Type hint for the task_chain attribute
         from typing import cast
-        from base import BaseHarvestTaskChain
         self.task_chain = cast(BaseHarvestTaskChain, self.task_chain)
 
     def method(self) -> 'HarvestUpdateTask':
@@ -478,7 +477,7 @@ class HarvestUpdateTask(BaseTask):
         self.meta['Stages'] = []
 
         # Validate the Task can reach the required silos
-        from .silos import get_silo
+        from CloudHarvestCoreTasks.silos import get_silo
         for silo_name in (self.task_chain.destination_silo, 'harvest-core'):
             try:
                 get_silo(silo_name).connect().server_info()
@@ -515,7 +514,7 @@ class HarvestUpdateTask(BaseTask):
 
         for record in data:
             # Generate this record's unique filter
-            from functions import get_nested_values
+            from CloudHarvestCoreTasks.functions import get_nested_values
             unique_identifier = '-'.join([get_nested_values(s=field, d=record)[0] for field in metadata['UniqueIdentifierKeys']])
 
             # Attach existing metadata to the record
@@ -568,7 +567,7 @@ class HarvestUpdateTask(BaseTask):
         result = pstar | build_components | dates | silo
 
         # Validate that all required metadata fields are present
-        from functions import get_nested_values
+        from CloudHarvestCoreTasks.functions import get_nested_values
         missing_fields = [
             field for field in self.REQUIRED_METADATA_FIELDS
             if not get_nested_values(s=field, d=result)
@@ -595,7 +594,7 @@ class HarvestUpdateTask(BaseTask):
 
         from datetime import datetime, timezone
         from pymongo import ReplaceOne
-        from .silos import get_silo
+        from CloudHarvestCoreTasks.silos import get_silo
 
         for record in data:
             # Remove an existing MongoDb _id field if it exists. This happens if the data source is MongoDB. We don't
@@ -611,7 +610,7 @@ class HarvestUpdateTask(BaseTask):
                                           upsert=True)
 
             # Gather the extra metadata fields for the record
-            from functions import get_nested_values
+            from CloudHarvestCoreTasks.functions import get_nested_values
             extras = {
                 field: get_nested_values(s=field, d=record)
                 for field in self.task_chain.extra_metadata_fields
@@ -686,7 +685,7 @@ class HarvestUpdateTask(BaseTask):
         """
         try:
             from datetime import datetime, timezone
-            from .silos import get_silo
+            from CloudHarvestCoreTasks.silos import get_silo
 
             # Deactivate Records that were not found in this data collection operation (assumed to be inactive)
             # We filter on the following fields to ensure we don't deactivate records that are collected in other processes:
@@ -943,7 +942,7 @@ class MongoTask(BaseDataTask):
         self.collection = collection
         self.result_attribute = result_attribute
 
-        from .filters import MongoFilter
+        from CloudHarvestCoreTasks.filters import MongoFilter
         self.filters = MongoFilter(self.filters)
 
     def apply_filters(self) -> 'MongoTask':

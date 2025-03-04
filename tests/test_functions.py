@@ -1,5 +1,5 @@
 import unittest
-import functions
+import CloudHarvestCoreTasks.functions as functions
 
 
 class TestFunctions(unittest.TestCase):

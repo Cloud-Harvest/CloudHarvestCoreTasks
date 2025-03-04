@@ -1,11 +1,11 @@
 import unittest
 
-from ..CloudHarvestCoreTasks.filters import DataSetFilter, MongoFilter, SqlFilter
-from ..CloudHarvestCoreTasks.dataset import DataSet
+from CloudHarvestCoreTasks.filters import DataSetFilter, MongoFilter, SqlFilter
+from CloudHarvestCoreTasks.dataset import DataSet
 
 class TestMatch(unittest.TestCase):
     def setUp(self):
-        from ..CloudHarvestCoreTasks.filters import Match
+        from CloudHarvestCoreTasks.filters import Match
         self.match = Match('user=1|2')
 
     def test_match(self):
@@ -16,12 +16,12 @@ class TestMatch(unittest.TestCase):
 
 class TestMatchSet(unittest.TestCase):
     def setUp(self):
-        from ..CloudHarvestCoreTasks.filters import MatchSet
+        from CloudHarvestCoreTasks.filters import MatchSet
 
         self.match_set = MatchSet(*['user=1|2', 'state=MD'])
 
     def test_match_set(self):
-        from ..CloudHarvestCoreTasks.filters import Match
+        from CloudHarvestCoreTasks.filters import Match
 
         self.assertEqual(len(self.match_set), 2)
         self.assertIsInstance(self.match_set[0], Match)
@@ -31,7 +31,7 @@ class TestMatchSet(unittest.TestCase):
 
 class TestMatchSetGroup(unittest.TestCase):
     def setUp(self):
-        from ..CloudHarvestCoreTasks.filters import MatchSetGroup
+        from CloudHarvestCoreTasks.filters import MatchSetGroup
 
         self.match_set_group = MatchSetGroup(*[
             ['user=1|2', 'state=MD'],       # user will be 1 or 2 AND state will be MD
@@ -39,7 +39,7 @@ class TestMatchSetGroup(unittest.TestCase):
         ])
 
     def test_match_set_group(self):
-        from ..CloudHarvestCoreTasks.filters import MatchSet
+        from CloudHarvestCoreTasks.filters import MatchSet
 
         self.assertEqual(len(self.match_set_group), 2)
         self.assertIsInstance(self.match_set_group[0], MatchSet)

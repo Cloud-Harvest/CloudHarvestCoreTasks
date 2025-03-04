@@ -229,7 +229,7 @@ class BaseTask:
 
                     # Check of the `when` condition is met
                     if self.when and self.task_chain:
-                        from templating import template_object
+                        from CloudHarvestCoreTasks.templating import template_object
                         when_result = True if template_object(template={'result': '{{ ' + self.when + ' }}'},
                                                               variables=self.task_chain.variables).get('result') == 'True' else False
 
@@ -503,7 +503,7 @@ class BaseDataTask(BaseTask):
         # Initialize the BaseTask class
         super().__init__(*args, **kwargs)
 
-        from .silos import get_silo
+        from CloudHarvestCoreTasks.silos import get_silo
 
         # Assigned attributes
         self.silo = get_silo(silo)
@@ -556,7 +556,7 @@ class BaseDataTask(BaseTask):
             self.task_chain.variables[self.base_command_part] = result
 
             # Walks the command path and returns the result. This allows commands such as MongoDb's 'find.row_count'.
-            from factories import replace_variable_path_with_value
+            from CloudHarvestCoreTasks.factories import replace_variable_path_with_value
             result: Any = replace_variable_path_with_value(original_string=f'var.{self.command}',
                                                            task_chain=self.task_chain,
                                                            fail_on_unassigned=True)
@@ -1027,7 +1027,7 @@ class BaseTaskChain(List[BaseTask]):
         """
 
         if self.results_silo:
-            from .silos import get_silo
+            from CloudHarvestCoreTasks.silos import get_silo
             from json import dumps
             silo = get_silo(self.results_silo)
 
@@ -1067,7 +1067,7 @@ class BaseTaskChain(List[BaseTask]):
             while True:
                 # Instantiate the task from the task configuration
                 try:
-                    from factories import task_from_dict
+                    from CloudHarvestCoreTasks.factories import task_from_dict
                     task_template = self.task_templates[self.position]
 
                     task = task_from_dict(task_configuration=task_template, task_chain=self)
@@ -1158,7 +1158,7 @@ class BaseTaskChain(List[BaseTask]):
 
         # Template the original configuration to get the iterated items. We take this approach to leverage the templating
         # engine to resolve variables in the iterate directive.
-        from factories import task_from_dict
+        from CloudHarvestCoreTasks.factories import task_from_dict
         task = task_from_dict(task_configuration=original_task_configuration, task_chain=self)
         iter_var = task.iterate
 
@@ -1182,7 +1182,7 @@ class BaseTaskChain(List[BaseTask]):
             task_configuration[class_key]['name'] = f'{task_configuration[class_key]["name"]} - {iter_var.index(item) + 1}/{len(iter_var)}'
 
             # Template the file with the item
-            from factories import walk_and_replace
+            from CloudHarvestCoreTasks.factories import walk_and_replace
             itemized_task_configuration = walk_and_replace(obj=task_configuration, task_chain=self, item=item)
 
             yield itemized_task_configuration

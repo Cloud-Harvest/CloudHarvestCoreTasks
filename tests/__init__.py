@@ -1,1 +1,1 @@
-from ..CloudHarvestCoreTasks import *
+from CloudHarvestCoreTasks import *

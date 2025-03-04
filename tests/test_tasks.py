@@ -3,13 +3,13 @@ import os
 import tempfile
 import unittest
 
-from data import MONGO_TEST_RECORDS
+from tests.data import MONGO_TEST_RECORDS
 from CloudHarvestCorePluginManager import register_all
 
-from ..CloudHarvestCoreTasks.__register__ import *
-from ..CloudHarvestCoreTasks.base import TaskStatusCodes
-from ..CloudHarvestCoreTasks.factories import task_chain_from_dict
-from ..CloudHarvestCoreTasks.tasks import (
+from CloudHarvestCoreTasks.__register__ import *
+from CloudHarvestCoreTasks.base import TaskStatusCodes
+from CloudHarvestCoreTasks.factories import task_chain_from_dict
+from CloudHarvestCoreTasks.tasks import (
     DummyTask,
     ErrorTask,
     FileTask,
@@ -44,7 +44,7 @@ class TestErrorTask(BaseTestCase):
         self.error_task = ErrorTask(name='error_task', description='This is an error task')
 
     def test_run(self):
-        from base import TaskException
+        from CloudHarvestCoreTasks.base import TaskException
 
         try:
             self.error_task.run()
@@ -55,7 +55,7 @@ class TestErrorTask(BaseTestCase):
 
 class TestFileTask(BaseTestCase):
     def setUp(self):
-        from base import BaseTaskChain
+        from CloudHarvestCoreTasks.base import BaseTaskChain
         self.temp_files = []
         self.test_task_chain = BaseTaskChain(name='test_task_chain', description='This is a test task chain', template={'name': 'test', 'tasks': []})
         
@@ -276,7 +276,7 @@ class TestDataSetTask(BaseTestCase):
             }
         ]
 
-        from base import BaseTaskChain
+        from CloudHarvestCoreTasks.base import BaseTaskChain
         self.test_data = test_data
         self.chain = BaseTaskChain(template=harvest_dataset_task_template)
         self.chain.variables["test_dataset"] = self.test_data
@@ -357,7 +357,7 @@ class TestJsonTask(BaseTestCase):
 
 class TestMongoTask(BaseTestCase):
     def setUp(self):
-        from ..CloudHarvestCoreTasks.silos import add_silo, get_silo
+        from CloudHarvestCoreTasks.silos import add_silo, get_silo
 
         add_silo(name='test_silo',
                  engine='mongo',
@@ -448,7 +448,7 @@ class TestRedisTask(BaseTestCase):
 
     @classmethod
     def setUpClass(cls):
-        from ..CloudHarvestCoreTasks.silos import add_silo
+        from CloudHarvestCoreTasks.silos import add_silo
 
         add_silo(name='test_silo',
                  engine='redis',

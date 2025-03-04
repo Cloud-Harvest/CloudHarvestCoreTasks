@@ -3,7 +3,7 @@ factories.py - This module contains functions for creating task chains from file
 """
 from logging import getLogger
 from typing import Any
-from base import BaseTaskChain, BaseTask
+from CloudHarvestCoreTasks.base import BaseTaskChain, BaseTask
 
 logger = getLogger('harvest')
 
@@ -74,7 +74,7 @@ def task_chain_from_dict(template: dict, **kwargs) -> BaseTaskChain:
         task_chain_configuration = template[task_chain_registered_class_name]
 
     except IndexError:
-        from base import BaseHarvestException
+        from CloudHarvestCoreTasks.base import BaseHarvestException
         raise BaseHarvestException('No task chain class found in the task chain configuration.')
 
     # Attempt to locate the identified class in the registry.
@@ -84,7 +84,7 @@ def task_chain_from_dict(template: dict, **kwargs) -> BaseTaskChain:
                                     name=task_chain_registered_class_name)[0]
 
     except IndexError:
-        from .base import BaseHarvestException
+        from CloudHarvestCoreTasks.base import BaseHarvestException
         raise BaseHarvestException(f'No task chain class found for {task_chain_registered_class_name}.')
 
     # Set the name of the task chain if it is not already set.

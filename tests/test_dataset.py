@@ -1,5 +1,5 @@
 import unittest
-from ..CloudHarvestCoreTasks.dataset import DataSet, perform_maths_operation
+from CloudHarvestCoreTasks.dataset import DataSet, perform_maths_operation
 
 class TestDataSet(unittest.TestCase):
     def setUp(self):

@@ -1,5 +1,5 @@
 from unittest import TestCase
-from ..CloudHarvestCoreTasks.silos import *
+from CloudHarvestCoreTasks.silos import *
 
 
 class test_MongoSilo(TestCase):

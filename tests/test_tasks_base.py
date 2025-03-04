@@ -1,9 +1,9 @@
 import unittest
 
-from ..CloudHarvestCoreTasks.__register__ import *
+from CloudHarvestCoreTasks.__register__ import *
 from CloudHarvestCorePluginManager.registry import register_all
-from ..CloudHarvestCoreTasks.factories import task_chain_from_dict
-from ..CloudHarvestCoreTasks.tasks import DummyTask, WaitTask, TaskStatusCodes
+from CloudHarvestCoreTasks.factories import task_chain_from_dict
+from CloudHarvestCoreTasks.tasks import DummyTask, WaitTask, TaskStatusCodes
 
 class BaseTestCase(unittest.TestCase):
     @classmethod
@@ -46,7 +46,6 @@ class TestTaskConfiguration(BaseTestCase):
                 ]
             }
         }
-        from factories import task_chain_from_dict
         self.base_task_chain = task_chain_from_dict(template=self.task_configuration)
 
     def test_instantiate(self):
@@ -96,7 +95,7 @@ class TestBaseTask(BaseTestCase):
 
     def test_retry(self):
         # Test the retry method
-        from base import BaseTaskChain
+        from CloudHarvestCoreTasks.base import BaseTaskChain
         task_chain = BaseTaskChain(template={
             'name': 'test_chain',
             'description': 'This is a task_chain.',
@@ -193,8 +192,8 @@ class TestBaseTask(BaseTestCase):
 class TestBaseHarvestTaskChain(BaseTestCase):
     def setUp(self):
         # Create a test silo for the task chain
-        from ..CloudHarvestCoreTasks.silos import add_silo, get_silo
-        from data import MONGO_TEST_RECORDS
+        from CloudHarvestCoreTasks.silos import add_silo, get_silo
+        from tests.data import MONGO_TEST_RECORDS
 
         add_silo(name='harvest-core',
                  engine='mongo',
@@ -266,7 +265,6 @@ class TestBaseHarvestTaskChain(BaseTestCase):
             }
         }
 
-        from factories import task_chain_from_dict
         self.base_task_chain = task_chain_from_dict(template=self.task_configuration)
 
     def tearDown(self):
@@ -279,10 +277,12 @@ class TestBaseHarvestTaskChain(BaseTestCase):
         # Test the run method of the BaseHarvestTaskChain class
         self.base_task_chain.run()
         self.assertFalse(self.base_task_chain.errors)
-        self.assertEqual(len(self.base_task_chain), 2)
+        self.assertEqual(len(self.base_task_chain), 3)
         self.assertEqual(str(str(self.base_task_chain.status)), TaskStatusCodes.complete)
         self.assertIsNotNone(self.base_task_chain[1].result[0]['Tags'])
-        self.assertEqual(len(self.base_task_chain.result['data']), 10)
+        self.assertGreater(self.base_task_chain.result['data']['RecordsProcessed'], 1)
+        self.assertGreater(self.base_task_chain.result['data']['RecordsReplaced'], 1)
+        self.assertIn('DeactivationResults', self.base_task_chain.result['data'])
 
 class TestBaseTaskChain(BaseTestCase):
     """
@@ -323,7 +323,6 @@ class TestBaseTaskChain(BaseTestCase):
                 ]
             }
         }
-        from factories import task_chain_from_dict
         self.base_task_chain = task_chain_from_dict(template=self.task_configuration)
 
     def test_init(self):
@@ -504,7 +503,6 @@ class TestBaseTaskChainOnDirective(BaseTestCase):
                 ]
             }
         }
-        from factories import task_chain_from_dict
         self.base_task_chain = task_chain_from_dict(task_chain_registered_class_name='chain', template=self.task_configuration)
 
     def test_on_directives(self):
@@ -591,7 +589,7 @@ class TestBaseTaskPool(BaseTestCase):
                 }
             ]
         }
-        from base import BaseTaskChain
+        from CloudHarvestCoreTasks.base import BaseTaskChain
         self.base_task_chain = BaseTaskChain(template=template)
 
     def test_pooling(self):

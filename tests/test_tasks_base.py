@@ -1,6 +1,5 @@
 import unittest
 
-from CloudHarvestCoreTasks.__register__ import *
 from CloudHarvestCorePluginManager.registry import register_all
 from CloudHarvestCoreTasks.factories import task_chain_from_dict
 from CloudHarvestCoreTasks.tasks import DummyTask, WaitTask, TaskStatusCodes
@@ -95,7 +94,7 @@ class TestBaseTask(BaseTestCase):
 
     def test_retry(self):
         # Test the retry method
-        from CloudHarvestCoreTasks.base import BaseTaskChain
+        from chains.base import BaseTaskChain
         task_chain = BaseTaskChain(template={
             'name': 'test_chain',
             'description': 'This is a task_chain.',
@@ -277,7 +276,7 @@ class TestBaseHarvestTaskChain(BaseTestCase):
         # Test the run method of the BaseHarvestTaskChain class
         self.base_task_chain.run()
         self.assertFalse(self.base_task_chain.errors)
-        self.assertEqual(len(self.base_task_chain), 3)
+        self.assertEqual(len(self.base_task_chain), 3)  # 2 defined Tasks and an upload task added by the Chain
         self.assertEqual(str(str(self.base_task_chain.status)), TaskStatusCodes.complete)
         self.assertIsNotNone(self.base_task_chain[1].result[0]['Tags'])
         self.assertGreater(self.base_task_chain.result['data']['RecordsProcessed'], 1)
@@ -589,7 +588,7 @@ class TestBaseTaskPool(BaseTestCase):
                 }
             ]
         }
-        from CloudHarvestCoreTasks.base import BaseTaskChain
+        from chains.base import BaseTaskChain
         self.base_task_chain = BaseTaskChain(template=template)
 
     def test_pooling(self):

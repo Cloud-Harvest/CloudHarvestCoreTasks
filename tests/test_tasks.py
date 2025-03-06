@@ -6,8 +6,7 @@ import unittest
 from tests.data import MONGO_TEST_RECORDS
 from CloudHarvestCorePluginManager import register_all
 
-from CloudHarvestCoreTasks.__register__ import *
-from CloudHarvestCoreTasks.base import TaskStatusCodes
+from tasks.base import TaskStatusCodes
 from CloudHarvestCoreTasks.factories import task_chain_from_dict
 from CloudHarvestCoreTasks.tasks import (
     DummyTask,
@@ -44,7 +43,7 @@ class TestErrorTask(BaseTestCase):
         self.error_task = ErrorTask(name='error_task', description='This is an error task')
 
     def test_run(self):
-        from CloudHarvestCoreTasks.base import TaskException
+        from exceptions import TaskException
 
         try:
             self.error_task.run()
@@ -55,7 +54,7 @@ class TestErrorTask(BaseTestCase):
 
 class TestFileTask(BaseTestCase):
     def setUp(self):
-        from CloudHarvestCoreTasks.base import BaseTaskChain
+        from chains.base import BaseTaskChain
         self.temp_files = []
         self.test_task_chain = BaseTaskChain(name='test_task_chain', description='This is a test task chain', template={'name': 'test', 'tasks': []})
         
@@ -276,7 +275,7 @@ class TestDataSetTask(BaseTestCase):
             }
         ]
 
-        from CloudHarvestCoreTasks.base import BaseTaskChain
+        from chains.base import BaseTaskChain
         self.test_data = test_data
         self.chain = BaseTaskChain(template=harvest_dataset_task_template)
         self.chain.variables["test_dataset"] = self.test_data

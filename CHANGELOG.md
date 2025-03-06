@@ -1,3 +1,8 @@
+# 0.6.0
+- Huge refactor of the directory structure using absolute imports
+- Fixed some recursive import issues
+- Added `BaseFilterableTask` which some `BaseTasks` will use to implement filtering on a per-Task basis
+
 # 0.5.1
 - Expanded `DataSet` with new maths methods
   - `maths_keys()` performs a mathematical operation on multiple keys in a record and assigns the result to a new key.

@@ -3,7 +3,7 @@ This module contains tests the "tasks.factories" module.
 """
 
 import unittest
-from CloudHarvestCoreTasks.tasks import BaseTaskChain
+from chains.base import BaseTaskChain
 from CloudHarvestCoreTasks.factories import replace_variable_path_with_value
 
 class TestReplaceVariablePathWithValue(unittest.TestCase):

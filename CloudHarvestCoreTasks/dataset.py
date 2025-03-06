@@ -709,6 +709,10 @@ class DataSet(List[WalkableDict]):
         keys (List[str]): The keys to keep.
         """
 
+        # If no keys are provided, return the data set as is
+        if not keys:
+            return self
+
         results = []
         for record in self:
             new_record = WalkableDict()

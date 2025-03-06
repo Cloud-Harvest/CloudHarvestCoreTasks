@@ -1,5 +1,4 @@
 from CloudHarvestCorePluginManager import register_definition
-from CloudHarvestCoreTasks.filters import MongoFilter
 from CloudHarvestCoreTasks.tasks.base import BaseDataTask, BaseFilterableTask
 from exceptions import TaskException
 

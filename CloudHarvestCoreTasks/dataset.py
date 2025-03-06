@@ -501,8 +501,6 @@ class DataSet(List[WalkableDict]):
         matching_expressions (list or str or MatchSetGroup): The expressions to match the records by.
         invert_results (bool, optional): When true, the results are inverted. Defaults to False.
         """
-        from CloudHarvestCoreTasks.filters import MatchSetGroup
-
         if not isinstance(matching_expressions, MatchSetGroup):
             matching_expressions = MatchSetGroup(matching_expressions)
 
@@ -957,6 +955,239 @@ class DataSet(List[WalkableDict]):
 
         for record in self:
             yield record.walk(source_key, default)
+
+
+class Match:
+    """
+    A Match is the lowest-level matching class. It is used to match a key, operator, and value in a record using a
+    specific operator. The `evaluate()` method is called to determine if the match is successful.
+    """
+    def __init__(self, syntax: str):
+        """
+        Initializes a new Match.
+
+        Arguments
+        syntax (str): The syntax to match.
+
+        Examples
+        >>> # Regex match of the key with the value
+        >>> Match('key=value')
+        >>> # Exact match of the key with the value
+        >>> Match('key==value')
+        >>> # Greater than or equal to match of the key with the value
+        >>> Match('key>=value')
+        """
+        self.syntax = syntax
+
+        # Determine the operator for the match
+        self.operator, \
+        self.operator_method = self.get_operator()
+
+        # Split the syntax into key, operator, and value
+        self.key, \
+        self.value = self.syntax.split(self.operator)
+
+    @property
+    def final_operator(self):
+        """
+        Returns a string representation of the operator.
+        """
+        return ''.join([str(s) for s in [self.key, self.operator, self.value]])
+
+    def get_operator(self) -> tuple:
+        """
+        Retrieves the operator key from the matching syntax.
+
+        Returns:
+            str: The operator key.
+
+        Raises:
+            ValueError: If no valid operator is found in the syntax.
+        """
+
+        import operator
+        from re import findall
+
+        # The order of match operation keys is important. The keys should be ordered from longest to shortest to ensure that
+        # the longest match is attempted first. For example, '==' should be before '=' to ensure that '==' is matched
+        # before '='. This allows us to perform split() operations on the syntax without accidentally splitting on a substring
+        # that is part of the operator.
+
+        match_operations = {
+            '==': operator.eq,  # Checks if 'a' is equal to 'b'
+            '>=': operator.ge,  # Checks if 'a' is greater than or equal to 'b'
+            '=>': operator.ge,  # Checks if 'a' is greater than or equal to 'b'
+            '<=': operator.le,  # Checks if 'a' is less than or equal to 'b'
+            '=<': operator.le,  # Checks if 'a' is less than or equal to 'b'
+            '!=': operator.ne,  # Checks if 'a' is not equal to 'b'
+            '>': operator.gt,  # Checks if 'a' is greater than 'b'
+            '<': operator.lt,  # Checks if 'a' is less than 'b'
+            '=': findall  # Checks if 'a' contains 'b'
+        }
+
+        for op, method in match_operations.items():
+            if op in self.syntax:
+                return op, method
+
+        raise ValueError('No valid operator found in syntax. Valid operators are: ' + ', '.join(match_operations.keys()))
+
+    def as_str(self) -> str:
+        """
+        Returns a string representation of the Match.
+        """
+
+        return f'{self.key}{self.operator}{self.value}'
+
+    def evaluate(self, item: WalkableDict or dict) -> bool:
+        """
+        Matches the item against the Match.
+
+        Arguments:
+            item (WalkableDict): The item to be matched.
+
+        Returns:
+            bool: The result of the match.
+        """
+        if not isinstance(item, WalkableDict):
+            item = WalkableDict(item)
+
+        from CloudHarvestCoreTasks.functions import is_bool, is_datetime, is_null, is_number
+        matching_value = self.value
+        record_key_value = item.walk(self.key)
+
+        # convert types if they do not match
+        if type(matching_value) is not type(record_key_value):
+            if is_bool(matching_value):
+                cast_variables_as = 'bool'
+
+            elif is_datetime(matching_value):
+                cast_variables_as = 'datetime'
+
+            elif is_null(matching_value):
+                cast_variables_as = 'null'
+
+            elif is_number(matching_value):
+                cast_variables_as = 'float'
+
+            else:
+                cast_variables_as = 'str'
+
+            from CloudHarvestCoreTasks.functions import cast
+            matching_value = cast(matching_value, cast_variables_as)
+            record_key_value = cast(record_key_value, cast_variables_as)
+
+        from re import findall, IGNORECASE
+        if self.operator == '=':
+            result = findall(pattern=matching_value, string=record_key_value, flags=IGNORECASE)
+
+        else:
+            result = self.operator_method(record_key_value, matching_value)
+
+        return result
+
+
+class MatchSet(List[Match]):
+    """
+    A MatchSet represents a list of multiple Match objects. When evaluate() is called, all Match objects are evaluated
+    and the results are combined using a logical AND. If all Match objects evaluate to True, the MatchSet evaluates to True.
+    Conversely, if any Match object evaluates to False, the MatchSet evaluates to False.
+    """
+    def __init__(self, *args):
+        """
+        Initializes a new MatchSet. Accepts a variable number of arguments that are converted to Match objects.
+        """
+        super().__init__()
+
+        def add_match(match: Any):
+            if isinstance(match, (list, MatchSet, tuple)):
+                for m in match:
+                    add_match(m)
+
+            elif isinstance(match, Match):
+                self.append(match)
+
+            elif isinstance(match, str):
+                self.append(Match(match))
+
+        add_match(args)
+
+    def as_dict(self) -> dict:
+        """
+        Returns a dictionary representation of the MatchSet.
+        """
+        return {
+            "$and": [
+                match.as_str()
+                for match in self
+            ]
+        }
+
+    def evaluate(self, item: WalkableDict or dict) -> bool:
+        """
+        Matches the item against the match.
+
+        Arguments:
+            item (dict): The item to be matched.
+
+        Returns:
+            bool: The result of the match.
+        """
+
+        return all(
+            match.evaluate(item)
+            for match in self
+        )
+
+
+class MatchSetGroup(List[MatchSet]):
+    """
+    A MatchGroup represents a list of multiple MatchSet objects. When evaluate() is called, all MatchSet objects are
+    evaluated and the results are combined using a logical OR. If any MatchSet object evaluates to True, the MatchGroup
+    evaluates to True. Conversely, if all MatchSet objects evaluate to False, the MatchGroup evaluates to False.
+    """
+    def __init__(self, *args):
+        super().__init__()
+
+        for arg in args:
+            if isinstance(arg, MatchSetGroup):
+                self.extend(arg)
+
+            elif isinstance(arg, list):
+                self.append(MatchSet(*arg))
+
+            elif isinstance(arg, str):
+                self.append(MatchSet(arg))
+
+    def as_dict(self) -> dict:
+        """
+        Returns a dictionary representation of the MatchSetGroup.
+
+        Returns:
+            dict: A dictionary representation of the MatchSetGroup.
+        """
+
+        return {
+            "$or": [
+                match_set.as_dict()
+                for match_set in self
+            ]
+        }
+
+    def evaluate(self, item: WalkableDict or dict) -> bool:
+        """
+        Matches the item against the match.
+
+        Arguments:
+            item (dict): The item to be matched.
+
+        Returns:
+            bool: The result of the match.
+        """
+
+        return any(
+            match_set.evaluate(item)
+            for match_set in self
+        )
 
 
 def perform_maths_operation(operation: VALID_MATHS_OPERATIONS, values: List[Any]) -> int or float or None:

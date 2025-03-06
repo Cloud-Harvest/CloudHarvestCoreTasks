@@ -1,5 +1,128 @@
+from CloudHarvestCorePluginManager.registry import register_all
+from CloudHarvestCoreTasks.dataset import DataSet
+from CloudHarvestCoreTasks.factories import task_chain_from_dict
+from CloudHarvestCoreTasks.tasks import TaskStatusCodes
+
 import unittest
-from CloudHarvestCoreTasks.tasks import DataSetTask, MongoTask
+
+test_data = [
+    {
+        'name': 'John Doe',
+        'address': {
+            'street': '123 Main St',
+            'city': 'Anytown',
+            'state': 'CA',
+            'zip': '12345'
+        },
+        'dob': '1990-01-01',
+        'email': 'john.doe@example.com',
+        'phone': '555-1234',
+        'tags': ['friend', 'colleague'],
+        'notes': 'Met at conference',
+        'age': 30,
+        'active': True
+    },
+    {
+        'name': 'Jane Smith',
+        'address': {
+            'street': '456 Elm St',
+            'city': 'Othertown',
+            'state': 'TX',
+            'zip': '67890'
+        },
+        'dob': '1985-05-15',
+        'email': 'jane.smith@example.com',
+        'phone': '555-5678',
+        'tags': ['family'],
+        'notes': 'Cousin',
+        'age': 35,
+        'active': False
+    },
+    {
+        'name': 'Jane Smith',
+        'address': {
+            'street': '789 Oak St',
+            'city': 'Newtown',
+            'state': 'NY',
+            'zip': '11223'
+        },
+        'dob': '1992-07-20',
+        'email': 'jane.smith2@example.com',
+        'phone': '555-9876',
+        'tags': ['friend'],
+        'notes': 'Met at school',
+        'age': 28,
+        'active': True
+    }
+]
+
+
+class TestDataSetTaskFilters(unittest.TestCase):
+    def setUp(self):
+        register_all()
+
+        self.dataset = DataSet()
+        self.dataset.add_records(test_data.copy())
+
+        self.task_chain_template = {
+            'report': {
+                'headers': ['name', 'address.state', 'dob'],
+                'tasks': [
+                    {
+                        'dataset': {
+                            'name': 'test_dataset',
+                            'description': 'Filter the results from the dataset.',
+                            'filters': '.*',
+                            'data': 'var.my_dataset',
+                            'stages': [
+                                {
+                                    'convert_list_to_string': {
+                                        'source_key': 'tags',
+                                        'separator': ', '
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+
+        self.filters = {
+            'accepted': '.*',
+            'add_keys': ['test_add_key'],
+            'exclude_keys': ['tags'],
+            'headers': ['name', 'address.state', 'dob'],
+            'matches': [['address.state=CA|TX']],
+            'sort': ['name']
+        }
+
+        # Instantiate the TaskChain
+        self.task_chain = task_chain_from_dict(template=self.task_chain_template, **{'filters': self.filters})
+
+        # Set the my_dataset variable referenced in the task_chain_template.data
+        self.task_chain.variables['my_dataset'] = self.dataset
+
+    def test_task_chain(self):
+        self.task_chain.run()
+
+        # Verify the DataSetTask was instantiated into the TaskChain
+        self.assertEqual(len(self.task_chain), 1)
+
+        # Verify that the TaskChain completed without errors
+        self.assertFalse(self.task_chain.errors)
+        self.assertEqual(self.task_chain.status, TaskStatusCodes.complete)
+
+        # Verify the records are properly filtered / processed
+        self.assertEqual(len(self.task_chain.result['data']), 2)
+        for record in self.task_chain.result['data']:
+            self.assertNotIn('tags', record.keys())        # explicitly removed with 'exclude_keys'
+            self.assertNotIn('email', record.keys())       # implicitly removed with 'headers'
+            self.assertIn('test_add_key', record.keys())   # explicitly added with 'add_keys'
+
+            # Verifies that the nested key value is not None
+            for expected_key in ('name', 'address.state', 'dob'):
+                self.assertIsNotNone(record.walk(expected_key))
 
 #
 # from CloudHarvestCoreTasks.filters import DataSetFilter, MongoFilter, SqlFilter

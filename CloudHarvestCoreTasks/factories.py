@@ -130,7 +130,7 @@ def task_from_dict(task_configuration: dict or BaseTask,
     class_configuration = templated_task_configuration.get(class_name) or {}
 
     if isinstance(task_chain, BaseTaskChain):
-        class_configuration = {'filters': task_chain.filters} | class_configuration
+        class_configuration = task_chain.filters | class_configuration
 
     instantiated_class = task_class(task_chain=task_chain, **class_configuration)
 

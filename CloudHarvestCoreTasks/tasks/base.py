@@ -553,7 +553,7 @@ class BaseFilterableTask(BaseTask):
     """
 
     def __init__(self,
-                 accepted_filters: str = None,
+                 filters: str = None,
                  order_of_operations: List[str] = None,
                  add_keys: List[str] = None,
                  count: bool = False,
@@ -577,7 +577,7 @@ class BaseFilterableTask(BaseTask):
         # The accepted filter is a regular expression that determines which filters are accepted by the task. If a filter
         # is not accepted, it will be ignored. To accept all filters, provide a string like '.*'. To accept no filters,
         # provide None (default)
-        self.accepted = compile(str(accepted_filters)) if accepted_filters else None
+        self.filters = compile(str(filters)) if filters else None
 
         # The default order of operations for all filters. This order is used to ensure that the filters are applied in an
         # optimal and consistent manner.
@@ -601,10 +601,10 @@ class BaseFilterableTask(BaseTask):
         self.sort = self.set_accepted_filters('sort', sort, [])
 
     def set_accepted_filters(self, filter_name: str, filter_value: Any, default_value: Any) -> Any:
-        if self.accepted is None:
+        if self.filters is None:
             return default_value
 
-        return filter_value if self.accepted.match(filter_name) else default_value
+        return filter_value or default_value if self.filters.match(filter_name) else default_value
 
     def apply_filters(self) -> 'BaseFilterableTask':
         """
@@ -624,17 +624,16 @@ class BaseFilterableTask(BaseTask):
         A list of the headers of the data.
         """
 
-        headers = self.headers or [] if self.accepted.match('headers') else []
-        add_keys = self.add_keys or [] if self.accepted.match('add_keys') else []
-        exclude_keys = self.exclude_keys or [] if self.accepted.match('exclude_keys') else []
-
         # If the task chain has headers, we use them as the default headers for the task
         if hasattr(self.task_chain, 'headers'):
-            headers = headers or self.task_chain.headers
+            headers = self.headers or self.task_chain.headers
+
+        else:
+            headers = self.headers
 
         return [
-            header for header in (headers + add_keys)
-            if header not in exclude_keys
+            header for header in (headers + self.add_keys)
+            if header not in self.exclude_keys
         ]
 
     def _filter_add_keys(self, *args, **kwargs):

@@ -74,6 +74,9 @@ class DataSetTask(BaseFilterableTask):
         # Apply user filters
         self.apply_filters()
 
+        # Sets the headers to the filtered keys
+        self.headers = self.filter_keys()
+
         # Assigns the modified DataSet to the result
         self.result = self.data
 
@@ -86,7 +89,7 @@ class DataSetTask(BaseFilterableTask):
         """
 
         # If the user filters not configured for this Task, return
-        if self.accepted is None or self.ignore_filters:
+        if self.filters is None or self.ignore_filters:
             pass
 
         else:

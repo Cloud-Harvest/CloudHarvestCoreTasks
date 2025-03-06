@@ -40,9 +40,6 @@ class ReportTaskChain(BaseTaskChain):
         super().__init__(*args, **kwargs)
 
     def run(self) -> 'ReportTaskChain':
-        # Add the headers to the metadata
-        self.meta['headers'] = self.headers
-
         super().run()
 
         return self

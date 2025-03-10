@@ -2,6 +2,7 @@
 - Huge refactor of the directory structure using absolute imports
 - Fixed some recursive import issues
 - Added `BaseFilterableTask` which some `BaseTasks` will use to implement filtering on a per-Task basis
+- `ReportTaskChain` now calculates headers which are returned as metadata to the user
 
 # 0.5.1
 - Expanded `DataSet` with new maths methods

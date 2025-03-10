@@ -1,7 +1,7 @@
 from CloudHarvestCorePluginManager import register_definition
 from CloudHarvestCoreTasks.dataset import WalkableDict
 from CloudHarvestCoreTasks.tasks.base import BaseTask
-from exceptions import TaskException
+from CloudHarvestCoreTasks.exceptions import TaskException
 
 from typing import Literal, List
 

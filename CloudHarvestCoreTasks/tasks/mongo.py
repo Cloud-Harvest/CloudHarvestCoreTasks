@@ -1,6 +1,6 @@
 from CloudHarvestCorePluginManager import register_definition
 from CloudHarvestCoreTasks.tasks.base import BaseDataTask, BaseFilterableTask
-from exceptions import TaskException
+from CloudHarvestCoreTasks.exceptions import TaskException
 
 from pymongo import MongoClient
 

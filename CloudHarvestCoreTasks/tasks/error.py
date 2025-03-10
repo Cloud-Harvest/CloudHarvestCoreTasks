@@ -1,6 +1,6 @@
 from CloudHarvestCorePluginManager import register_definition
 from CloudHarvestCoreTasks.tasks.base import BaseTask
-from exceptions import TaskException
+from CloudHarvestCoreTasks.exceptions import TaskException
 
 
 @register_definition(name='error', category='task')

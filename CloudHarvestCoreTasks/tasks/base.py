@@ -201,7 +201,7 @@ class BaseTask:
         Returns:
         BaseTask: The instance of the task.
         """
-        from exceptions import TaskException
+        from CloudHarvestCoreTasks.exceptions import TaskException
 
         try:
             max_attempts = self.retry.get('max_attempts') or 1

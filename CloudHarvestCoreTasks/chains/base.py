@@ -1,6 +1,6 @@
 from CloudHarvestCorePluginManager import register_definition
 from CloudHarvestCoreTasks.tasks.base import BaseTask, TaskStatusCodes
-from exceptions import TaskTerminationException
+from CloudHarvestCoreTasks.exceptions import TaskTerminationException
 
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Generator

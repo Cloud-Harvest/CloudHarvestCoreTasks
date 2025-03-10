@@ -1,49 +1,11 @@
-"""
-This module defines the core classes and functionality for managing tasks and task chains in the Harvest system.
-
-Classes:
-    TaskStatusCodes (Enum): Defines the basic status codes for any given data collection object.
-    TaskConfiguration: Manages the configuration of a task and provides methods to instantiate the task.
-    BaseTask: Manages a single task in a task chain, providing the basic structure and methods for all tasks.
-    BaseAuthenticationTask (BaseTask): Manages tasks related to authentication.
-    BaseDataTask (BaseTask): Manages tasks that retrieve data from a data connection-based data provider.
-    BaseTaskChain (List[BaseTask]): Manages a chain of tasks, providing methods to run, insert, and handle task states.
-    BaseTaskPool: Manages a pool of tasks that can be executed concurrently.
-
-Modules:
-    CloudHarvestCorePluginManager.decorators: Provides decorators for registering task definitions.
-    CloudHarvestCoreTasks.exceptions: Defines custom exceptions for the Harvest system.
-    datetime: Provides classes for manipulating dates and times.
-    enum: Provides support for enumerations.
-    threading: Provides support for creating and managing threads.
-    typing: Provides support for type hints.
-    logging: Provides support for logging messages.
-"""
-
-from CloudHarvestCorePluginManager.decorators import register_definition
 from datetime import datetime, timezone
-from enum import Enum
-from threading import Thread
-from typing import Any, Dict, List, Literal
+from typing import Any, List, Literal
+
 from logging import getLogger
-
-from silos import get_silo
-
-_log_levels = Literal['debug', 'info', 'warning', 'error', 'critical']
-USER_FILTERS = {
-    'add_keys': [],
-    'count': False,
-    'exclude_keys': [],
-    'headers': [],
-    'limit': None,
-    'matches': [],
-    'sort': None
-}
-
 logger = getLogger('harvest')
 
 
-class TaskStatusCodes(Enum):
+class TaskStatusCodes:
     """
     These are the basic status codes for any given Task object. Valid states are:
     - complete: The task has stopped and there are no more tasks to complete.
@@ -63,6 +25,13 @@ class TaskStatusCodes(Enum):
     skipped = 'skipped'
     terminating = 'terminating'
 
+    @classmethod
+    def get_codes(cls):
+        return [
+            attr for attr in dir(cls)
+            if not attr.startswith('__') and not callable(getattr(cls, attr))
+        ]
+
 
 class BaseTask:
     """
@@ -71,22 +40,18 @@ class BaseTask:
     subclasses that provide specific functionality.
     """
 
-    # By default, the user filter class is HarvestRecordSetUserFilter. This is because most tasks which return data do
-    # so after the overarching data set has been retrieved. An example of this include the FileTask which reads a file
-    # and returns the data.
-    USER_FILTER_STAGE = 'complete'
-
     def __init__(self,
                  name: str,
                  blocking: bool = True,
                  data: Any = None,
                  description: str = None,
+                 ignore_filters: bool = False,
                  iterate: dict = None,
                  on: dict = None,
-                 task_chain: 'BaseTaskChain' = None,
+                 task_chain: Any = None,
                  result_as: (dict or str) = None,
                  retry: dict = None,
-                 user_filters:dict = None,
+                 filters:dict = None,
                  when: str = None,
                  **kwargs):
 
@@ -101,13 +66,8 @@ class BaseTask:
             name (str): The name of the task.
             blocking (bool): A boolean indicating whether the task is blocking or not. If True, the task will block the task chain until it completes.
             description (str): A brief description of what the task does.
-            iterate (dict): A dictionary
-                >>> iterate = {
-                >>>     'variable': 'var.variable_name',    # The name of the variable to iterate over.
-                >>>     'insert_tasks_before_name': str,    # (optional) The name of the task to insert before.
-                >>>     'insert_tasks_after_name': str,     # (optional) The name of the task to insert after.
-                >>>     'insert_tasks_at_position': str,    # (optional) The position to insert the task at.
-                >>> }
+            ignore_filters (bool): A boolean indicating whether to ignore user filters or not.
+            iterate (str): A variable to iterate over.
             on (dict): A dictionary of task configurations for the task to run when it completes, errors, is skipped, or starts.
                 >>> on = {
                 >>>     'complete': [TaskConfiguration],
@@ -115,7 +75,7 @@ class BaseTask:
                 >>>     'skipped': [TaskConfiguration],
                 >>>     'start': [TaskConfiguration]
                 >>> }
-            task_chain (BaseTaskChain): The task chain that this task belongs to, if applicable.
+            task_chain (chains.base.BaseTaskChain): The task chain that this task belongs to, if applicable.
             retry (dict): A dictionary of retry configurations for the task.
                 >>> retry = {
                 >>>     'delay_seconds': 1.0,                  # The number of seconds to delay before retrying the task.
@@ -129,8 +89,8 @@ class BaseTask:
                 >>>     'name': 'variable_name',
                 >>>     'mode': 'append', 'extend', 'merge', 'overwrite'    # The mode to store the result in the variable. 'overwrite' is the default.
                 >>> }
-            user_filters (dict): A dictionary of user filters to apply to the data.
-                >>> user_filters = {
+            filters (dict): A dictionary of user filters to apply to the data.
+                >>> filters = {
                 >>>     'accepted': '*',                        # Regex pattern to match the filters allowed in this Task.
                 >>>     'add_keys': ['new_key'],                # Keys to add to the data.
                 >>>     'count': True,                          # Returns a count of data instead of the data itself.
@@ -150,12 +110,14 @@ class BaseTask:
         self.blocking = blocking
         self.data = data
         self.description = description
+        self.ignore_filters = ignore_filters
         self.iterate = iterate or {}
         self.on = on or {}
         self.output = None
         self.result_as = result_as
         self.retry = retry or {}
-        self.task_chain = task_chain
+        from CloudHarvestCoreTasks.chains.base import BaseTaskChain
+        self.task_chain: BaseTaskChain = task_chain
         self.when = when
 
         # Programmatic attributes
@@ -169,8 +131,8 @@ class BaseTask:
         self.start = None
         self.end = None
 
-        # Defaults < task-chain < user
-        self.user_filters = USER_FILTERS | self.task_chain.user_filters if self.task_chain else {} | (user_filters or {})
+        # Defaults < user
+        self.filters = filters
 
     @property
     def duration(self) -> float:
@@ -205,20 +167,12 @@ class BaseTask:
         except ValueError:
             return -1
 
-    def apply_user_filters(self):
+    def apply_filters(self) -> 'BaseTask':
         """
         Applies user filters to the Task. The default user filter class is HarvestRecordSetUserFilter which is executed
         when on_complete() is called. This method should be overwritten in subclasses to provide specific functionality.
         """
-
-        # If the user filters not configured for this Task, return
-        if self.user_filters.get('accepted') is None:
-            return
-
-        from ..user_filters import HarvestRecordSetUserFilter
-
-        with HarvestRecordSetUserFilter(recordset=self.result, **self.user_filters) as user_filter:
-            self.result = user_filter.apply()
+        return self
 
     def method(self, *args, **kwargs) -> 'BaseTask':
         """
@@ -229,8 +183,8 @@ class BaseTask:
         for i in range(10):
 
             # Make sure to include a block which handles termination
-            if str(self.status) == str(TaskStatusCodes.terminating):
-                raise TaskTerminationException('Task was instructed to terminate.')
+            if self.status == TaskStatusCodes.terminating:
+                break
 
             from time import sleep
             sleep(1)
@@ -247,6 +201,7 @@ class BaseTask:
         Returns:
         BaseTask: The instance of the task.
         """
+        from exceptions import TaskException
 
         try:
             max_attempts = self.retry.get('max_attempts') or 1
@@ -263,7 +218,7 @@ class BaseTask:
 
                     # Check of the `when` condition is met
                     if self.when and self.task_chain:
-                        from .templating import template_object
+                        from CloudHarvestCoreTasks.templating import template_object
                         when_result = True if template_object(template={'result': '{{ ' + self.when + ' }}'},
                                                               variables=self.task_chain.variables).get('result') == 'True' else False
 
@@ -275,7 +230,7 @@ class BaseTask:
                     else:
                         self.on_skipped()
 
-                except Exception as ex:
+                except (Exception, TaskException) as ex:
                     # If the `retry` directive is provided, check if the task should be retried. We include isinstance()
                     # to ensure that the retry directive is a dictionary.
                     if self.retry and isinstance(self.retry, dict):
@@ -295,7 +250,7 @@ class BaseTask:
                             self.attempts < max_attempts,
 
                             # Check if the task is not terminating
-                            str(self.status) != str(TaskStatusCodes.terminating)
+                            self.status != TaskStatusCodes.terminating
                         )
 
                         retry = all(retry)
@@ -319,7 +274,7 @@ class BaseTask:
 
                 else:
                     # If the task was not skipped, call the on_complete() method
-                    if str(self.status) != str(TaskStatusCodes.skipped):
+                    if self.status != TaskStatusCodes.skipped:
 
                         # If the result is a generator, convert it to a list. We do this at this stage instead of
                         # inside the on_complete() method to make sure any post-task processing will be handled on the
@@ -336,15 +291,15 @@ class BaseTask:
 
 
         except Exception as ex:
-            raise BaseTaskException(f'Top level error while running task {self.name}: {ex}')
+            raise TaskException(self, ex)
 
         finally:
             # Update the metadata with the task's status, duration, and other information
-            self.meta = self.meta | {
+            self.meta |= {
                 'attempts': self.attempts,
                 'count': len(self.result) if hasattr(self, '__len__') else 1,
                 'duration': self.duration,
-                'status': str(self.status)
+                'status': self.status
             }
         return self
 
@@ -388,10 +343,6 @@ class BaseTask:
         if self.result_as and self.task_chain:
             self.task_chain.variables[self.result_as] = self.result
 
-        # Apply user filters if the user filter stage is set to 'complete'
-        if self.USER_FILTER_STAGE == 'complete':
-            self.apply_user_filters()
-
         # Run the on_complete directive
         self._run_on_directive('complete')
 
@@ -420,7 +371,11 @@ class BaseTask:
         if hasattr(ex, 'args'):
             self.meta['Errors'].append(str(ex.args))
 
-        logger.error(f'Error running task {self.name}: {ex}')
+        if self.task_chain:
+            logger.error(f'{self.task_chain.id}[{self.position + 1}]: Error running task "{self.name}": {ex}')
+
+        else:
+            logger.error(f'Error running task "{self.name}": {ex}')
 
         self._run_on_directive('error')
 
@@ -455,9 +410,6 @@ class BaseTask:
 
         self._run_on_directive('start')
 
-        if self.USER_FILTER_STAGE == 'start':
-            self.apply_user_filters()
-
         return self
 
     def terminate(self) -> 'BaseTask':
@@ -474,12 +426,6 @@ class BaseTask:
 
         return self
 
-
-class BaseAuthenticationTask(BaseTask):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        self.auth = None
 
 class BaseDataTask(BaseTask):
     """
@@ -528,12 +474,12 @@ class BaseDataTask(BaseTask):
             command (str): The command to run on the data provider.
             arguments (dict, optional): Arguments to pass to the command.
             silo (str, optional): The name of the silo to use for the task. Defaults to None.
-\        """
+        """
 
         # Initialize the BaseTask class
         super().__init__(*args, **kwargs)
 
-        from ..silos import get_silo
+        from CloudHarvestCoreTasks.silos import get_silo
 
         # Assigned attributes
         self.silo = get_silo(silo)
@@ -586,7 +532,7 @@ class BaseDataTask(BaseTask):
             self.task_chain.variables[self.base_command_part] = result
 
             # Walks the command path and returns the result. This allows commands such as MongoDb's 'find.row_count'.
-            from .factories import replace_variable_path_with_value
+            from CloudHarvestCoreTasks.factories import replace_variable_path_with_value
             result: Any = replace_variable_path_with_value(original_string=f'var.{self.command}',
                                                            task_chain=self.task_chain,
                                                            fail_on_unassigned=True)
@@ -596,976 +542,119 @@ class BaseDataTask(BaseTask):
 
         return result
 
-@register_definition(name='chain', category='chain')
-class BaseTaskChain(List[BaseTask]):
+
+class BaseFilterableTask(BaseTask):
     """
-    The BaseTaskChain class is responsible for managing a chain of tasks.
-
-    It stores a list of tasks and provides methods to run the tasks in the chain, insert new tasks into the chain,
-    and handle completion and error states. It also provides properties to track the progress of the task chain.
-
-    Tasks are templated just before they are run. This allows for dynamic configuration of Tasks based on the variables
-    provided by previous Tasks. The templating is done using the templating.functions.template_object function.
+    The BaseFilterableTask class is a subclass of the BaseTask class and is used to manage a task that can be filtered
+    based on user-defined filters.
 
     Attributes:
-        name (str): The name of the task chain.
-        description (str): A brief description of what the task chain does.
-        variables (dict): Variables that can be used by the tasks in the chain.
-        task_templates (List[TaskConfiguration]): A list of task configurations for the tasks in the chain.
-        status (TaskStatusCodes): The current status of the task chain.
-        position (int): The current position in the task chain.
-        start (datetime): The start time of the task chain.
-        end (datetime): The end time of the task chain.
-        _meta (Any): Any metadata associated with the task chain.
-
-    Methods:
-        detailed_progress() -> dict: Returns a dictionary representing the progress of the task chain.
-        percent() -> float: Returns the current progress of the task chain as a percentage.
-        total() -> int: Returns the total number of tasks in the task chain.
-        find_task_position_by_name(task_name: str) -> int: Finds the position of a task in the task chain by its name.
-        get_variables_by_names(*variable_names) -> dict: Retrieves variables stored in the 'BaseTaskChain.variables' property based on their names.
-        insert_task_after_name(task_name: str, new_task_configuration: dict) -> 'BaseTaskChain': Inserts a new task into the task chain immediately after a task with a given name.
-        insert_task_before_name(task_name: str, new_task_configuration: dict) -> 'BaseTaskChain': Inserts a new task into the task chain immediately before a task with a given name.
-        insert_task_at_position(position: int, new_task_configuration: dict) -> 'BaseTaskChain': Inserts a new task into the task chain at a specific position.
-        on_complete() -> 'BaseTaskChain': Method to run when the task chain completes.
-        on_error(ex: Exception) -> 'BaseTaskChain': Method to run when the task chain errors.
-        run() -> 'BaseTaskChain': Runs the task chain.
-        terminate() -> 'BaseTaskChain': Terminates the task chain.
+        filters (dict): A dictionary of user filters to apply to the data.
     """
 
     def __init__(self,
-                 template: dict,
-                 user_filters: dict = None,
-                 variables: dict = None,
-                 *args, **kwargs):
+                 filters: str = None,
+                 order_of_operations: List[str] = None,
+                 add_keys: List[str] = None,
+                 count: bool = False,
+                 exclude_keys: List[str] = None,
+                 headers: List[str] = None,
+                 limit: int = None,
+                 matches: List[List[str]] = None,
+                 sort: List[str] = None,
+                 *args, **kwargs
+                 ):
         """
-        Initializes a new instance of the BaseTaskChain class.
+        Initializes a new instance of the BaseFilterableTask class.
 
         Args:
-            template(dict): The configuration for the task chain.
-                name(str): The name of the task chain.
-                tasks(List[dict]): A list of task configurations for the tasks in the chain.
-                description(str, optional): A brief description of what the task chain does. Defaults to None.
-                max_workers(int, optional): The maximum number of concurrent workers that are permitted.
-            cache_progress(bool, optional): A boolean indicating whether the progress of the task chain should
-                                            be reported to the Ephemeral Silo. Defaults to False.
-            user_filters(dict, optional): A dictionary of user filters to apply to the data. Defaults to None.
-            variables(dict, optional): Variables that can be used by the tasks in the chain. The dictionary is merged
-                                        with into the BaseTaskChain.variables attribute. Defaults to None.
-        """
-        self.original_template = template
-
-        super().__init__()
-
-        from uuid import uuid4
-        self.id = str(uuid4())
-
-        self.name = template['name']
-        self.description = template.get('description')
-
-        # Variables are stored with their name as the key.
-        # Starting variables can be added using the variables parameter.
-        self.variables: Dict[str, Any] = {} | (variables or {})
-
-        self.task_templates: List[dict or BaseTask] = template.get('tasks', [])
-
-        self.status = TaskStatusCodes.initialized
-        self.pool = BaseTaskPool(chain=self,
-                                 max_workers=template.get('max_workers', 4),
-                                 idle_refresh_rate=template.get('idle_refresh_rate', 3),
-                                 worker_refresh_rate=template.get('worker_refresh_rate', .5)).start()
-
-        self.position = 0
-
-        self.start = None
-        self.end = None
-        self.user_filters = USER_FILTERS | (user_filters or {})
-
-        self.meta = {}
-
-        self.reporting_thread = self.update_task_chain_cache_thread()
-
-    def __enter__(self) -> 'BaseTaskChain':
-        """
-        This method is called when the context management protocol is initiated using the 'with' statement.
-        It returns the instance of the task chain itself.
-
-        Returns:
-            BaseTaskChain: The instance of the task chain.
-        """
-
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """
-        This method is called when the context management protocol is ended (when exiting the 'with' block).
-        It doesn't do anything in this case.
-
-        Args:
-            exc_type (type): The type of the exception that caused the context management protocol to end, if any.
-            exc_val (Exception): The instance of the exception that caused the context management protocol to end, if any.
-            exc_tb (traceback): A traceback object encapsulating the call stack at the point where the exception was raised, if any.
-        """
-
-        return None
-
-    @property
-    def errors(self) -> List[dict]:
-        """
-        Returns a list of errors that occurred during the task chain.
-        """
-
-        errors = []
-        for task in self:
-            if task.meta.get('Errors'):
-                errors.append({f'{self.index(task)}-{task.name}': task.meta['Errors']})
-
-        if self.meta.get('Errors'):
-            errors.append({'TaskChain': self.meta['Errors']})
-
-        return errors
-
-    @property
-    def percent(self) -> float:
-        """
-        Returns the current progress of the task chain as a percentage cast as float.
-        """
-
-        return self.position / self.total if self.total > 0 else -1
-
-    @property
-    def performance_metrics(self) -> List[dict]:
-        """
-        This method calculates and returns the performance metrics of the task chain.
-
-        The performance metrics include information about each task in the task chain, such as its position, name,
-        status, data size, duration, start and end times. It also includes system metrics like CPU and memory usage,
-        and disk space.
-
-        The method returns a dictionary with the following keys:
-
-        - 'TaskMetrics': Contains a list of dictionaries, each representing a task in the task chain. Each dictionary
-          includes the following keys:
-            - 'Position': The position of the task in the task chain.
-            - 'Name': The name of the task.
-            - 'Status': The status of the task.
-            - 'DataBytes': The size of the data produced by the task, in bytes.
-            - 'Records': The number of records in the task's data, if applicable.
-            - 'Duration': The duration of the task, in seconds.
-            - 'Start': The start time of the task.
-            - 'End': The end time of the task.
-
-        - 'Timings': Contains statistics about the durations of the tasks in the task chain, including the average,
-           maximum, minimum, and standard deviation.
-
-        - 'SystemMetrics': Contains a list of dictionaries, each representing a system metric. Each dictionary includes
-          the following keys:
-            - 'Name': The name of the metric.
-            - 'Value': The value of the metric.
-
-            The system metrics returned are:
-            - CPU Cores: The number of CPU cores.
-            - CPU Threads: The number of CPU threads.
-            - CPU Architecture: The CPU architecture.
-            - CPU Clock Speed: The CPU clock speed.
-            - OS Architecture: The OS architecture.
-            - OS Version: The OS version.
-            - OS 64/32 bit: Whether the OS is 64 or 32 bit.
-            - OS Runtime: The OS runtime.
-            - Total Memory: The total memory available.
-            - Available Memory: The available memory.
-            - Swap Size: The size of the swap space.
-            - Swap Usage: The amount of swap space used.
-            - Total Disk Space: The total disk space.
-            - Used Disk Space: The used disk space.
-            - Free Disk Space: The free disk space.
-
-        Returns:
-            List[dict]: A dictionary representing the performance metrics of the task chain.
-        """
-
-        from sys import getsizeof
-
-        # This part of the report returns results for each task in the task chain.
-        task_metrics = [
-            {
-                'Position': self.position,
-                'Name': task.name,
-                'Status': task.status.__str__(),
-                'Attempts': task.attempts,
-                'DataBytes': getsizeof(task.result),
-                'Records': len(task.result) if hasattr(task.result, '__len__') else 'N/A',
-                'Duration': task.duration,
-                'Start': task.start,
-                'End': task.end,
-            }
-            for task in self
-        ]
-
-        # Gather metrics for the entire task chain
-        # We generate multiple lists through one loop to perform the necessary calculations without having to loop
-        # multiple times through the TaskChain's tasks.
-        total_records = []
-        total_result_size = []
-        starts = []
-        ends = []
-        for task in self:
-            if hasattr(task.result, '__len__'):
-                total_records.append(len(task.result))
-
-            total_result_size.append(getsizeof(task.result))
-            starts.append(task.start)
-            ends.append(task.end)
-
-        # Add a total row to the task metrics
-        total_records = sum(total_records)
-        total_result_size = sum(total_result_size)
-        starts = min(starts)
-        ends = max(ends)
-
-        task_metrics.append({
-            'Position': 'Total',
-            'Name': '',
-            'Status': self.status.__str__(),
-            'Records': total_records,
-            'DataBytes': total_result_size,
-            'Duration': (ends - starts).total_seconds() if starts and ends else 0,
-            'Start': starts,
-            'End': ends,
-        })
-
-        # Add a buffer run between the task list and the Total
-        # We add it at this stage just in case there are no Tasks in the TaskChain
-        # which means the only row in the task_metrics list is the Total row
-        task_metrics.insert(-1, {k: '' for k in task_metrics[-1].keys()})
-
-        return [
-            {
-                'data': task_metrics,
-                'meta': {
-                    'headers': [k for k in task_metrics[0].keys()]
-                }
-            }
-        ]
-
-    @property
-    def result(self) -> dict:
-        """
-        Returns either `var.result` or the result of the last task in the task chain.
-        """
-
-        result = None
-
-        try:
-            result = self.variables.get('result') or self[-1].result
-
-        except IndexError:
-            result = None
-
-        finally:
-            return {
-                'data': result,
-                'meta': self.meta
-            }
-
-    @property
-    def total(self) -> int:
-        """
-        Returns the total number of tasks in the task chain.
-        """
-
-        return len(self.task_templates)
-
-    def detailed_progress(self) -> dict:
-        """
-        This method calculates and returns the progress of the task chain.
-
-        It returns a dictionary with the following keys:
-        - 'total': The total number of tasks in the task chain.
-        - 'current': The current position of the task chain.
-        - 'percent': The percentage of tasks completed in the task chain.
-        - 'duration': The total duration of the task chain in seconds. If the task chain has not started, it returns 0.
-        - 'counts': A dictionary with the count of tasks in each status. The keys of this dictionary are the status codes defined in the TaskStatusCodes Enum.
-
-        Returns:
-            dict: A dictionary representing the progress of the task chain.
-        """
-
-        from datetime import datetime, timezone
-
-        # Set the possible status codes based on the TaskStatusCodes Enum
-        count_result = {
-            str(k): 0 for k in TaskStatusCodes
-        }
-
-        # Now we count the number of tasks in each status
-        for task in self:
-            count_result[str(task.status)] += 1
-
-        return {
-            'total': self.total,
-            'current': self.position,
-            'percent': (self.position / self.total) * 100,
-            'duration': (self.end or datetime.now(tz=timezone.utc) - self.start).total_seconds() if self.start else 0,
-            'counts': count_result
-        }
-
-    def find_task_by_name(self, task_name: str) -> 'BaseTask':
-        """
-        This method finds a task in the task chain by its name.
-
-        Args:
-            task_name (str): The name of the task to find.
-
-        Returns:
-            BaseTask: The task with the given name.
-        """
-
-        for task in self:
-            if task.name == task_name:
-                return task
-
-    def find_task_position_by_name(self, task_name: str) -> int:
-        """
-        This method finds the position of a task in the task chain by its name.
-
-        Args:
-            task_name (str): The name of the task to find.
-
-        Returns:
-            int: The position of the task in the task chain. If the task is not found, it returns None.
-        """
-
-        for position, task in enumerate(self.task_templates):
-            if task.name == task_name:
-                return position
-
-    def get_variables_by_names(self, *variable_names) -> dict:
-        """
-        Retrieves variables stored in the 'BaseTaskChain.variables' property based on their names (top level key).
-        Note that the values
-
-        Args:
-            *variable_names: The variables to return.
-
-        Returns: a dictionary of variable names (keys) and their values.
-        """
-
-        return {
-            key: value
-            for key, value in self.variables.items()
-            if key in variable_names
-        }
-
-    def insert_task_after_name(self, task_name: str, new_task_configuration: dict or BaseTask) -> 'BaseTaskChain':
-        """
-        This method inserts a new task into the task chain immediately after a task with a given name.
-
-        Args:
-            task_name (str): The name of the task after which the new task should be inserted.
-            new_task_configuration (dict): The configuration of the new task to be inserted.
-
-        Returns:
-            BaseTaskChain: The instance of the task chain.
-        """
-
-        self.task_templates.insert(self.find_task_position_by_name(task_name) + 1, new_task_configuration)
-
-        return self
-
-    def insert_task_before_name(self, task_name: str, new_task_configuration: dict or BaseTask) -> 'BaseTaskChain':
-        """
-        This method inserts a new task into the task chain immediately before a task with a given name.
-
-        Args:
-            task_name (str): The name of the task before which the new task should be inserted.
-            new_task_configuration (dict): The configuration of the new task to be inserted.
-
-        Returns:
-            BaseTaskChain: The instance of the task chain.
-        """
-
-        position = self.find_task_position_by_name(task_name)
-
-        if position < self.position:
-            raise BaseTaskException('Cannot insert a task before the current task.')
-
-        else:
-            self.task_templates.insert(position - 1, new_task_configuration)
-
-        return self
-
-    def insert_task_at_position(self, position: int, new_task_configuration: dict or BaseTask) -> 'BaseTaskChain':
-        """
-        This method inserts a new task into the task chain at a specific position.
-
-        Args:
-            position (int): The position at which the new task should be inserted.
-            new_task_configuration (dict): The configuration of the new task to be inserted.
-
-        Returns:
-            BaseTaskChain: The instance of the task chain.
-        """
-
-        if position > self.total:
-            self.task_templates.append(new_task_configuration)
-
-        else:
-            self.task_templates.insert(position, new_task_configuration)
-
-        return self
-
-    def on_complete(self) -> 'BaseTaskChain':
-        """
-        Method to run when the task chain completes.
-        This method may be overridden in subclasses to provide specific completion logic.
-
-        Returns:
-            BaseTaskChain: The instance of the task chain.
-        """
-
-        self.status = TaskStatusCodes.complete
-        self.end = datetime.now(tz=timezone.utc)
-
-        return self
-
-    def on_error(self, ex: Exception) -> 'BaseTaskChain':
-        """
-        Method to run when the task chain errors.
-        This method may be overridden in subclasses to provide specific error handling logic.
-
-        Returns:
-            BaseTaskChain: The instance of the task chain.
-        """
-
-        self.status = TaskStatusCodes.error
-        self.meta['Error'] = ex.args
-
-        if self.pool.queue_size:
-            self.pool.terminate()
-
-        logger.error(f'Error running task chain {self.name}: {ex}')
-
-        return self
-
-    def on_start(self) -> 'BaseTaskChain':
-        """
-        Method to run when the task chain starts.
-        This method may be overridden in subclasses to provide specific start logic.
-        """
-
-        self.status = TaskStatusCodes.running
-        self.start = datetime.now(tz=timezone.utc)
-
-        return self
-
-    def run(self) -> 'BaseTaskChain':
-        """
-        Runs the task chain. This method will block until all tasks in the chain are completed.
-        Note that this method may be overwritten in subclasses to provide specific functionality.
-
-        Returns:
-            BaseTaskChain: The instance of the task chain.
-        """
-
-        try:
-            self.on_start()
-            self.position = 0
-
-            while True:
-                # Instantiate the task from the task configuration
-                try:
-                    from .factories import task_from_dict
-                    task_template = self.task_templates[self.position]
-
-                    task = task_from_dict(task_configuration=task_template, task_chain=self)
-
-                    if task.iterate:
-                        task.status = TaskStatusCodes.skipped
-                        task.meta['Info'] = 'Task was skipped because it was an iterated task.'
-
-                        # Insert the iterated tasks into the task chain's configurations
-                        [
-                            self.task_templates.insert(self.position + 1, iter_task)
-                            for iter_task in self.iterate_task(original_task_configuration=task_template)
-                        ]
-
-                        # Add the parent task to the task chain (it will not be executed)
-                        self.append(task)
-
-                        # Increment the position
-                        self.position += 1
-                        continue
-
-                # Break when there are no more tasks to run
-                except IndexError:
-                    break
-
-                self.append(task)
-
-                # Execute the task
-                if task.blocking:
-                    task.run()
-
-                # Add it to the pool to be run asynchronously
-                else:
-                    self.pool.add(task)
-
-                # Check for termination
-                if str(self.status) == str(TaskStatusCodes.terminating):
-                    raise TaskTerminationException('Task chain was instructed to terminate.')
-
-                # Hold within the loop if there are outstanding pool tasks because the async task might have an
-                # on_* directive which needs to be added and processed. By waiting here, we ensure that the task chain
-                # will not complete until all tasks have been processed.
-                if self.pool.queue_size > 0 and len(self.task_templates) == len(self):
-                    self.pool.wait_until_complete()
-
-                # Increment the position
-                self.position += 1
-
-            if self.pool.queue_size > 0:
-                self.pool.wait_until_complete()
-
-        except Exception as ex:
-            self.on_error(ex)
-
-        finally:
-            self.on_complete()
-
-            if self.reporting_thread:
-                try:
-                    self.reporting_thread.join(timeout=5)
-
-                except TimeoutError:
-                    pass
-
-            return self
-
-    def iterate_task(self, original_task_configuration: dict) -> List[dict]:
-        """
-        This generator converts a task_configuration with an 'iterate' directive into a list of task configurations
-        based on the elements of 'iterate.variable'.
-
-        Args:
-            original_task_configuration (dict): The original task configuration with the 'iterate' directive.
-        """
-
-        # Determine how results from the itemized processes will be stored. The default behavior is to override the
-        # variable with the same name as the 'result_as' directive; however, itemized tasks may return results of
-        # different types. The 'result_as' directive provides a way to specify how the results should be stored.
-        result_as = original_task_configuration.get('result_as')
-
-        if result_as:
-            result_as_mode = result_as.get('mode') or 'override' if isinstance(result_as, dict) else 'override'
-
-            # Determine how the results should be stored then initialize the variable accordingly
-            match result_as_mode:
-                case 'append' | 'extend':
-                    self.variables[result_as['name']] = []
-
-                case 'merge':
-                    self.variables[result_as['name']] = {}
-
-                # The default behavior is to override the variable
-                case _:
-                    self.variables[result_as['name']] = None
-
-        # Template the original configuration to get the iterated items. We take this approach to leverage the templating
-        # engine to resolve variables in the iterate directive.
-        from .factories import task_from_dict
-        task = task_from_dict(task_configuration=original_task_configuration, task_chain=self)
-        iter_var = task.iterate.get('variable')
-
-        # We employ reversed() here because we want the order of the tasks to be the same as the order of the iterated
-        # items. This is because the list.insert() operation will insert the new task at the specified position and
-        # shift the existing tasks down the task order. If we iterate in the normal order, the tasks will be performed
-        # in the reverse order of the iterated items.
-        # iter_var = list(reversed(iter_var))
-        for item in reversed(iter_var):
-            from copy import deepcopy
-
-            # Create a deep copy of the original task configuration to avoid mangling the original configuration
-            task_configuration = deepcopy(original_task_configuration)
-
-            class_key = list(task_configuration.keys())[0]
-
-            # Remove iterable configuration from the task
-            task_configuration[class_key].pop('iterate')
-
-            # Update the task's name
-            task_configuration[class_key]['name'] = f'{task_configuration[class_key]["name"]} - {iter_var.index(item) + 1}/{len(iter_var)}'
-
-            # Template the file with the item
-            from .factories import walk_and_replace
-            itemized_task_configuration = walk_and_replace(obj=task_configuration, task_chain=self, item=item)
-
-            yield itemized_task_configuration
-
-    def terminate(self) -> 'BaseTaskChain':
-        """
-        Terminates the task chain.
-        This method may be overridden in subclasses to provide specific termination logic.
-
-        Returns:
-            BaseTaskChain: The instance of the task chain.
-        """
-
-        self.status = TaskStatusCodes.terminating
-
-        return self
-
-    def update_task_chain_cache_thread(self) -> Thread or None:
-        """
-        This method is responsible for updating the job cache with the task chain's progress.
-        """
-
-        from ..silos import get_silo
-
-        # We only report status to harvest-jobs. If the silo is not available, we return None.
-        if not get_silo('harvest-jobs'):
-            return None
-
-        def update_task_chain_cache():
-            """
-            Updates the job cache with the task chain's progress.
-            """
-            while True:
-                cache_entry = {
-                    'id': self.id,
-                    'status': self.status.__str__(),
-                    'start': self.start,
-                    'end': self.end
-                } | self.detailed_progress()
-
-                try:
-                    client = get_silo('harvest-jobs').connect()
-
-                    client.hset(name=self.id, mapping=cache_entry)
-
-                    # A job which has not updated in 15 minutes is considered stale and will be removed from the cache.
-                    client.expire(name=self.id, time=900)
-
-                except Exception as ex:
-                    logger.error(f'{self.name}: Error updating job cache: {ex}')
-
-                finally:
-                    from time import sleep
-
-                    match self.status:
-                        case TaskStatusCodes.initialized, TaskStatusCodes.idle:
-                            sleep(5)
-
-                        case TaskStatusCodes.complete:
-                            break
-
-                        case _:
-                            sleep(1)
-
-        thread = Thread(target=update_task_chain_cache, daemon=True)
-        thread.start()
-
-        return thread
-
-
-@register_definition(name='harvest', category='chain')
-class BaseHarvestTaskChain(BaseTaskChain):
-    """
-    The BaseHarvestTaskChain class is a subclass of the BaseTaskChain class and is used to manage a sequence of tasks
-    related to harvesting data. Specific functionality may be required based on the source data
-    provider.
-    """
-
-    def __init__(self,
-                 platform: str,
-                 service: str,
-                 type: str,
-                 account: str,
-                 region: str,
-                 destination_silo: str,
-                 unique_identifier_keys: (str or List[str]),
-                 extra_matadata_fields: (str or List[str]) = None,
-                 mode: Literal['all', 'single'] = 'all',
-                 *args, **kwargs):
 
         """
-        Initializes a new instance of the BaseHarvestTaskChain class.
-
-        platform (str): The Platform (ie AWS, Azure, Google)
-        service (str): The Platform's service name (ie RDS, EC2, GCP)
-        type (str): The Service subtype, if applicable (ie RDS instance, EC2 event)
-        account (str): The Platform account name or identifier
-        region (str): The geographic region name for the Platform
-        destination_silo (str): The name of the destination silo where the harvested data will be stored
-        unique_identifier_keys (str or List[str]): The unique filter keys for the harvested data
-        extra_matadata_fields (str or List[str], optional): Additional metadata fields to include in the harvested data's metadata record
-        mode (str, optional): The mode of the harvest task chain. 'all' will harvest all data, 'single' will harvest a single record
-
-        Exposes
-        The following parameters are exposed as variables in the task chain:
-        - var.pstar: A dictionary containing the platform, service, type, account, and region.
-
-        Configuration Example
-        >>> {
-        >>>   "name": "Example Harvest Task Chain",
-        >>>   "description": "A task chain for harvesting data",
-        >>>   "tasks": [
-        >>>     {
-        >>>       "task_name": "example_task",
-        >>>       "result_as": "result",
-        >>>       "task_parameters": {
-        >>>         "param1": "value1",
-        >>>         "param2": "value2"
-        >>>       }
-        >>>     }
-        >>>   ],
-        >>>   "max_workers": 4,
-        >>>   "idle_refresh_rate": 3,
-        >>>   "worker_refresh_rate": 0.5,
-        >>>   "platform": "aws",                        # This should be populated by the
-        >>>   "service": "ec2",
-        >>>   "type": "instance",
-        >>>   "account": "example_account",
-        >>>   "region": "us-west-2",
-        >>>   "destination_silo": "example_silo",
-        >>>   "unique_identifier_keys": ["key1", "key2"],
-        >>>   "extra_metadata_fields": ["field1", "field2"]
-        >>> }
-        """
-
-        # Update the template based on the mode
-        if isinstance(kwargs['tasks'], dict):
-            if kwargs['tasks'].get('all') and kwargs['tasks'].get('single'):
-                kwargs['tasks'] = kwargs['tasks']['mode']
 
         super().__init__(*args, **kwargs)
 
-        # Set the class attributes
-        self.platform = platform
-        self.service = service
-        self.type = type
-        self.account = account
-        self.region = region
-        self.mode = mode
-        self.destination_silo = destination_silo
-        self.unique_identifier_keys = [unique_identifier_keys] if isinstance(unique_identifier_keys, str) else unique_identifier_keys
-        self.extra_metadata_fields = [extra_matadata_fields] if isinstance(extra_matadata_fields, str) else extra_matadata_fields or []
+        # The accepted filter is a regular expression that determines which filters are accepted by the task. If a filter
+        # is not accepted, it will be ignored. To accept all filters, provide a string like '.*'. To accept no filters,
+        # provide None (default)
+        self.filters = filters
 
-        # Computed attributes
-        self.replacement_collection_name = f'{self.platform}_{self.service}_{self.type}'
+        # The default order of operations for all filters. This order is used to ensure that the filters are applied in an
+        # optimal and consistent manner.
+        self.order_of_operations = order_of_operations or (
+            'add_keys',     # Need all possible keys for matching and sorting
+            'matches',      # Filter the data
+            'sort',         # Sort the data
+            'limit',        # Limit the data
+            'exclude_keys', # Exclude keys from the data
+            'headers',      # Set the headers of the data
+            'count'         # Return a count of the data
+        )
 
-        # Insert a HarvestTask template into the end of the task chain
-        template = {
-            'harvest_update': {
-                'name': f'{self.destination_silo}:{self.platform}/{self.service}/{self.type}/{self.account}/{self.region}',
-                'description': 'Updates the Harvest Persistent Storage with the latest data',
-                'data': 'var.result',
-                'result_as': 'result',
-            }
-        }
+        # Sets the values
+        self.add_keys = self.set_accepted_filters('add_keys', add_keys, [])
+        self.count = self.set_accepted_filters('count', count, False)
+        self.exclude_keys = self.set_accepted_filters('exclude_keys', exclude_keys, [])
+        self.headers = self.set_accepted_filters('headers', headers, [])
+        self.limit = self.set_accepted_filters('limit', limit, None)
+        self.matches = self.set_accepted_filters('matches', matches, [])
+        self.sort = self.set_accepted_filters('sort', sort, [])
 
-        self.task_templates.append(template)
+    def set_accepted_filters(self, filter_name: str, filter_value: Any, default_value: Any) -> Any:
+        if self.filters is None:
+            return default_value
 
-        # Expose the platform, service, type, account, and region as variables
-        self.variables['pstar'] = {
-            'platform': self.platform,
-            'service': self.service,
-            'type': self.type,
-            'account': self.account,
-            'region': self.region,
-        }
+        from re import compile
+        filters = compile(self.filters)
 
-class BaseTaskPool:
-    """
-    The BaseTaskPool class is responsible for managing a pool of tasks that can be executed concurrently. Unlike the
-    ThreadPoolExecutor provided by concurrent.futures, the BaseTaskPool class is designed to continue working even if
-    the Pool's queue is empty. This allows for the addition of new tasks to the pool while it is running.
+        return filter_value or default_value if filters.match(filter_name) else default_value
 
-    TaskChains should call terminate() on the TaskPool to stop the pool from running once all the Chain's Tasks
-    have completed. This will prevent the pool from running indefinitely.
-
-    Attributes:
-        max_workers (int): The maximum number of concurrent workers.
-        worker_refresh_rate (float): The rate at which the pool checks for task completion and starts new tasks.
-        idle_refresh_rate (float): The rate at which the pool checks for new tasks when idle.
-        _pool (list): The list of tasks waiting to be executed.
-        _active (list): The list of tasks currently being executed.
-        _complete (list): The list of tasks that have completed execution.
-        _minder_thread (Thread): The thread responsible for managing the task pool.
-        status (TaskStatusCodes): The current status of the task pool.
-    """
-
-    def __init__(self, chain: BaseTaskChain, max_workers: int, idle_refresh_rate: float = 3, worker_refresh_rate: float = .5):
+    def apply_filters(self) -> 'BaseFilterableTask':
         """
-        Initializes a new instance of the BaseTaskPool class.
-
-        Args:
-            max_workers (int): The maximum number of concurrent workers.
-            idle_refresh_rate (float, optional): The rate at which the pool checks for new tasks when idle. Defaults to 3 seconds.
-            worker_refresh_rate (float, optional): The rate at which the pool checks for task completion and starts new tasks. Defaults to 0.5 seconds.
+        This method applies the user filters to the data based on the ORDER_OF_OPERATIONS.
         """
 
-        self.chain = chain
-        self.max_workers = max_workers
-        self.worker_refresh_rate = worker_refresh_rate
-        self.idle_refresh_rate = idle_refresh_rate
-
-        self._pool = []         # List of tasks waiting to be executed
-        self._active = []       # List of tasks currently being executed
-        self._complete = []     # List of tasks that have completed execution
-
-        from threading import Thread
-        self._minder_thread = Thread(target=self._worker, daemon=True)  # Thread to manage the task pool
-
-        self.status = TaskStatusCodes.initialized  # Initial status of the task pool
-
-    @property
-    def queue_size(self) -> int:
-        """
-        Returns the number of pending and running tasks in the pool.
-        """
-
-        return len(self._active) + len(self._pool)
-
-    def add(self, task: BaseTask) -> 'BaseTaskPool':
-        """
-        Adds a task to the pool.
-
-        Args:
-            task (BaseTask): The task to be added to the pool.
-        """
-
-        self._pool.append(task)
-        return self
-
-    def wait_until_complete(self, timeout: float = 0) -> 'BaseTaskPool':
-        """
-        Waits until all tasks in the pool have completed.
-
-        Args:
-            timeout (float, optional): The maximum number of seconds to wait for the tasks to complete.
-                                       If 0, the method will wait indefinitely. Defaults to 0.
-        """
-
-        from time import sleep
-        from datetime import datetime
-
-        wait_start = datetime.now()
-
-        while self.queue_size > 0:
-            if timeout != 0:
-                if (datetime.now() - wait_start).total_seconds() > timeout:
-                    break
-
-            sleep(1)
+        for operation in self.order_of_operations:
+            getattr(self, f'_filter_{operation}')()
 
         return self
 
-    def remove(self, task: BaseTask) -> 'BaseTaskPool':
+    def filter_keys(self) -> List[str]:
         """
-        Removes a task from the pool.
+        This method returns the expected keys of the data based on the provided headers, add_keys, and exclude_keys.
 
-        Args:
-            task (BaseTask): The task to be removed from the pool.
-        """
-
-        pool = self._find_task(task)
-        try:
-            pool.remove(task)
-
-        except ValueError:
-            pass  # Task not found in the pool
-
-        return self
-
-    def start(self) -> 'BaseTaskPool':
-        """
-        Starts the minder thread to manage the task pool.
+        Returns
+        A list of the headers of the data.
         """
 
-        self._minder_thread.start()
-        return self
+        # If the task chain has headers, we use them as the default headers for the task
+        if hasattr(self.task_chain, 'headers'):
+            headers = self.headers or self.task_chain.headers
 
-    def terminate(self) -> 'BaseTaskPool':
-        """
-        Terminates the task pool.
-        """
+        else:
+            headers = self.headers
 
-        self.status = TaskStatusCodes.terminating
+        return [
+            header for header in (headers + self.add_keys)
+            if header not in self.exclude_keys
+        ]
 
-        # Terminate all tasks in the pool
-        for task in self._pool + self._active:
-            task.terminate()
+    def _filter_add_keys(self, *args, **kwargs):
+        pass
 
-        # Wait for the minder thread to finish
-        self._minder_thread.join()
-        return self
+    def _filter_count(self, *args, **kwargs):
+        pass
 
-    def _worker(self) -> None:
-        """
-        The method run by the minder thread to manage task execution.
-        """
+    def _filter_exclude_keys(self, *args, **kwargs):
+        pass
 
-        from time import sleep
-        from threading import Thread
+    def _filter_headers(self, *args, **kwargs):
+        pass
 
-        self.status = TaskStatusCodes.running
+    def _filter_limit(self, *args, **kwargs):
+        pass
 
-        while True:
-            if len(self._active) < self.max_workers and self._pool:
-                next_task = self._pool.pop(0)  # Get the next task from the pool
-                self._active.append(next_task)  # Add the task to the active list
+    def _filter_matches(self, *args, **kwargs):
+        pass
 
-                Thread(target=next_task.run).start()  # Start the task in a new thread
-
-            for task in self._active:
-                if str(task.status) in (str(TaskStatusCodes.complete), str(TaskStatusCodes.error), str(TaskStatusCodes.skipped)):
-                    self._active.remove(task)
-                    self._complete.append(task)
-
-            # Wait before checking the task statuses again
-            if self.queue_size:
-                sleep(self.worker_refresh_rate)
-            else:
-                if str(self.status) == str(TaskStatusCodes.terminating):
-                    break
-                else:
-                    sleep(self.idle_refresh_rate)
-
-    def _find_task(self, task: BaseTask) -> list:
-        """
-        Finds the pool (waiting, active, or complete) that contains the given task.
-
-        Args:
-            task (BaseTask): The task to find.
-
-        Returns:
-            list: The pool that contains the task.
-        """
-
-        for pool in [self._pool, self._active, self._complete]:
-            if task in pool:
-                return pool
-
-        return []
-
-
-class BaseHarvestException(BaseException):
-    """
-    Base exception class for all exceptions in the Harvest system
-    """
-
-    def __init__(self, *args, log_level: _log_levels = 'error'):
-        super().__init__(*args)
-
-        getattr(logger, log_level.lower())(str(args))
-
-
-class BaseTaskException(BaseHarvestException):
-    def __init__(self, *args):
-        super().__init__(*args)
-
-
-class TaskTerminationException(BaseTaskException):
-    def __init__(self, *args):
-        super().__init__(*args)
+    def _filter_sort(self, *args, **kwargs):
+        pass

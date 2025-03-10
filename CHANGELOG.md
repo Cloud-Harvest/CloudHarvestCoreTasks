@@ -1,3 +1,59 @@
+# 0.6.0
+- Huge refactor of the directory structure using absolute imports
+- Fixed some recursive import issues
+- Added `BaseFilterableTask` which some `BaseTasks` will use to implement filtering on a per-Task basis
+
+# 0.5.1
+- Expanded `DataSet` with new maths methods
+  - `maths_keys()` performs a mathematical operation on multiple keys in a record and assigns the result to a new key.
+  - `maths_records()` performs a mathematical operation on all values for one or more keys and places the output in the maths_results attribute for later retrieval
+  - `append_record_maths_results()` appends the maths_results to the record
+- Added the `HttpTask`
+- `BaseTaskChain.results` now returns more keys: `data`, `errors`, `meta`, `metrics`, and `template`
+- `ReportTaskChain` now adds `headers` to the `meta` attribute
+- Vastly improved how filtering is applied
+  - Created new classes for different types of filters: `DataSetFilter`, `MongoFilter`, and `SqlFilter`
+  - Filtering methods are now defined and ordered using the `BaseFilter.ORDER_OF_OPERATIONS` tuple
+  - Filters call `apply()` which iterates based on the `ORDER_OF_OPERATIONS`
+- Added a performance optimization for `WalkableDict` where walking logic is now bypassed if now separator is in the key name
+- `DataSet.sort()` now correctly sorts by multiple keys and in reverse order
+- Refactor of the project structure, removing nested directories which were overcomplicating imports
+
+# 0.5.0
+- Replaced `HarvestRecordSet` with `DataSet(List[WalkableDict])`
+  - Most methods now return a `DataSet` object
+  - All operational methods are now stored under this object (whereas `HarvestRecordSet` and `HarvestRecord` split the methods based on how the object was manipulated)
+  - These changes simplified `DataSetTask` which replaces `HarvestRecordSetTask`
+- `WalkableDict` is a dictionary that can be accessed using dot notation
+  - We use different method names to avoid collision with existing `dict` methods
+  - `assign()` provides an interface to change the value of a nested key
+  - `drop()` pops a nested key from the dictionary
+  - `walk()` returns the value of a nested key
+- `HarvestRecordSetTask` has been replaced by `DataSetTask`
+- The `recordset` task chain directive has been replaced by `dataset`
+
+# 0.4.3
+- Added `drop_silos(*names)` to the Silos
+- Added `HarvestAgentBlueprint` and `HarvestApiBlueprint` objects
+- Updated MongoTask silo usage code
+- Updated to Python 3.13
+- Moved test data from seed files to `tests/data.py` for easier implementation
+- Tests should now leverage default CloudHarvestStack configurations instead of internally managed `tests/docker-compose.yaml`
+- `task_chain_from_dict()` now merges `**kwargs` with the task chain configuration on class instantiation
+- Removed the `HeartBeat` class. Moved `silos.py` into the root package directory
+- Added methods to `HarvestRecord`
+  - `assign_value_to_key()`
+  - `title_keys()`
+- TaskStatusCodes
+  - added `get_codes()`
+  - Removed Enum; now uses string constants
+- HarvestRecordSet
+  - Added `nest()` and `unnest()` methods
+  - Added `values_to_list()` and `values_from_list_to_str()` methods
+  - Removed `remove_key()` in favor of `remove_keys()` which accepts a list of keys
+- Bugs
+  - Fixed an issue where vars were not properly replaced when they were non-None items
+
 # 0.4.2
 - Added `BaseHarvestTaskChain` and `HarvestRecordUpdateTask` to upload data collected from other sources to a persistent silo
 - `BaseTaskChain` now accepts starting `variables` which become available to all tasks in the chain

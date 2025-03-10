@@ -5,9 +5,5 @@ kicks off the @register_definition decorator, which registers all the classes wi
 to ensure that the TaskRegistry is populated with all the classes that are available to the system.
 """
 
-from silos import (
-    MongoSilo,
-    RedisSilo
-)
-
-from tasks import *
+from CloudHarvestCoreTasks.chains import *
+from CloudHarvestCoreTasks.tasks import *

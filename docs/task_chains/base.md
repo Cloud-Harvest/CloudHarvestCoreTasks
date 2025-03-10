@@ -1,4 +1,4 @@
-# BaseTaskChain
+# BaseTaskChain | `chain`
 
 The `BaseTaskChain()` class is responsible for managing a chain of tasks. It stores a list of tasks and provides methods 
 to run the tasks in the chain, insert new tasks into the chain, and handle completion and error states. It also 
@@ -58,7 +58,8 @@ workers that can be used to run tasks concurrently.
 ## Code Examples
 
 ```python
-from tasks.base import BaseTaskChain
+
+from chains.base import BaseTaskChain
 
 template = {
     'name': 'My Task Chain',

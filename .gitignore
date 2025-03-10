@@ -129,11 +129,7 @@ dmypy.json
 .pyre/
 
 # Harvest-specific
-.harvest/*
 .idea
-
-# Poetry
-poetry.lock
 
 # Draw.io
 .$*.bkp

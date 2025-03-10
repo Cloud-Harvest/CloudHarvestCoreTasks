@@ -1,30 +1,18 @@
-"""
-This module contains the core tasks that are used by the CloudHarvest system. The import statements in this module are
-used to import all the task classes from the tasks module. This is done to ensure that all the task classes are
-registered with the TaskRegistry when the module is imported. This is necessary to ensure that the TaskRegistry is
-populated with all the classes that are available to the system.
-"""
-
-from .base import (
+# Base Classes
+from CloudHarvestCoreTasks.tasks.base import (
     BaseTask,
-    BaseTaskChain,
     TaskStatusCodes
 )
 
-from .chains import (
-    ReportTaskChain
-)
-
-from .factories import *
-
-from .tasks import (
-    DummyTask,
-    ErrorTask,
-    FileTask,
-    HarvestRecordSetTask,
-    JsonTask,
-    MongoTask,
-    PruneTask,
-    RedisTask,
-    WaitTask
-)
+# Tasks
+from CloudHarvestCoreTasks.tasks.dataset import DataSetTask
+from CloudHarvestCoreTasks.tasks.dummy import DummyTask
+from CloudHarvestCoreTasks.tasks.error import ErrorTask
+from CloudHarvestCoreTasks.tasks.file import FileTask
+from CloudHarvestCoreTasks.tasks.harvest_update import HarvestUpdateTask
+from CloudHarvestCoreTasks.tasks.http import HttpTask
+from CloudHarvestCoreTasks.tasks.json import JsonTask
+from CloudHarvestCoreTasks.tasks.mongo import MongoTask
+from CloudHarvestCoreTasks.tasks.prune import PruneTask
+from CloudHarvestCoreTasks.tasks.redis import RedisTask
+from CloudHarvestCoreTasks.tasks.wait import WaitTask

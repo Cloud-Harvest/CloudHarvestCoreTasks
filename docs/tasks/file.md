@@ -1,91 +1,47 @@
-# FileTask
-The `FileTask` class is a subclass of the `BaseTask` class. It represents a task that performs file operations such as reading from or writing to a file.
+# FileTask([BaseTask](./base_task)) | `file`
+This task performs various file operations, such as reading and writing data. 
 
-# Table of Contents
-
-- [FileTask](#filetask)
-- [Python](#python)
-    - [Attributes](#attributes)
-    - [Methods](#methods)
-    - [Code Examples](#code-examples)
 - [Configuration](#configuration)
-    - [Arguments](#arguments)
-    - [Examples](#examples)
-        - [Reading Files](#reading-files)
-        - [Writing Files](#writing-files)
+    - [Directives](#directives)
+- [Examples](#example)
 
-# Python
+## Configuration
 
-## Attributes
-| Attribute        | Description                                                           |
-|------------------|-----------------------------------------------------------------------|
-| **path**         | The path to the file.                                                 |
-| **abs_path**     | The absolute path to the file resolved from the provided `path`.      |
-| **in_data**      | Data to write to a file. Inherited from `BaseTask`.                   |
-| **mode**         | The mode in which the file will be opened (append, read, write).      |
-| **format**       | The format of the file (`config`, `csv`, `json`, `raw`, `yaml`).      |
-| **desired_keys** | When specified, only the keys identified will be written to the file. |
-| **template**     | A `jinja2` template to use when writing data.                         |
-| **result_as**    | The name under which a `read` result will be stored.                  |
+### Directives
 
-## Methods
-| Method                 | Description                                                              |
-|------------------------|--------------------------------------------------------------------------|
-| **determine_format()** | Determines the format of the file based on its extension.                |
-| **method()**           | Performs the file operation specified by the mode and format attributes. |
+| Key          | Required | Default | Description                                                                                                                                                                                                                                                    |
+|--------------|----------|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| path         | Yes      | None    | The path to the file.                                                                                                                                                                                                                                          |
+| mode         | Yes      | None    | The mode in which the file will be opened (`append`, `read`, `write`).                                                                                                                                                                                         |
+| format       | No       | None    | The format of the file (`config`, `csv`, `json`, `raw`, `yaml`). When not provided, the FileTask attempts to determine the correct format based on the `path` extension. If the extension cannot be determined or is an unsupported type, the format is `raw`. |
+| desired_keys | No       | None    | When specified, only the keys identified will be written to the file.                                                                                                                                                                                          |
+| template     | No       | None    | A `jinja2` template to use when writing data.                                                                                                                                                                                                                  |
 
-## Code Examples
+## Example
 
-```python
-from CloudHarvestCoreTasks.tasks import FileTask
-task = FileTask(path='data.json', mode='read', result_as='result')
-task.run()
-print(task.out_data)  # Output: Content of the file
-```
-
-# Configuration
-
-## Arguments
-The `FileTask` class has the following arguments beyond those defined in [BaseTask](./base_task).
-
-| Key          | Required | Default | Description                                                           |
-|--------------|----------|---------|-----------------------------------------------------------------------|
-| path         | Yes      | None    | The path to the file.                                                 |
-| mode         | Yes      | None    | The mode in which the file will be opened (append, read, write).      |
-| format       | No       | None    | The format of the file (`config`, `csv`, `json`, `raw`, `yaml`).      |
-| desired_keys | No       | None    | When specified, only the keys identified will be written to the file. |
-| template     | No       | None    | A `jinja2` template to use when writing data.                         |
-| result_as    | No       | None    | The name under which a `read` result will be stored.                  |
-
-## Examples
-### Reading Files
-
+### Read example
 ```yaml
 file:
-  name: My File Task
-  description: A task that reads from a file.
-  path: ./data.json
+  name: Read File
+  description: | 
+    This task will read a file from /tmp/my_source_file.json
+    Because the extension is .json, the format will be set to json and does not need to be set with the 'format' directive.
+  path: /tmp/my_source_file.json
   mode: read
-  result_as: result
 ```
 
-### Writing Files
-If `in_data` os a string, it will be treated as a variable name and the value of the variable will be retrieved from the TaskChain as though the user specified `with_vars`.
-
+### Write example
 ```yaml
 file:
-  name: My File Task
-  description: A task that writes to a file.
-  path: ./data.json
+  name: Write File
+  description: | 
+    This task will write a file to /tmp/my_destination_file.json
+    Because the extension is .json, the format will be set to json and does not need to be set with the 'format' directive.
+  data: var.my_data
+  desired_keys:   # Only these keys will be written to the file
+    - key1
+    - nested.key.key2
+  path: /tmp/my_destination_file.json
   mode: write
-  in_data: [{"name": "John Doe", "age": 30}, {"name": "Jane Doe", "age": 25}] 
 ```
 
-# Python
-```python
-from CloudHarvestCoreTasks.tasks import FileTask
-
-file_task = FileTask(path='data.json', result_as='result', mode='read')
-file_task.method()
-print(file_task.data)  # Output: Content of the file
-```

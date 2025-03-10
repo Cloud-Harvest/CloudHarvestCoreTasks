@@ -573,11 +573,10 @@ class BaseFilterableTask(BaseTask):
 
         super().__init__(*args, **kwargs)
 
-        from re import compile
         # The accepted filter is a regular expression that determines which filters are accepted by the task. If a filter
         # is not accepted, it will be ignored. To accept all filters, provide a string like '.*'. To accept no filters,
         # provide None (default)
-        self.filters = compile(str(filters)) if filters else None
+        self.filters = filters
 
         # The default order of operations for all filters. This order is used to ensure that the filters are applied in an
         # optimal and consistent manner.
@@ -604,7 +603,10 @@ class BaseFilterableTask(BaseTask):
         if self.filters is None:
             return default_value
 
-        return filter_value or default_value if self.filters.match(filter_name) else default_value
+        from re import compile
+        filters = compile(self.filters)
+
+        return filter_value or default_value if filters.match(filter_name) else default_value
 
     def apply_filters(self) -> 'BaseFilterableTask':
         """

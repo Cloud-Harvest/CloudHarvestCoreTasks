@@ -447,7 +447,7 @@ class BaseTaskChain(List[BaseTask]):
         """
 
         self.status = TaskStatusCodes.error
-        self.meta['error'] = ex.args
+        self.meta['error'] = str(ex.args)
 
         if self.pool.queue_size:
             self.pool.terminate()

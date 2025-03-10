@@ -3,6 +3,7 @@
 - Fixed some recursive import issues
 - Added `BaseFilterableTask` which some `BaseTasks` will use to implement filtering on a per-Task basis
 - `ReportTaskChain` now calculates headers which are returned as metadata to the user
+- Simplified Filtering by moving the logic to the `BaseFilterableTask`
 
 # 0.5.1
 - Expanded `DataSet` with new maths methods

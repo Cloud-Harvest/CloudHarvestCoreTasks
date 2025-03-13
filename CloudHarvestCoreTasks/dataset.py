@@ -132,6 +132,30 @@ class WalkableDict(dict):
 
         return result
 
+    def map(self, item: Any = None, nested: bool = False) -> Any:
+        """
+        Recursive method which creates a map of the self, replacing values with data types.
+        """
+
+        if item is None and not nested:
+            item = self
+
+        if isinstance(item, dict):
+            return {
+                key: self.map(value, nested=True)
+                for key, value in item.items()
+            }
+
+        elif isinstance(item, list):
+            list_result = []
+            for value in item:
+                list_result.append(self.map(value, nested=True))
+
+            return list(set(list_result))
+
+        else:
+            return type(item).__name__
+
     def walk(self, key: str, default: Any = None, separator: str = '.') -> Any:
         """
         Walks the self to get the value of a key.
@@ -492,6 +516,36 @@ class DataSet(List[WalkableDict]):
         self[:] = self[:limit]
 
         return self
+
+    def map(self, limit: int = 100) -> WalkableDict:
+        """
+        Creates a map of the dataset's structure, replacing values with data types and merging those data types into a
+        single map.
+        """
+
+        def walk_and_merge(value, merged):
+            if isinstance(value, dict):
+                for k, v in value.items():
+                    if k not in merged:
+                        merged[k] = v
+                    else:
+                        merged[k] = walk_and_merge(v, merged[k])
+            elif isinstance(value, list):
+                if not isinstance(merged, list):
+                    merged = []
+                for item in value:
+                    if item not in merged:
+                        merged.append(item)
+            else:
+                merged = value
+            return merged
+
+        combined_result = WalkableDict()
+        for record in self[:limit]:
+            mapped = record.map()
+            walk_and_merge(mapped, combined_result)
+
+        return combined_result
 
     def match_and_remove(self, matching_expressions: List[List[str]], invert_results: bool = False) -> 'DataSet':
         """

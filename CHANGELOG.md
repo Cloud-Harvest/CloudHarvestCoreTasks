@@ -1,3 +1,6 @@
+# 0.6.1
+- Added the `map()` method `DataSet` and `WalkableDict` 
+
 # 0.6.0
 - Huge refactor of the directory structure using absolute imports
 - Fixed some recursive import issues

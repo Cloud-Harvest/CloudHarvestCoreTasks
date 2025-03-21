@@ -1,3 +1,6 @@
+# 0.6.2
+- Updated to CloudHarvestCorePluginManager 0.5.0
+
 # 0.6.1
 - Added the `map()` method `DataSet` and `WalkableDict` 
 

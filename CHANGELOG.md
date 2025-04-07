@@ -1,17 +1,22 @@
-# 0.6.2
+# Changelog
+
+## 0.6.3
+- Added the Environment package which provides a way to store configuration information made available to tasks
+
+## 0.6.2
 - Updated to CloudHarvestCorePluginManager 0.5.0
 
-# 0.6.1
+## 0.6.1
 - Added the `map()` method `DataSet` and `WalkableDict` 
 
-# 0.6.0
+## 0.6.0
 - Huge refactor of the directory structure using absolute imports
 - Fixed some recursive import issues
 - Added `BaseFilterableTask` which some `BaseTasks` will use to implement filtering on a per-Task basis
 - `ReportTaskChain` now calculates headers which are returned as metadata to the user
 - Simplified Filtering by moving the logic to the `BaseFilterableTask`
 
-# 0.5.1
+## 0.5.1
 - Expanded `DataSet` with new maths methods
   - `maths_keys()` performs a mathematical operation on multiple keys in a record and assigns the result to a new key.
   - `maths_records()` performs a mathematical operation on all values for one or more keys and places the output in the maths_results attribute for later retrieval
@@ -27,7 +32,7 @@
 - `DataSet.sort()` now correctly sorts by multiple keys and in reverse order
 - Refactor of the project structure, removing nested directories which were overcomplicating imports
 
-# 0.5.0
+## 0.5.0
 - Replaced `HarvestRecordSet` with `DataSet(List[WalkableDict])`
   - Most methods now return a `DataSet` object
   - All operational methods are now stored under this object (whereas `HarvestRecordSet` and `HarvestRecord` split the methods based on how the object was manipulated)
@@ -40,7 +45,7 @@
 - `HarvestRecordSetTask` has been replaced by `DataSetTask`
 - The `recordset` task chain directive has been replaced by `dataset`
 
-# 0.4.3
+## 0.4.3
 - Added `drop_silos(*names)` to the Silos
 - Added `HarvestAgentBlueprint` and `HarvestApiBlueprint` objects
 - Updated MongoTask silo usage code
@@ -62,7 +67,7 @@
 - Bugs
   - Fixed an issue where vars were not properly replaced when they were non-None items
 
-# 0.4.2
+## 0.4.2
 - Added `BaseHarvestTaskChain` and `HarvestRecordUpdateTask` to upload data collected from other sources to a persistent silo
 - `BaseTaskChain` now accepts starting `variables` which become available to all tasks in the chain
 - `additional_database_arguments` have been renamed to `extended_db_configuration` for Silos and DataTasks
@@ -70,7 +75,7 @@
   - now expects the task chain to begin with a key representing the task chain's class such as `chain`, `harvest`, or `report`
   - all tests updated accordingly
 
-# 0.4.1
+## 0.4.1
 - [#12](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/12) Completely redesigned how objects are templated variables referenced in task configurations
 - [#13](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/13) Added the `BaseTask.itemize` directive 
   - Allows for the iteration of a task over a list of items 
@@ -82,7 +87,7 @@
 - Added `add_indexes` to `BaseSilo` to add indexes to a database, where supported
 - Updated to CloudHarvestCorePluginManager 0.1.5
 
-# 0.4.0
+## 0.4.0
 - Moved MongoDb operations into Tasks since both the Api and Agent will need to interact with the database
 - Moved `BaseCacheTask` and `CacheAggregateTask` to `CloudHarvestCoreTasks` as refactors inheriting `BaseDataTask`
 - Created the `BaseDataTask` which interacts with database backends
@@ -104,7 +109,7 @@
 - Updates to support [CloudHarvestCorePluginManager 0.3.0](https://github.com/Cloud-Harvest/CloudHarvestCorePluginManager/tree/v/0.3.0)
 - Fixed an issue where `BaseTask._run_on_directive()` was templating objects when it should simply return the configuration back to the TaskChain for templating.
 
-# 0.3.5
+## 0.3.5
 - [#9](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/9) c
 - Updated `WaitTask` to accept `when_after_seconds`
 - Removed `DelayTask` because it is now redundant with the `when_after_seconds` directive in `WaitTask`
@@ -113,47 +118,47 @@
 - Replaced `BaseTask.data` with `BaseTask.in_data` and `BaseTask.out_data`-
 - Added a check in `BaseTaskChain` which cleanly exits the loop when there are no more tasks to instantiate
 
-# 0.3.3
+## 0.3.3
 - Implemented `ForEachTask` which replaces `TemplateTask` and tests
 
-# 0.3.2
+## 0.3.2
 - Removed `BaseAsyncTask` and associated tests because it is now redundant
 - Added `blocking` parameter to `BaseTask` so now any arbitrary task can be run asynchronously
 - Create the `BaseTaskPool` class to manage asynchronous tasks
 - Fixed some inconsistent tests with `FileTask`
 
-# 0.3.1
+## 0.3.1
 - [#3](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/3) Added `when` conditional operator to `BaseTask` and `BaseTaskChain`
 - [#5](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/5) Added `FileTask`
 - [#6](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/6) Merged CloudHarvestCoreDataModel into this repository
 - [#7](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/7) Added `on_` state directives to the `BaseTask`
 
-# 0.2.7
+## 0.2.7
 - Updated to conform with CloudHarvestCorePluginManager 0.2.4
 
-# 0.2.6
+## 0.2.6
 - `BaseTaskChain.performance_report`
   - Removed several unnecessary metrics
   - Improved metrics and reduced the number of list comprehensions
   - Added a buffer line between the task list and the total row
 
-# 0.2.5
+## 0.2.5
 - Added `.__str__()` to TaskStatusCode calls in the `BaseTaskChain.performance_report` output because the class is not JSON serializable
 
-# 0.2.4
+## 0.2.4
 - Added missing `end` timestamp in `BaseTaskChain.on_complete()`
 
-# 0.2.3
+## 0.2.3
 - Changed the return type of `BaseTaskChain.performance_report` to `List[dict]`
 - Added the hostname to the `BaseTaskChain.performance_report` output
 - Updated tests
 
-# 0.2.2
+## 0.2.2
 - New tests
 - PruneTask now returns the `total_bytes_pruned` value
 - Removed some unused imports
 
-# 0.2.1
+## 0.2.1
 - Updated to conform with CloudHarvestCorePluginManager 0.2.0
   - Implemented `@register_definition` and `@register_instance` decorators
   - Replaced `PluginRegistry` with `Registry`

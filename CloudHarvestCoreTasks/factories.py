@@ -164,11 +164,14 @@ def replace_variable_path_with_value(original_string: str,
         [^\s]*: Matches zero or more characters that are not whitespace.
     """
 
+
+    variable_prefixes = ('item', 'env', 'task', 'var')
+
     # If the original string is not a string or does not start with 'var' or 'item', return the original string
-    if not isinstance(original_string, str) or not any([f'{prefix}.' in original_string for prefix in ('item', 'var')]):
+    if not isinstance(original_string, str) or not any([f'{prefix}.' in original_string for prefix in variable_prefixes]):
         return original_string
 
-    pattern = compile('(item|var)\.[^\s]*')
+    pattern = compile('(' + '|'.join(variable_prefixes) + ')\.[^\s]*')
 
     # Find all the matches in the path
     matches = [match.group(0) for match in pattern.finditer(original_string)]
@@ -191,10 +194,10 @@ def replace_variable_path_with_value(original_string: str,
 
         # The start_index is assigned based on the type of variable (item or var). This is necessary because the
         # variable identifier (item/var) is not a valid part of the object itself.
-        if parts[0] == 'item':
+        if parts[0] in ('item', 'task'):
             start_index = 2
 
-        elif parts[0] == 'var':
+        elif parts[0] in ('env', 'var'):
             start_index = 3
 
         else:
@@ -221,7 +224,10 @@ def replace_variable_path_with_value(original_string: str,
                         pass    # We'll return this obj
 
                     case _:
-                        # Remove the () from the end of the string
+                        # Remove the () from the end of the string.
+                        # NOTE: This was commented so that functions of objects (such as keys() or values()) can be called.
+                        # However, we recognize there may be vulnerabilities in this approach. A future iteration of
+                        # this code may involve whitelisted methods for certain data types.
                         # p = p[:-2]
 
                         # Check if this is a property or method
@@ -243,7 +249,6 @@ def replace_variable_path_with_value(original_string: str,
                         # If the object is a list, check that p is an int and within the bounds of the list
                         elif isinstance(obj, list) and isinstance(p, int):
                             obj = obj[p]
-
 
             else:
                 obj = obj[p]
@@ -268,6 +273,11 @@ def replace_variable_path_with_value(original_string: str,
             case 'task':
                 if task_chain:
                     replacement_values[match] = walk_path(match, task_chain)
+
+            case 'env':
+                # Get Harvest Environment variables
+                from CloudHarvestCoreTasks.environment import Environment
+                replacement_values[match] = Environment.get(var_name)
 
             # Get a component of a task chain variable
             case 'var':

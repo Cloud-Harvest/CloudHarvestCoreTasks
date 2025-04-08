@@ -434,14 +434,14 @@ stages:
 #### `rename_keys`
 Renames keys in the records in the dataset.
 
-| Directive    | Required | Default | Description                                                                                   |
-|--------------|----------|---------|-----------------------------------------------------------------------------------------------|
-| `key_map`    | Yes      |         | A dictionary containing the old key names as keys and the new key names as values.            |
+| Directive  | Required | Default | Description                                                                                   |
+|------------|----------|---------|-----------------------------------------------------------------------------------------------|
+| `mapping`  | Yes      |         | A dictionary containing the old key names as keys and the new key names as values.            |
 
 ```yaml
 stages:
   - rename_keys:
-      key_map:
+      mapping:
           old_key1: new_key1
           old_key2: new_key2
 ```

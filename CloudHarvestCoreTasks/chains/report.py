@@ -35,11 +35,25 @@ class ReportTaskChain(BaseTaskChain):
             **kwargs:
                 Arbitrary keyword arguments.
         """
-        self.headers = kwargs.get('template', {}).get('headers') or None
 
         super().__init__(*args, **kwargs)
+
+        # Sends the headers back to the client as part of the response
+        self.meta['headers'] = self.headers
 
     def run(self) -> 'ReportTaskChain':
         super().run()
 
         return self
+
+    @property
+    def headers(self) -> list:
+        # If the task chain has headers, we use them as the default headers for the task
+        headers = self.filters.get('headers', []) or self.original_template.get('headers') or []
+        add_keys = self.filters.get('add_keys', []) or []
+        exclude_keys = self.filters.get('exclude_keys', []) or []
+
+        return [
+            header for header in (headers + add_keys)
+            if header not in exclude_keys
+        ]

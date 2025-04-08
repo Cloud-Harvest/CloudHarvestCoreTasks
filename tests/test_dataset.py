@@ -118,6 +118,31 @@ class TestDataSet(unittest.TestCase):
             self.assertIn('street', record['address'])
             self.assertIn('city', record['address'])
 
+    def test_map(self):
+        from CloudHarvestCoreTasks.dataset import WalkableDict
+        self.dataset[0]['bonus_key'] = []
+        expected_map = WalkableDict({
+            'name': 'str',
+            'address': {
+                'street': 'str',
+                'city': 'str',
+                'state': 'str',
+                'zip': 'str'
+            },
+            'dob': 'str',
+            'email': 'str',
+            'phone': 'str',
+            'tags': [
+                'str'
+            ],
+            'notes': 'str',
+            'age': 'int',
+            'active': 'bool',
+            'bonus_key': []
+        })
+
+        self.assertEqual(self.dataset.map(), expected_map)
+
     def test_match_and_remove(self):
         self.dataset.match_and_remove([['name=="John Doe"']])
         for record in self.dataset:
@@ -323,6 +348,28 @@ class TestWalkableDict(unittest.TestCase):
                 'active': False
             }
         ])
+
+    def test_map(self):
+        expected_map = {
+            'name': 'str',
+            'address': {
+                'street': 'str',
+                'city': 'str',
+                'state': 'str',
+                'zip': 'str'
+            },
+            'dob': 'str',
+            'email': 'str',
+            'phone': 'str',
+            'tags': [
+                'str'
+            ],
+            'notes': 'str',
+            'age': 'int',
+            'active': 'bool'
+        }
+        for record in self.dataset:
+            self.assertEqual(record.map(), expected_map)
 
     def test_walk(self):
         for record in self.dataset:

@@ -8,6 +8,10 @@ from CloudHarvestCoreTasks.factories import replace_variable_path_with_value
 
 class TestReplaceVariablePathWithValue(unittest.TestCase):
     def setUp(self):
+        from CloudHarvestCoreTasks.environment import Environment
+        self.env = Environment
+        self.env.add('my_environment_variable', 'My env string value')
+
         self.task_chain = BaseTaskChain(template={'name': 'TestBaseTaskChainReplaceVariablePathWithValue'})
         self.task_chain.variables['replace_test'] = {
             'test_str': 'successful test str replacement',
@@ -47,6 +51,16 @@ class TestReplaceVariablePathWithValue(unittest.TestCase):
         self.assertEqual(replace_variable_path_with_value(original_string='My string var.replace_test.test_str',
                                                           task_chain=self.task_chain),
             'My string successful test str replacement')
+
+        # Environment variable replacement
+        self.assertEqual(replace_variable_path_with_value(original_string='env.my_environment_variable',
+                                                          task_chain=self.task_chain),
+                            'My env string value')
+
+        # Variable and Environment variable replacement
+        self.assertEqual(replace_variable_path_with_value(original_string='env.my_environment_variable var.replace_test.test_str',
+                                                          task_chain=self.task_chain),
+                         'My env string value successful test str replacement')
 
         # Multi-string replacement
         self.assertEqual(replace_variable_path_with_value(original_string='My string var.replace_test.test_str var.replace_test.test_nested_list_dict.key3[2]',

@@ -2,6 +2,7 @@
 
 ## 0.6.3
 - Added the Environment package which provides a way to store configuration information made available to tasks
+- Added the `CachedData` class providing the means to store data temporarily
 
 ## 0.6.2
 - Updated to CloudHarvestCorePluginManager 0.5.0

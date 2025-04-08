@@ -19,16 +19,9 @@ logger = getLogger('harvest')
 class Environment:
     _variables = WalkableDict()
 
-    @staticmethod
-    def __getitem__(key: str) -> Any:
-        return Environment._variables[key]
 
-    @staticmethod
-    def __setitem__(key: str, value: Any) -> None:
-        Environment._variables[key] = value
-
-    @staticmethod
-    def add(name: str, value: Any, overwrite: bool = False):
+    @classmethod
+    def add(cls, name: str, value: Any, overwrite: bool = False):
         """
         Adds an environment variable to the Environment class.
 
@@ -41,11 +34,11 @@ class Environment:
             None
         """
 
-        if name not in Environment._variables or overwrite:
-            Environment._variables[name] = value
+        if name not in cls._variables or overwrite:
+            cls._variables[name] = value
 
-    @staticmethod
-    def get(name: str, default: Any = None) -> Any:
+    @classmethod
+    def get(cls, name: str, default: Any = None) -> Any:
         """
         Retrieves the value of an environment variable from the Environment class.
 
@@ -57,10 +50,10 @@ class Environment:
             Any: The value of the environment variable, or the default value if it does not exist.
         """
 
-        return Environment._variables.get(name) or default
+        return cls._variables.walk(name) or default
 
-    @staticmethod
-    def load(path: str) -> None:
+    @classmethod
+    def load(cls, path: str) -> None:
         """
         Loads environment variables from a file into the Environment class. Accepted file formats are '.yaml' and '.json'.
 
@@ -80,11 +73,11 @@ class Environment:
             with open(path, 'r') as file:
                 if path.endswith('.yaml') or path.endswith('.yml'):
                     from yaml import load, FullLoader
-                    Environment._variables |= load(file, Loader=FullLoader)
+                    cls._variables |= load(file, Loader=FullLoader)
 
                 elif path.endswith('.json'):
                     from json import load
-                    Environment._variables |= load(file)
+                    cls._variables |= load(file)
 
                 else:
                     raise ValueError("Unsupported file format. Only '.yaml', '.yml', and '.json' are supported.")
@@ -95,8 +88,8 @@ class Environment:
         else:
             logger.info(f'Environment: successfully loaded {path}')
 
-    @staticmethod
-    def merge(*args: dict):
+    @classmethod
+    def merge(cls, *args: dict) -> None:
         """
         Merges multiple dictionaries into the Environment class.
 
@@ -109,13 +102,13 @@ class Environment:
 
         for arg in args:
             if isinstance(arg, dict):
-                Environment._variables |= arg
+                cls._variables |= arg
 
             else:
                 logger.warning(f'Argument {arg} is not a dictionary and will be ignored.')
 
-    @staticmethod
-    def purge():
+    @classmethod
+    def purge(cls) -> None:
         """
         Clears all environment variables from the Environment class. This method is intended for testing and not
         recommended for production use.
@@ -124,10 +117,10 @@ class Environment:
             None
         """
 
-        Environment._variables.clear()
+        cls._variables.clear()
 
-    @staticmethod
-    def remove(name: str) -> Any:
+    @classmethod
+    def remove(cls, name: str) -> Any:
         """
         Removes an environment variable from the Environment class.
 
@@ -138,5 +131,5 @@ class Environment:
             Any: The value of the removed variable, or None if the variable did not exist.
         """
 
-        if name in Environment._variables:
-            return Environment._variables.pop(name)
+        if name in cls._variables:
+            return cls._variables.pop(name)

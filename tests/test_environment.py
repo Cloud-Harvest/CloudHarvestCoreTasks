@@ -63,7 +63,3 @@ class TestEnvironment(unittest.TestCase):
         # Assuming you have a valid JSON file for testing
         self.env.load('test_env.json')
         self.assertEqual(self.env.get('FILE_TEST_VAR'), 'file_test_value')
-
-    def test_splices(self):
-        self.env.add('SPLICE_TEST', 'test_value')
-        self.assertEqual(self.env['SPLICE_TEST'], 'test_value')

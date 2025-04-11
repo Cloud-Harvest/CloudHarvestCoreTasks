@@ -35,6 +35,7 @@ In a Task Chain, you called this task by using the key `dataset`.
       * [sort_records](#sort_records)
       * [splice_key](#splice_key)
       * [split_key](#split_key)
+      * [split_key_to_keys](#split_key_to_keys)
       * [title_keys](#title_keys)
       * [unflatten](#unflatten)
       * [unwind](#unwind)

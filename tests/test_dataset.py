@@ -299,6 +299,22 @@ class TestDataSet(unittest.TestCase):
         self.assertEqual(self.dataset[2]['name'], 'Jane Smith')
         self.assertEqual(self.dataset[2].walk('address.zip'), '67890')
 
+    def split_key_to_keys(self):
+        self.dataset.split_key_to_keys(
+            source_key='address.street',
+            target_keys=['address.street_number', 'address.street_name', 'address.street_type'],
+            separator=' ',
+            preserve_source_key=True
+        )
+
+        for record in self.dataset:
+            self.assertIn('address.street_number', record)
+            self.assertIn('address.street_name', record)
+            self.assertIn('address.street_type', record)
+            self.assertEqual(record['address.street_number'], record['address.street'].split(' ')[0])
+            self.assertEqual(record['address.street_name'], record['address.street'].split(' ')[0])
+            self.assertEqual(record['address.street_type'], record['address.street'].split(' ')[0])
+
     def test_unwind_and_wind(self):
         self.dataset.unwind('tags')
         self.assertEqual(len(self.dataset), 4)

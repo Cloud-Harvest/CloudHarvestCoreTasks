@@ -791,6 +791,50 @@ class DataSet(List[WalkableDict]):
 
         return self
 
+    def split_key_to_keys(self, source_key: str, target_keys: List[str], separator: str = '.', max_split: int = None, default_value: Any = None, preserve_source_key: bool = False) -> 'DataSet':
+        """
+        Splits a key's value in a record into multiple keys. The split value is assigned to the target keys. If there are
+        not enough values to assign to the target keys, the remaining target keys are assigned to the default value.
+
+        Arguments
+        source_key (str): The key to split.
+        target_keys (List[str]): The keys to assign the split value to.
+        separator (str, optional): The separator to split the value by. Defaults to '.'.
+        max_split (int, optional): The maximum number of times to split the separator. Defaults to None which means no limit.
+        default_value (Any, optional): The default value to assign to the target keys. Defaults to None.
+        preserve_source_key (bool, optional): When true, the source key will be preserved. Defaults to False.
+        """
+
+        for record in self:
+            source_data = record.walk(source_key)
+
+            # Can only split on a string
+            if isinstance(source_data, str):
+                source_data = source_data.split(separator, maxsplit=max_split)
+
+            # But we can still support list/tuple
+            elif isinstance(source_data, (list, tuple)):
+                source_data = list(source_data)
+
+            # If the source data is not a string, list, or tuple, set it to an empty list. This allows us to assign the
+            # default value to the target keys
+            else:
+                source_data = []
+
+            # Always add the default values to the target keys, even if the source data is empty
+            for i, target_key in enumerate(target_keys):
+                try:
+                    record.assign(target_key, source_data[i])
+
+                except IndexError:
+                    record.assign(target_key, default_value)
+
+            # Remove the source key from the record if it is not preserved
+            if not preserve_source_key:
+                record.drop(source_key, None)
+
+        return self
+
     def sort_records(self, keys: List[str]) -> 'DataSet':
         """
         Sort the records in the record set by one or more keys.

@@ -545,6 +545,30 @@ stages:
       separator: ','
 ```
 
+#### `split_key_to_keys`
+Splits a string into multiple keys based on a separator. 
+
+| Directive             | Required | Default | Description                                                                                                                                           |
+|-----------------------|----------|---------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `source_key`          | Yes      |         | The key containing the string to split. May be a `string`, `list`, or `tuple` type.                                                                   |
+| `target_keys`         | Yes      |         | A list of keys to store the resulting substrings. If not enough `target_keys` are provided, the excess values generated from the split are discarded. |
+| `separator`           | No       | `.`     | The separator to use when splitting the string. By default, the separator is a new line.                                                              |
+| `max_split`           | No       | `None`  | The maximum number of splits to perform. If `None`, all splits are performed.                                                                         |
+| `default_value`       | No       | `None`  | The value to use when there are not enough elements from the split to fill the target keys.                                                           |
+| `preserve_source_key` | No       | `False` | If `True`, the original key will be preserved in the record. Otherwise, it will be removed.                                                           |
+
+```yaml
+stages:
+  - split_key_to_keys:
+      source_key: my_key
+      target_keys:
+        - key1
+        - key2
+      separator: ','
+      default_value: 'default'
+      preserve_source_key: True
+```
+
 #### `title_keys`
 Uses the Python string method `title()` to capitalize the first letter of each word in a key's value.
 

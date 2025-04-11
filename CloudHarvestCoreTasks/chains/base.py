@@ -474,6 +474,8 @@ class BaseTaskChain(List[BaseTask]):
         Sends the TaskChain results to a remote silo.
         """
 
+        results = self.result or {}
+
         if self.results_silo:
             from CloudHarvestCoreTasks.silos import get_silo
             from json import dumps
@@ -486,7 +488,7 @@ class BaseTaskChain(List[BaseTask]):
                     name=self.id,
                     mapping={
                         key: dumps(value, default=str)
-                        for key, value in self.result.items()
+                        for key, value in results.items()
                     }
                 )
 

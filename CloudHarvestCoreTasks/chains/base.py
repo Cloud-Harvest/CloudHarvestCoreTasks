@@ -93,19 +93,15 @@ class BaseTaskChain(List[BaseTask]):
         self.start = None
         self.end = None
 
-        self.meta = {}
+        self.meta = {
+            'Errors': []
+        }
 
         # When set, the TaskChain will send results to this silo when it completes or errors. Can only be set after the
         # TaskChain has been instantiated. This is to prevent users from setting the silo in the template, thus sending
         # results to the wrong silo.
         self.results_silo = None
         self.required_variables = template.get('required_variables') or []
-
-        # Validate the required variables are present for the task chain
-        if self.required_variables:
-            for var in self.required_variables:
-                if var not in self.variables:
-                    raise TaskChainException(self, f'Missing required variable: {var}')
 
     def __enter__(self) -> 'BaseTaskChain':
         """
@@ -252,7 +248,6 @@ class BaseTaskChain(List[BaseTask]):
                 'Start': self.start,
                 'End': self.end,
             }]
-
 
         return task_metrics
 
@@ -451,7 +446,7 @@ class BaseTaskChain(List[BaseTask]):
         """
 
         self.status = TaskStatusCodes.error
-        self.meta['error'] = str(ex.args)
+        self.meta['Errors'].append(str(ex.args))
 
         if self.pool.queue_size:
             self.pool.terminate()
@@ -517,6 +512,12 @@ class BaseTaskChain(List[BaseTask]):
         try:
             self.on_start()
             self.position = 0
+
+            # Validate the required variables are present for the task chain
+            if self.required_variables:
+                for var in self.required_variables:
+                    if var not in self.variables:
+                        raise Exception(self, f'Missing required variable: {var}')
 
             while True:
                 # Instantiate the task from the task configuration
@@ -633,7 +634,8 @@ class BaseTaskChain(List[BaseTask]):
             task_configuration[class_key].pop('iterate')
 
             # Update the task's name
-            task_configuration[class_key]['name'] = f'{task_configuration[class_key]["name"]} - {iter_var.index(item) + 1}/{len(iter_var)}'
+            task_configuration[class_key][
+                'name'] = f'{task_configuration[class_key]["name"]} - {iter_var.index(item) + 1}/{len(iter_var)}'
 
             # Template the file with the item
             from CloudHarvestCoreTasks.factories import walk_and_replace
@@ -675,7 +677,8 @@ class BaseTaskPool:
         status (TaskStatusCodes): The current status of the task pool.
     """
 
-    def __init__(self, chain: BaseTaskChain, max_workers: int, idle_refresh_rate: float = 3, worker_refresh_rate: float = .5):
+    def __init__(self, chain: BaseTaskChain, max_workers: int, idle_refresh_rate: float = 3,
+                 worker_refresh_rate: float = .5):
         """
         Initializes a new instance of the BaseTaskPool class.
 
@@ -690,9 +693,9 @@ class BaseTaskPool:
         self.worker_refresh_rate = worker_refresh_rate
         self.idle_refresh_rate = idle_refresh_rate
 
-        self._pool = []         # List of tasks waiting to be executed
-        self._active = []       # List of tasks currently being executed
-        self._complete = []     # List of tasks that have completed execution
+        self._pool = []  # List of tasks waiting to be executed
+        self._active = []  # List of tasks currently being executed
+        self._complete = []  # List of tasks that have completed execution
 
         from threading import Thread
         self._minder_thread = Thread(target=self._worker, daemon=True)  # Thread to manage the task pool
@@ -828,5 +831,3 @@ class BaseTaskPool:
                 return pool
 
         return []
-
-

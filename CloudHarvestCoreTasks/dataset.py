@@ -834,7 +834,7 @@ class DataSet(List[WalkableDict]):
 
             # Can only split on a string
             if isinstance(source_data, str):
-                source_data = source_data.split(separator, maxsplit=max_split)
+                source_data = source_data.split(separator, maxsplit=max_split or -1)    # maxsplit=None raises an error
 
             # But we can still support list/tuple
             elif isinstance(source_data, (list, tuple)):

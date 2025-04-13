@@ -99,6 +99,13 @@ class BaseTaskChain(List[BaseTask]):
         # TaskChain has been instantiated. This is to prevent users from setting the silo in the template, thus sending
         # results to the wrong silo.
         self.results_silo = None
+        self.required_variables = template.get('required_variables') or []
+
+        # Validate the required variables are present for the task chain
+        if self.required_variables:
+            for var in self.required_variables:
+                if var not in self.variables:
+                    raise TaskChainException(self, f'Missing required variable: {var}')
 
     def __enter__(self) -> 'BaseTaskChain':
         """

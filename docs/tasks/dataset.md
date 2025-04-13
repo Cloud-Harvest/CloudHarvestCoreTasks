@@ -16,6 +16,7 @@ In a Task Chain, you called this task by using the key `dataset`.
       * [convert_string_to_list](#convert_string_to_list)
       * [copy_key](#copy_key)
       * [copy_record](#copy_record)
+      * [count_elements](#count_elements)
       * [create_key_from_keys](#create_key_from_keys)
       * [deserialize_key](#deserialize_key)
       * [drop_keys](#drop_keys)
@@ -589,10 +590,10 @@ stages:
 #### `title_keys`
 Uses the Python string method `title()` to capitalize the first letter of each word in a key's value.
 
-| Directive               | Required | Default | Description                                                                              |
-|-------------------------|----------|---------|------------------------------------------------------------------------------------------|
-| `remove_characters`     | No       |         | A list of characters to remove from the key's value after capitalizing the first letter. |
-| `replacement_character` | No       |         | The character to replace the characters in `remove_characters` with.                     |
+| Directive               | Required | Default | Description                                                                                                               |
+|-------------------------|----------|---------|---------------------------------------------------------------------------------------------------------------------------|
+| `remove_characters`     | No       |         | A list of characters to remove from the key's value after capitalizing the first letter.                                  |
+| `replacement_character` | No       | `''`    | The character to replace the characters in `remove_characters` with. The default `''` returns keys in `CamelCase` format. |
 
 ```yaml
 stages:

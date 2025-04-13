@@ -939,24 +939,25 @@ class DataSet(List[WalkableDict]):
 
         return self
 
-    @requires_flatten
     def title_keys(self, remove_characters: List[str] = None, replacement_character: str = ''):
         """
-        Titles all keys in the data set, removing unwanted characters and replacing them with a provided character.
+        Titles all root keys in the data set.
 
         Arguments
         remove_characters (List[str], optional): A list of characters to remove from the keys. Defaults to None.
-        replacement_character (str, optional): The character to replace the removed characters with. Defaults to ''.
+        replacement_character (str, optional): The character to replace the removed characters with. Defaults to '' for CamelCase.
         """
 
         for record in self:
             for key in list(record.keys()):
+                # Assign the new key to a variable for further modification
                 new_key = key.title()
 
-                if remove_characters:
-                    for character in remove_characters:
-                        new_key = new_key.replace(character, replacement_character)
+                # Remove characters if specified
+                for character in remove_characters:
+                    new_key = new_key.replace(character, replacement_character)
 
+                # Assign the new key to the record
                 record[new_key] = record.pop(key)
 
         return self

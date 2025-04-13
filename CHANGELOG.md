@@ -4,9 +4,10 @@
 - Added the Environment package which provides a way to store configuration information made available to tasks
 - Added the `CachedData` class providing the means to store data temporarily
 - Fixed a bug in `BaseTaskChain` where a null result would the `results_to_silo()` to fail
-- Added `DataSet` methods
-  - `split_key_to_keys()`
-  - `count_elements()`
+- `DataSet` methods
+  - Added `split_key_to_keys()`
+  - Added `count_elements()`
+  - Fixed `title_keys()` by removing the `requires_flatten()` decorator and cleaned up the code
 
 ## 0.6.2
 - Updated to CloudHarvestCorePluginManager 0.5.0

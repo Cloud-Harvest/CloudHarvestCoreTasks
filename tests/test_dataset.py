@@ -107,6 +107,12 @@ class TestDataSet(unittest.TestCase):
         self.assertEqual(len(self.dataset), 4)
         self.assertEqual(self.dataset[-1], self.dataset[0])
 
+    def test_count_elements(self):
+        self.dataset.count_elements(source_key='tags', target_key='tags_count')
+        for record in self.dataset:
+            self.assertIn('tags_count', record)
+            self.assertEqual(record['tags_count'], len(record['tags']))
+
     def test_flatten_and_unflatten(self):
         self.dataset.flatten()
         for record in self.dataset:

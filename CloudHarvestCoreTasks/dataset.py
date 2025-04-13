@@ -410,6 +410,30 @@ class DataSet(List[WalkableDict]):
 
         return self
 
+    def count_elements(self, source_key: str, target_key: str = None) -> 'DataSet':
+        """
+        Counts the number of elements in an object and assigns the result to a new key.
+
+        Arguments
+        source_key (str): The key to count.
+        target_key (str, optional): The key to record the count to. If not provided, the source key is used.
+        """
+
+        target_key = target_key or source_key
+
+        for record in self:
+            source_value = record.walk(source_key, [])
+
+            result = None
+
+            if hasattr(source_value, '__len__'):
+                result = len(source_value)
+
+            record.assign(target_key, result)
+
+        return self
+
+
     def create_key_from_keys(self, source_keys: List[str], target_key: str, separator: str = '-') -> 'DataSet':
         """
         Creates a key from multiple keys.

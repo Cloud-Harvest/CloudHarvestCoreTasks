@@ -229,6 +229,22 @@ stages:
       target_index: 1
 ```
 
+#### `count_elements`
+Counts the number of elements in an object and stores the result in a new key. If the target object does not contain 
+a `__len__` method, the result will be `None`.
+
+| Directive    | Required | Default | Description                                                                                  |
+|--------------|----------|---------|----------------------------------------------------------------------------------------------|
+| `source_key` | Yes      |         | The key containing the object to count the elements of.                                      |
+| `target_key` | No       |         | The key to store the resulting count. If not provided, the `source_key` will be overwritten. |
+
+```yaml
+stages:
+  - count_elements:
+      source_key: my_key
+      target_key: my_new_key
+```
+
 #### `create_key_from_keys`
 Creates a new key by concatenating the values of other keys.
 

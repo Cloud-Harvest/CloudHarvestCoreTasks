@@ -3,7 +3,10 @@
 ## 0.6.3
 - Added the Environment package which provides a way to store configuration information made available to tasks
 - Added the `CachedData` class providing the means to store data temporarily
-- Fixed a bug in `BaseTaskChain` where a null result would the `results_to_silo()` to fail
+- `BaseTaskChain` 
+  - Fixed a bug in  where a null result would the `results_to_silo()` to fail
+  - Fixed an issue in `performance_report()` where `min` and `max` on date fields could raise a `ValueError`
+  - Fixed an `IndexError` in the `results` property which prevented the chain from returning the result
 - `DataSet` methods
   - Added `split_key_to_keys()`
   - Added `count_elements()`

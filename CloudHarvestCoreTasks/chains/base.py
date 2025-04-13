@@ -214,8 +214,8 @@ class BaseTaskChain(List[BaseTask]):
             # Add a total row to the task metrics
             total_records = sum(total_records)
             total_result_size = sum(total_result_size)
-            starts = min([dt for dt in starts if dt])
-            ends = max([dt for dt in ends if dt])
+            starts = min([dt for dt in starts if dt]) if any(starts) else None
+            ends = max([dt for dt in ends if dt]) if any(ends) else None
 
             task_metrics.append({
                 'Position': 'Total',
@@ -255,24 +255,21 @@ class BaseTaskChain(List[BaseTask]):
         Returns the result of the task chain.
         """
 
-        result = None
-
         try:
             data = self.variables.get('result') or self[-1].result
 
-            result = {
-                'data': data,
-                'errors': self.errors,
-                'meta': self.meta,
-                'metrics': self.performance_metrics,
-                'template': self.original_template
-            }
-
         except IndexError:
-            result = None
+            data = []
 
-        finally:
-            return result
+        result = {
+            'data': data,
+            'errors': self.errors,
+            'meta': self.meta,
+            'metrics': self.performance_metrics,
+            'template': self.original_template
+        }
+
+        return result
 
     @property
     def total(self) -> int:

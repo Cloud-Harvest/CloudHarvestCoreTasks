@@ -522,10 +522,10 @@ class BaseTaskChain(List[BaseTask]):
             while True:
                 # Instantiate the task from the task configuration
                 try:
-                    from CloudHarvestCoreTasks.factories import task_from_dict
+                    from CloudHarvestCoreTasks.factories import template_task_configuration
                     task_template = self.task_templates[self.position]
 
-                    task = task_from_dict(task_configuration=task_template, task_chain=self)
+                    task = template_task_configuration(task_configuration=task_template, task_chain=self)
 
                     if task.iterate:
                         task.status = TaskStatusCodes.skipped
@@ -613,8 +613,8 @@ class BaseTaskChain(List[BaseTask]):
 
         # Template the original configuration to get the iterated items. We take this approach to leverage the templating
         # engine to resolve variables in the iterate directive.
-        from CloudHarvestCoreTasks.factories import task_from_dict
-        task = task_from_dict(task_configuration=original_task_configuration, task_chain=self)
+        from CloudHarvestCoreTasks.factories import template_task_configuration
+        task = template_task_configuration(task_configuration=original_task_configuration, task_chain=self)
         iter_var = task.iterate
 
         # We employ reversed() here because we want the order of the tasks to be the same as the order of the iterated
@@ -634,12 +634,14 @@ class BaseTaskChain(List[BaseTask]):
             task_configuration[class_key].pop('iterate')
 
             # Update the task's name
-            task_configuration[class_key][
-                'name'] = f'{task_configuration[class_key]["name"]} - {iter_var.index(item) + 1}/{len(iter_var)}'
+            task_configuration[class_key]['name'] = f'{task_configuration[class_key]["name"]} - {iter_var.index(item) + 1}/{len(iter_var)}'
 
             # Template the file with the item
-            from CloudHarvestCoreTasks.factories import walk_and_replace
-            itemized_task_configuration = walk_and_replace(obj=task_configuration, task_chain=self, item=item)
+            from CloudHarvestCoreTasks.factories import template_task_configuration
+            itemized_task_configuration = template_task_configuration(task_configuration,
+                                                                      task_chain=self,
+                                                                      item=item,
+                                                                      instantiate=False)
 
             yield itemized_task_configuration
 

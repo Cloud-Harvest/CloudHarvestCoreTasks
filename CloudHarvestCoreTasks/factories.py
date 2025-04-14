@@ -99,17 +99,23 @@ def task_chain_from_dict(template: dict, **kwargs) -> BaseTaskChain:
     return result
 
 
-def task_from_dict(task_configuration: dict or BaseTask,
-                   task_chain: 'BaseTaskChain' = None,
-                   item: Any = None) -> BaseTask:
+def template_task_configuration(task_configuration: dict or BaseTask,
+                                task_chain: 'BaseTaskChain' = None,
+                                item: Any = None,
+                                instantiate: bool = True) -> BaseTask or dict:
     """
     Instantiates a task based on the task configuration.
 
-    This method converts a task configuration into an instantiated class. If a task chain is
-    provided, it retrieves the variables from the task chain and uses them to template the task configuration.
-    The templated configuration is then used to instantiate the task.
+    This method converts a task configuration into an instantiated class.
 
-    Returns:
+    Arguments
+        task_configuration (dict or BaseTask): The task configuration.
+        task_chain (BaseTaskChain, optional): The task chain associated with the task. Defaults to None.
+        item (Any, optional): The current item in the iteration. Defaults to None.
+        instantiate (bool, optional): Whether to instantiate the task. Defaults to True. When False, a dictionary is
+        returned. The default of 'True' is used because this is the most common scenario for this method.
+
+    Returns
         BaseTask: The instantiated task.
     """
 
@@ -124,243 +130,29 @@ def task_from_dict(task_configuration: dict or BaseTask,
     task_class = Registry.find(result_key='cls', category='task', name=class_name)[0]
 
     # Replace string object references with the objects themselves
-    templated_task_configuration = walk_and_replace(obj=task_configuration, task_chain=task_chain, item=item)
-
-    # Instantiate the task with the templated configuration and return it
-    class_configuration = templated_task_configuration.get(class_name) or {}
-
-    if isinstance(task_chain, BaseTaskChain):
-        class_configuration = task_chain.filters | class_configuration
-
-    instantiated_class = task_class(task_chain=task_chain, **class_configuration)
-
-    instantiated_class.original_template = task_configuration[class_name]
-
-    return instantiated_class
-
-
-def replace_variable_path_with_value(original_string: str,
-                                     task_chain: BaseTaskChain = None,
-                                     item: (dict or list or tuple) = None,
-                                     fail_on_unassigned: bool = False,
-                                     **kwargs) -> Any:
-    """
-    Accepts a path like 'item.key[index].key' and returns the value of that path in the task chain's variables.
-
-    Args:
-        original_string (str): The path to the variable in the task chain's variables.
-        task_chain (BaseTaskChain): The task chain containing 'var' variables.
-        item (dict, list, tuple): When iteration is in effect, this is the item being iterated over.
-        fail_on_unassigned (bool): If True, the method will raise an exception if the variable is not assigned.
-        **kwargs (dict): Additional keyword arguments to pass to the replace_variable_path_with_value() method.
-    """
-
-    from re import compile, split
-
-    """
-    Regex expression breakdown:
-        (item|var): Matches the literal strings "item" or "var".
-        \.: Matches a literal dot.
-        [^\s]*: Matches zero or more characters that are not whitespace.
-    """
-
-
-    variable_prefixes = ('item', 'env', 'task', 'var')
-
-    # If the original string is not a string or does not start with 'var' or 'item', return the original string
-    if not isinstance(original_string, str) or not any([f'{prefix}.' in original_string for prefix in variable_prefixes]):
-        return original_string
-
-    pattern = compile('(' + '|'.join(variable_prefixes) + ')\.[^\s]*')
-
-    # Find all the matches in the path
-    matches = [match.group(0) for match in pattern.finditer(original_string)]
-
-    # Determines if the entire string will be replaced by the output. When True, the output will be
-    # a single value. Otherwise, the output will be a string with the replaced values. This allows users to
-    # concatenate strings with variables.
-    replace_string_with_value = (len(matches) == 1 and original_string == matches[0])
-
-    def walk_path(p, obj) -> Any:
-        """
-        Walks the path of the object to retrieve the value at the end of the path.
-        """
-        # Convert the path string into a list of keys and indices
-        path = []
-
-        # Splits the string at either a dot (.) or any substring enclosed in square brackets ([]),
-        # while keeping the delimiters (dot or square brackets) in the result.
-        parts = split(r'(\[.*?\]|\.)', p)
-
-        # The start_index is assigned based on the type of variable (item or var). This is necessary because the
-        # variable identifier (item/var) is not a valid part of the object itself.
-        if parts[0] in ('item', 'task'):
-            start_index = 2
-
-        elif parts[0] in ('env', 'var'):
-            start_index = 3
-
-        else:
-            start_index = 0
-
-        for part in parts[start_index:]:
-            if part == '' or part == '.':
-                continue
-
-            if part.startswith('[') and part.endswith(']'):
-                path.append(int(part[1:-1]))
-            else:
-                path.append(part)
-
-        # Traverse the object using the parsed path
-        for p in path:
-
-            # Special functions which can be added at the end of the path
-            if isinstance(p, str):  # and p.endswith('()'):
-                # TODO: I think it would be valuable if we could include the args/kwargs in the function call in ().
-
-                match p:
-                    case 'value':  # ()':
-                        pass    # We'll return this obj
-
-                    case _:
-                        # Remove the () from the end of the string.
-                        # NOTE: This was commented so that functions of objects (such as keys() or values()) can be called.
-                        # However, we recognize there may be vulnerabilities in this approach. A future iteration of
-                        # this code may involve whitelisted methods for certain data types.
-                        # p = p[:-2]
-
-                        # Check if this is a property or method
-                        if hasattr(obj, p):
-                            obj = getattr(obj, p)
-
-                            # If the object is a callable, execute it otherwise return the object
-                            if callable(obj):
-                                obj = obj()
-
-                                # Convert the object to a list if it is a dict_keys or dict_values object
-                                if type(obj) in (type({}.keys()), type({}.values())):
-                                    obj = list(obj)
-
-                        # If the object is a dict, check that p is a key in the dict
-                        elif isinstance(obj, dict):
-                            obj = obj[p]
-
-                        # If the object is a list, check that p is an int and within the bounds of the list
-                        elif isinstance(obj, list) and isinstance(p, int):
-                            obj = obj[p]
-
-            else:
-                obj = obj[p]
-
-        return obj
-
-    # Prepare the replacement values dictionary
-    replacement_values = {}
-
-    for match in matches:
-        # The type of variable (item, var) and the name of the variable
-        ms = match.split('.')
-
-        var_type = ms[0]
-        var_name = ms[1]
-
-        match var_type:
-            # Use the iterator as the source object
-            case 'item':
-                replacement_values[match] = walk_path(match, item)
-
-            case 'task':
-                if task_chain:
-                    replacement_values[match] = walk_path(match, task_chain)
-
-            case 'env':
-                # Get Harvest Environment variables
-                from CloudHarvestCoreTasks.environment import Environment
-                replacement_values[match] = Environment.get(var_name)
-
-            # Get a component of a task chain variable
-            case 'var':
-                var = task_chain.variables.get(var_name) if task_chain is not None else None
-
-                if var is not None:
-                    # Assign the value to the replacement_values dictionary
-                    replacement_values[match] = walk_path(match, var)
-
-                else:
-                    # From an internal code perspective there may be times when we need to raise errors when a variable
-                    # is not assigned. However, in the context of templating a task chain, we may want to ignore this
-                    # error and continue. This is especially useful when we are scanning the task chain configurations
-                    # for variables that need to be replaced. We may not have assigned the variable yet.
-                    if fail_on_unassigned:
-                        # Raise an error because a var was referenced but there is no associated task chain
-                        if not task_chain:
-                            raise ReferenceError(f'Variable "{var_name}" referenced but process is not part of a task chain.')
-
-                        # Raise an error because the var was not found in task_chain.variables
-                        if not var:
-                            raise ValueError(f'Variable "{var_name}" is not assigned in the task chain. '
-                                             f'Did you remember to assign in a previous task with "result_as: var.{var}"?')
-
-                    else:
-                        # Normally we will ignore this variable and continue because the variable may not have been
-                        # assigned yet. Configurations may be scanned by this method several times before the variable
-                        # is assigned.
-                        continue
-
-            case _:
-                # We shouldn't actually see this error, but it is here just in case.
-                raise ValueError(f'Invalid path: {match}; must begin with "item" or "var".')
-
-    # Perform the replacement
-    if replace_string_with_value:
-        if replacement_values.values():
-            # Since the only value of the original_string is a variable reference, we will return the actual
-            # variable's object.
-            result = list(replacement_values.values())[0]
-
-        # No replacement value was retrieved, so we will return the original string
-        else:
-            result = original_string
-
-    else:
-        # Copy the original string so that we don't mangle the input
-        from copy import copy
-        result = copy(original_string)
-
-        # Replace the variables in the string
-        for key, value in replacement_values.items():
-            result = result.replace(key, str(value))
-
-    return result
-
-def walk_and_replace(obj: Any, **kwargs) -> Any:
-    """
-    Recursively walks through a nested list of dictionaries and lists, executing replace_variable_path_with_value()
-    whenever a string is encountered.
-
-    Args:
-        obj (Any): The object to process.
-        **kwargs: Keyword arguments to pass to replace_variable_path_with_value().
-
-    Returns:
-        The processed object with replaced strings.
-    """
-
-    if isinstance(obj, dict):
-        return {
-            k: walk_and_replace(obj=v, **kwargs)
-            for k, v in obj.items()
+    from CloudHarvestCoreTasks.dataset import WalkableDict
+    from CloudHarvestCoreTasks.environment import Environment
+    templated_task_configuration = WalkableDict(task_configuration).replace(
+        variables={
+            'chain': task_chain,                                                # The task chain itself
+            'env': Environment.get(),                                           # All Environment variables
+            'item': {'value': item} if isinstance(item, str) else item,         # The current item in the iteration
+            'var': task_chain.variables if task_chain is not None else {},      # The task chain variables
         }
+    )
 
-    elif isinstance(obj, list):
-        return [
-            walk_and_replace(obj=elem, **kwargs)
-            for elem in obj
-        ]
+    if instantiate:
+        # Instantiate the task with the templated configuration and return it
+        class_configuration = templated_task_configuration.get(class_name) or {}
 
-    elif isinstance(obj, str):
-        return replace_variable_path_with_value(original_string=obj, **kwargs)
+        if isinstance(task_chain, BaseTaskChain):
+            class_configuration = task_chain.filters | class_configuration
+
+        instantiated_class = task_class(task_chain=task_chain, **class_configuration)
+
+        instantiated_class.original_template = task_configuration[class_name]
+
+        return instantiated_class
 
     else:
-        return obj
+        return templated_task_configuration

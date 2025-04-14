@@ -38,19 +38,23 @@ class Environment:
             cls._variables[name] = value
 
     @classmethod
-    def get(cls, name: str, default: Any = None) -> Any:
+    def get(cls, name: str = None, default: Any = None) -> Any:
         """
         Retrieves the value of an environment variable from the Environment class.
 
         Arguments
-            name (str): The name of the environment variable.
+            name (str, optional): The name of the environment variable. If not provided, the method will return all variables.
             default (Any, optional): The default value to return if the variable does not exist. Defaults to None.
 
         Returns
             Any: The value of the environment variable, or the default value if it does not exist.
         """
 
-        return cls._variables.walk(name) or default
+        if name:
+            return cls._variables.walk(name) or default
+
+        else:
+            return cls._variables
 
     @classmethod
     def load(cls, path: str) -> None:

@@ -495,52 +495,52 @@ class BaseDataTask(BaseTask):
     def __exit__(self, exc_type, exc_val, exc_tb):
         return None
 
-    @property
-    def base_command_part(self):
-        """
-        Extracts the actual command from 'self.command' and returns it while preserving the path of the original command.
-        """
-
-        result = self.command
-
-        if '.' in self.command:
-            # Extract the command from the string
-            result = self.command.split('.')[0]
-
-        elif '[' and ']' in self.command:
-            # Extract the command from the string
-            result = self.command.split('[')[0]
-
-        return result
-
-    def walk_result_command_path(self, result: Any) -> Any:
-        """
-        Walks the command path and returns the result, if applicable.
-
-        >>> # The Task Configuration supplies the command 'find.row_count'. row_count is a property of the find command.
-        >>> self.command = 'find.row_count'
-        >>> # The find command returns CursorType() which is stored in the variable 'result'.
-        >>> result = CursorType()
-        >>> # The walk_result_command_path() method will walk the command path and return CursorType().row_count.
-        >>> self.walk_result_command_path(result)
-        >>> # The final result is returned.
-        >>> 10
-        """
-
-        if '.' in self.command or ('[' and ']') in self.command:
-            # Walk the command path and return the result, if applicable
-            self.task_chain.variables[self.base_command_part] = result
-
-            # Walks the command path and returns the result. This allows commands such as MongoDb's 'find.row_count'.
-            from CloudHarvestCoreTasks.factories import replace_variable_path_with_value
-            result: Any = replace_variable_path_with_value(original_string=f'var.{self.command}',
-                                                           task_chain=self.task_chain,
-                                                           fail_on_unassigned=True)
-
-            # Removes the command from the variables
-            self.task_chain.variables.pop(self.base_command_part)
-
-        return result
+    # @property
+    # def base_command_part(self):
+    #     """
+    #     Extracts the actual command from 'self.command' and returns it while preserving the path of the original command.
+    #     """
+    #
+    #     result = self.command
+    #
+    #     if '.' in self.command:
+    #         # Extract the command from the string
+    #         result = self.command.split('.')[0]
+    #
+    #     elif '[' and ']' in self.command:
+    #         # Extract the command from the string
+    #         result = self.command.split('[')[0]
+    #
+    #     return result
+    #
+    # def walk_result_command_path(self, result: Any) -> Any:
+    #     """
+    #     Walks the command path and returns the result, if applicable.
+    #
+    #     >>> # The Task Configuration supplies the command 'find.row_count'. row_count is a property of the find command.
+    #     >>> self.command = 'find.row_count'
+    #     >>> # The find command returns CursorType() which is stored in the variable 'result'.
+    #     >>> result = CursorType()
+    #     >>> # The walk_result_command_path() method will walk the command path and return CursorType().row_count.
+    #     >>> self.walk_result_command_path(result)
+    #     >>> # The final result is returned.
+    #     >>> 10
+    #     """
+    #
+    #     if '.' in self.command or ('[' and ']') in self.command:
+    #         # Walk the command path and return the result, if applicable
+    #         self.task_chain.variables[self.base_command_part] = result
+    #
+    #         # Walks the command path and returns the result. This allows commands such as MongoDb's 'find.row_count'.
+    #         from CloudHarvestCoreTasks.factories import replace_variable_path_with_value
+    #         result: Any = replace_variable_path_with_value(original_string=f'var.{self.command}',
+    #                                                        task_chain=self.task_chain,
+    #                                                        fail_on_unassigned=True)
+    #
+    #         # Removes the command from the variables
+    #         self.task_chain.variables.pop(self.base_command_part)
+    #
+    #     return result
 
 
 class BaseFilterableTask(BaseTask):

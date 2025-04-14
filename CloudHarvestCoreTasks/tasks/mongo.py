@@ -295,9 +295,7 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
         # Execute the command on the database or collection
         self.calls += 1
 
-        result = self.walk_result_command_path(
-            getattr(database_object, self.base_command_part)(**self.arguments)
-        )
+        result = getattr(database_object, self.command)(**self.arguments)
 
         # Convert the result to a list if it is a generator or cursor
         from types import GeneratorType

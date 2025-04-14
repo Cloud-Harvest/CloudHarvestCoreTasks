@@ -393,6 +393,30 @@ class TestWalkableDict(unittest.TestCase):
         for record in self.dataset:
             self.assertEqual(record.map(), expected_map)
 
+    def test_replace(self):
+        from CloudHarvestCoreTasks.dataset import WalkableDict
+        test_dict = WalkableDict({
+            'whole_string_replacement': 'var.test-string',
+            'substring_replacement': 'my var.test-string is here',
+            'multi_var_replacement': 'var.test-string var.test-string-2',
+            'nested_substring_replacement': [
+                {'nested_key': 'my var.test-string is here'},
+                'var.test-dict'
+            ],
+            'no_change': 'this should not change',
+            'no_replacement_var': 'var.does-not-exist',
+        })
+
+        result = test_dict.replace(variables={'var': {'test-string': 'replaced', 'test-string-2': 'replaced2', 'test-dict': {'key': 'value'}}})
+
+        self.assertEqual(result['whole_string_replacement'], 'replaced')
+        self.assertEqual(result['substring_replacement'], 'my replaced is here')
+        self.assertEqual(result['multi_var_replacement'], 'replaced replaced-2')
+        self.assertEqual(result['nested_substring_replacement'][0]['nested_key'], 'my replaced is here')
+        self.assertEqual(result['nested_substring_replacement'][1], {'key': 'value'})
+        self.assertEqual(result['no_change'], 'this should not change')
+        self.assertEqual(result['no_replacement_var'], 'var.does-not-exist')
+
     def test_walk(self):
         for record in self.dataset:
             self.assertEqual(record.walk('address.city'), record['address']['city'])

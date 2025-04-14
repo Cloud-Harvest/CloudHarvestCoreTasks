@@ -1,4 +1,4 @@
-CloudHarvestCorePluginManager @ git+https://github.com/Cloud-Harvest/CloudHarvestCorePluginManager.git@0.5.0
+CloudHarvestCorePluginManager @ git+https://github.com/Cloud-Harvest/CloudHarvestCorePluginManager.git@0.5.1
 Flask
 Jinja2
 deprecated

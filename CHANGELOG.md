@@ -3,6 +3,7 @@
 ## 0.6.3
 - Added the Environment package which provides a way to store configuration information made available to tasks
 - Added the `CachedData` class providing the means to store data temporarily
+- Various improvements to the task instantiation and templating process
 - `BaseTaskChain` 
   - Fixed a bug in  where a null result would the `results_to_silo()` to fail
   - Fixed an issue in `performance_report()` where `min` and `max` on date fields could raise a `ValueError`

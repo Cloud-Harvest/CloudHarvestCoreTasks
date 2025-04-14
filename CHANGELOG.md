@@ -11,6 +11,9 @@
   - Added `split_key_to_keys()`
   - Added `count_elements()`
   - Fixed `title_keys()` by removing the `requires_flatten()` decorator and cleaned up the code
+- `WalkableDict`
+  - Added `replace()` which replaces string values with respective values in a dictionary
+  - Fixed an issue in `walk()` where indices would not transverse lists/tuples 
 
 ## 0.6.2
 - Updated to CloudHarvestCorePluginManager 0.5.0

@@ -156,6 +156,77 @@ class WalkableDict(dict):
         else:
             return type(item).__name__
 
+    def replace(self, variables: dict, die_on_unassigned: bool = False) -> 'WalkableDict':
+        """
+        Replaces string representations with variables in the self.
+
+        Arguments
+        variables (dict): The variable mapping used to replace string expressions in self. Each key in the dictionary
+        serves as a prefix for the variable name, and the corresponding value is the variable's value.
+        die_on_unassigned (bool, optional): When true, an exception is raised if a variable is not found. Defaults to False.
+        ```
+        {
+            "env": { }
+            "var": {
+                "my_var_1": "something",
+                "my_var_2": "something else"
+            }
+            "item": { }
+        }
+        ```
+        """
+        from flatten_json import flatten
+        from re import findall, sub
+
+        # If there are no keys in either dictionary, nothing can be replaced
+        if not self.keys() or not variables.keys():
+            return self
+
+        # Convert the variables to a WalkableDict to allow for nested key access
+        variables = WalkableDict(variables)
+
+        # Create a regex expression to match the variable prefixes
+        regex_expression = r'\b(?:' + '|'.join(variables.keys()) + r')\.[^\s]*'
+
+        # Flatten the self which will give us the key paths and values. We do not iterate over the values or unflatten
+        # this list because unflatten will fail if a replacement variable contains a list or dictionary structure.
+        flat_self = flatten(self, separator='.')
+
+        # Iterate through the flattened keys (effectively a list of self's paths) and check if the value is a string
+        for key in flat_self.keys():
+            # Starting value. We always walk to self's value because this is also the value we assign to the self key.
+            # Using the flat_self value would not work because we never change this value.
+            value = self.walk(key)
+
+            if isinstance(value, str):
+                # Iterate over matches in the regex expression
+                for match in findall(regex_expression, value) or []:
+                    value = self.walk(key)
+                    replacement_value = variables.walk(match)
+
+                    # If the replacement value is None, continue or die as specified
+                    if replacement_value is None:
+                        if die_on_unassigned:
+                            # When die_on_unassigned is true, raise an exception if the variable is not found
+                            raise ValueError(f'Variable `{match}` not found when replacing in `{key}`')
+
+                        else:
+                            # If the replacement value is None, skip to the next match. This allows us to support scenarios
+                            # where variables yet to be assigned can be used in the string in subsequent iterations
+                            continue
+
+                    # If the match and value are the same, assign the value to the key
+                    if match == value:
+                        self.assign(key, replacement_value)
+
+                    # Otherwise the variable reference is inside an existing string. Therefore, we replace the matching
+                    # variable name with a string representation of the variable value
+                    else:
+                        # Sub is used to replace whole words only
+                        self.assign(key, sub(pattern=r'\b' + match + r'\b', repl=str(replacement_value), string=str(value)))
+
+        return self
+
     def walk(self, key: str, default: Any = None, separator: str = '.') -> Any:
         """
         Walks the self to get the value of a key.
@@ -180,9 +251,31 @@ class WalkableDict(dict):
 
         for part in path:
             try:
+                # If the part is a digit, convert it to an integer and use it as a list index or subscript
+                if str(part).isdigit():
+                    part = int(part)
+
                 target = target[part]
 
-            except KeyError or IndexError or TypeError:
+            except KeyError:
+                # Check if this is a callable attribute, such as __len__ or keys()
+                if hasattr(target, part):
+                    try:
+                        if callable(getattr(target, part)):
+                            # If the attribute is callable, call it and assign the result
+                            result = getattr(target, part)()
+
+                        else:
+                            # If the attribute is not callable, assign it directly
+                            result = getattr(target, part)
+
+                    except Exception:
+                        result = default
+
+                else:
+                    result = default
+
+            except (IndexError, TypeError, ValueError):
                 result = default
                 break
 

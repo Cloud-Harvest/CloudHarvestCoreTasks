@@ -525,6 +525,12 @@ class BaseTaskChain(List[BaseTask]):
                     from CloudHarvestCoreTasks.factories import template_task_configuration
                     task_template = self.task_templates[self.position]
 
+                    # Check if this task has a `mode` key after the `tasks` directive
+                    # and that the task chain includes a `mode` directive
+                    if isinstance(task_template.get('tasks'), dict) and hasattr(self, 'mode'):
+                        # Updates the template by replacing `tasks` with the associated mode
+                        task_template['tasks'] = task_template['tasks'].get(self.mode) or task_template['tasks'].get('all')
+
                     task = template_task_configuration(task_configuration=task_template, task_chain=self)
 
                     if task.iterate:

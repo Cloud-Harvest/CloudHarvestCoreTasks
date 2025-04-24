@@ -97,13 +97,19 @@ class BaseHarvestTaskChain(BaseTaskChain):
                 'description': 'Updates the Harvest Persistent Storage with the latest data',
                 'data': 'var.result',
                 'result_as': 'result',
+                'platform': self.platform,
+                'service': self.service,
+                'type': self.type,
+                'account': self.account,
+                'region': self.region,
+                'unique_identifier_keys': self.unique_identifier_keys,
             }
         }
 
         self.task_templates.append(template)
 
         # Expose the platform, service, type, account, and region as variables
-        self.variables['pstar'] = {
+        self.variables |= {
             'platform': self.platform,
             'service': self.service,
             'type': self.type,

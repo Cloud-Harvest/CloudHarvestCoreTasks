@@ -17,16 +17,20 @@ In a Task Chain, you called this task by using the key `dataset`.
       * [copy_key](#copy_key)
       * [copy_record](#copy_record)
       * [count_elements](#count_elements)
+      * [create_index](#create_index)
       * [create_key_from_keys](#create_key_from_keys)
       * [deserialize_key](#deserialize_key)
+      * [drop_index](#drop_index)
       * [drop_keys](#drop_keys)
       * [flatten](#flatten)
+      * [join](#join)
       * [limit](#limit)
       * [match_and_remove](#match_and_remove)
       * [maths_keys](#maths_keys)
       * [maths_records](#maths_records)
       * [maths_reset](#maths_reset)
       * [nest_keys](#nest_keys)
+      * [refresh_index](#refresh_index)
       * [remove_duplicate_records](#remove_duplicate_records)
       * [remove_duplicates_from_list](#remove_duplicates_from_list)
       * [rename_keys](#rename_keys)
@@ -246,6 +250,28 @@ stages:
       target_key: my_new_key
 ```
 
+#### `create_index`
+Creates a new key by concatenating the values of other keys. The index is created by joining the values of the keys
+with a separator. The result is stored within the `indexes` property of the DataSet. Indexes are used in [join](#join)
+operations to speed up the process of finding matching records; however, it is not necessary to call `create_index`
+explicitly, as indexes are automatically created when `join` is called if they do not already exist.
+
+| Directive | Required | Default | Description                      |
+|-----------|----------|---------|----------------------------------|
+| `name`    | Yes      |         | The name of the index to create. |
+| `keys`    | Yes      |         | A list of keys to concatenate.   |
+
+
+```yaml
+stages:
+  - create_index:
+      name: my_index
+      keys:
+        - key1
+        - key2
+```
+
+
 #### `create_key_from_keys`
 Creates a new key by concatenating the values of other keys.
 
@@ -280,6 +306,19 @@ stages:
       target_key: my_new_key
 ```
 
+#### `drop_index`
+Removes an index from the DataSet.
+
+| Directive | Required | Default | Description                      |
+|-----------|----------|---------|----------------------------------|
+| `name`    | Yes      |         | The name of the index to remove. |
+
+```yaml
+stages:
+  - drop_index:
+      name: my_index
+```
+
 #### `drop_keys`
 Removes keys from the records in the dataset.
 
@@ -293,6 +332,23 @@ stages:
       keys:
         - key1
         - key2
+```
+
+#### `find_index`
+Returns an index name based on the keys provided. It may optionally create an index if it is not already present.
+
+| Directive | Required | Default | Description                                                        |
+|-----------|----------|---------|--------------------------------------------------------------------|
+| `keys`    | Yes      |         | A list of keys in the index.                                       |
+| `create`  | No       | `False` | If `True`, the index will be created if it does not already exist. |
+
+```yaml
+stages:
+  - find_index:
+      keys:
+        - key1
+        - key2
+      create: True
 ```
 
 #### `flatten`
@@ -309,6 +365,37 @@ stages:
       preserve_lists: True
       separator: '_'
 ```
+
+#### `join`
+Merges two DataSets based on the specified keys. The left DataSet is the one that calls this method while the
+right DataSet is passed as an argument. The join is performed by matching the values of the specified keys in
+both DataSets. The resulting DataSet contains all records from the left DataSet and the matching records from
+the right DataSet. When keys exist in both the left- and right-handed DataSets, the right-handed DataSet's
+values are used.
+
+When the `inner` argument is True, only records that exist in both DataSets are included in the result. This is
+also known as an inner join. When `inner` is False, all records from the left DataSet are included in the result,
+
+| Directive    | Required | Default | Description                                                                     |
+|--------------|----------|---------|---------------------------------------------------------------------------------|
+| `data`       | Yes      |         | The right-hand DataSet to use.                                                  |
+| `left_keys`  | Yes      |         | The keys to use from the left-hand DataSet.                                     |
+| `right_keys` | Yes      |         | The keys to use from the right-hand DataSet.                                    |
+| `inner`      | No       | `False` | If `True`, only records that exist in both DataSets are included in the result. |
+
+```yaml
+stages:
+  - join:
+      data: var.my_other_dataset
+      left_keys:
+          - key1
+          - key2
+      right_keys:
+          - key3
+          - key4
+      inner: True
+```
+
 
 #### `limit`
 Limits the number of records in the dataset, discarding records beyond the specified value.
@@ -421,6 +508,21 @@ stages:
           - key2
       target_key: new_key
       preserve_original_keys: True
+```
+
+#### `refresh_index`
+Refreshes the index of the DataSet. This is useful when the dataset has been modified and the index needs to be updated.
+> Indexes in Harvest DataSets are not automatically updated when the dataset is modified.
+
+| Directive | Required | Default | Description           |
+|-----------|----------|---------|-----------------------|
+| `name`    | Yes      |         | The index to refresh. |
+
+```yaml
+stages:
+  - refresh_index:
+      name: my_index
+
 ```
 
 #### `remove_duplicate_records`

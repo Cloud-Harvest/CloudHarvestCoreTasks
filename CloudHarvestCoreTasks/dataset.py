@@ -28,6 +28,25 @@ def requires_flatten(method, preserve_lists: bool = False):
 
     return wrapper
 
+def rebuild_indexes(method):
+    """
+    Decorator to rebuild the indexes after a method is called.
+
+    Arguments
+    method (function): The method to decorate.
+    """
+
+    def wrapper(self, *args, **kwargs):
+        # Call the method
+        result = method(self, *args, **kwargs)
+
+        # Rebuild the indexes
+        [self.refresh_index(index_name) for index_name in self.indexes.keys()]
+
+        return result
+
+    return wrapper
+
 # CLASSES---------------------------------------------------------------------------------------------------------------
 class WalkableDict(dict):
 
@@ -294,6 +313,7 @@ class DataSet(List[WalkableDict]):
         if args:
             self.add_records(args)
 
+        self.indexes = {}
         self.maths_results = WalkableDict()
 
     def __enter__(self):
@@ -316,7 +336,6 @@ class DataSet(List[WalkableDict]):
                         seen_keys.add(key)
                         yield key
 
-    @requires_flatten
     def add_keys(self, keys: List[str] or str, default_value: Any = None, clobber: bool = False) -> 'DataSet':
         """
         Adds keys to the data set.
@@ -526,6 +545,38 @@ class DataSet(List[WalkableDict]):
 
         return self
 
+    def create_index(self, name: str, keys: List[str]) -> 'DataSet':
+        """
+        Creates an index on the data set. Indexes are string representations of the keys in the data set. The index is
+        created by concatenating the keys with a separator. Indexes are not automatically updated when the data set is
+        modified.
+
+        Arguments
+        name (str): The name of the index.
+        keys (List[str]): The keys to use to create the index.
+        """
+
+        index_name = name
+        result = {
+            'keys': [keys] if isinstance(keys, str) else keys,
+            'values': {}
+        }
+
+        for record in self:
+            # Identify the index value for the record
+            record_index_value = '-'.join([str(record.walk(key, default='None')) for key in keys])
+
+            # Creates the index value if it does not exist
+            if record_index_value not in result['values'].keys():
+                result['values'][record_index_value] = []
+
+            # Append the record to the index. Python will use pointers here so the record is not copied.
+            result['values'][record_index_value].append(record)
+
+        # Store the index in the indexes attribute
+        self.indexes[index_name] = result
+
+        return self
 
     def create_key_from_keys(self, source_keys: List[str], target_key: str, separator: str = '-') -> 'DataSet':
         """
@@ -580,6 +631,19 @@ class DataSet(List[WalkableDict]):
 
         return self
 
+    def drop_index(self, name) -> 'DataSet':
+        """
+        Drops an index from the data set.
+
+        Arguments
+        name (str): The name of the index to drop.
+        """
+
+        if name in self.indexes.keys():
+            del self.indexes[name]
+
+        return self
+
     def drop_keys(self, keys: List[str] or str) -> 'DataSet':
         """
         Drops keys from the data set.
@@ -598,6 +662,28 @@ class DataSet(List[WalkableDict]):
         ]
 
         return self
+
+    def find_index(self, keys: List[str], create: bool = False) -> str or None:
+        """
+        Finds an index in the data set based on the keys used.
+
+        Arguments
+        keys (List[str]): The keys to use to find the index.
+        create (bool, optional): When true, a new index is created if it does not exist. Defaults to False.
+        """
+
+        keys = [keys] if isinstance(keys, str) else keys
+
+        for index_name, index in self.indexes.items():
+            if index['keys'] == keys:
+                return index_name
+
+        if create:
+            name = '_'.join(keys) + '_index'
+            self.create_index(name=name, keys=keys)
+            return name
+
+        return None
 
     def flatten(self, preserve_lists: bool = False, separator: str = '.') -> 'DataSet':
         """
@@ -619,6 +705,67 @@ class DataSet(List[WalkableDict]):
         # Clear the data set and add the flattened data
         self.clear()
         self.add_records(flat_data)
+
+        return self
+
+    def join(self, data: 'DataSet', left_keys: List[str], right_keys: List[str], inner: bool = False) -> 'DataSet':
+        """
+        Merges two DataSets based on the specified keys. The left DataSet is the one that calls this method while the
+        right DataSet is passed as an argument. The join is performed by matching the values of the specified keys in
+        both DataSets. The resulting DataSet contains all records from the left DataSet and the matching records from
+        the right DataSet. When keys exist in both the left- and right-handed DataSets, the right-handed DataSet's
+        values are used.
+
+        When the `inner` argument is True, only records that exist in both DataSets are included in the result. This is
+        also known as an inner join. When `inner` is False, all records from the left DataSet are included in the result,
+
+        Arguments
+        data (DataSet): The DataSet to join into this one.
+        left_keys (str): The keys used on the left side of the join
+        right_keys (str): The keys used on the right side of the join
+        inner (bool): When true, an inner join is performed. Defaults to False.
+        """
+
+        # Find the index names for the left and right DataSets
+        left_index_name = self.find_index(left_keys, create=True)
+        right_index_name = data.find_index(right_keys, create=True)
+
+        # Create a new DataSet to hold the joined records
+        joined_data = DataSet()
+
+        # Iterate through the left DataSet.indexes[left_index_name]['values']
+        for left_index_value, left_records in self.indexes[left_index_name]['values'].items():
+            # Get the corresponding records from the right DataSet using the index name
+            right_records = data.indexes[right_index_name]['values'].get(left_index_value, [])
+
+            # Iterate through each record in the left DataSet
+            for left_record in left_records:
+                from copy import deepcopy
+
+                if right_records:
+                    # Create a new record for each matching right-hand record
+                    for right_record in right_records:
+                        # Create a new record by merging the left and right records
+                        merged_record = WalkableDict(deepcopy(left_record))
+                        merged_record.update(right_record)
+
+                        # Append the merged record to the joined_data DataSet
+                        joined_data.append(merged_record)
+
+                else:
+                    # If there are no matching records in the right DataSet and an inner join is specified, skip the left record
+                    # This is what makes a join an "inner" join: records must exist in both DataSets
+                    if inner:
+                        continue
+
+                    # If there are no matching records in the right DataSet, append the left record to the joined_data DataSet
+                    joined_data.append(deepcopy(left_record))
+
+        # Update the DataSet with the joined data
+        [self.refresh_index(index_name) for index_name in self.indexes.keys()]
+        self.maths_results.clear()
+        self.clear()
+        self.add_records(joined_data)
 
         return self
 
@@ -769,6 +916,19 @@ class DataSet(List[WalkableDict]):
 
             else:
                 record.update(nested_result)
+
+        return self
+
+    def refresh_index(self, name: str) -> 'DataSet':
+        """
+        Refreshes the index in the data set.
+
+        Arguments
+        name (str): The name of the index to refresh.
+        """
+
+        if name in self.indexes.keys():
+            self.create_index(name, self.indexes[name]['keys'])
 
         return self
 

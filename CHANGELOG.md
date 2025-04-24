@@ -11,6 +11,8 @@
 - `DataSet` methods
   - Added `split_key_to_keys()`
   - Added `count_elements()`
+  - Added `join()`
+  - Added `create_index()`, `drop_index()`, `find_index()`, and `refresh_index()` methods
   - Fixed `title_keys()` by removing the `requires_flatten()` decorator and cleaned up the code
 - `WalkableDict`
   - Added `replace()` which replaces string values with respective values in a dictionary

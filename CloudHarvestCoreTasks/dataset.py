@@ -726,6 +726,8 @@ class DataSet(List[WalkableDict]):
         inner (bool): When true, an inner join is performed. Defaults to False.
         """
 
+        data = DataSet(data) if not isinstance(data, DataSet) else data
+
         # Find the index names for the left and right DataSets
         left_index_name = self.find_index(left_keys, create=True)
         right_index_name = data.find_index(right_keys, create=True)

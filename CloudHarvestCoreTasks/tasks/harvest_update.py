@@ -1,4 +1,5 @@
 from CloudHarvestCorePluginManager import register_definition
+from CloudHarvestCoreTasks.dataset import WalkableDict
 from CloudHarvestCoreTasks.tasks.base import BaseTask
 from CloudHarvestCoreTasks.exceptions import TaskException
 
@@ -23,7 +24,7 @@ class HarvestUpdateTask(BaseTask):
         'Module.Name',                  # The name of the Harvest module that collected the data
         'Module.Url',                   # The repository where the Harvest module is stored
         'Module.Version',               # The version of the Harvest module
-        'Dates.DeactivatedOn',          # The date the record was deactivated, if applicable
+        # 'Dates.DeactivatedOn',          # The date the record was deactivated, if applicable
         'Dates.LastSeen',               # The date indicating when the record was last collected by Harvest
         'Active'                        # A boolean indicating if the record is active
     )
@@ -73,7 +74,7 @@ class HarvestUpdateTask(BaseTask):
                 raise TaskException(self, f'Unable to connect to the {silo_name} silo. {str(ex)}')
 
         # Attach metadata to the records
-        data = self.attach_metadata_to_records(data=self.data, metadata=self.build_metadata())
+        data = self.attach_metadata_to_records(metadata=self.build_metadata())
 
         # Bulk Replace the records in the destination silo and the metadata in the metadata silo
         unique_filters = self.replace_bulk_records(data=data)
@@ -89,8 +90,7 @@ class HarvestUpdateTask(BaseTask):
 
         return self
 
-    @staticmethod
-    def attach_metadata_to_records(data: List[dict], metadata: dict) -> List[dict]:
+    def attach_metadata_to_records(self, metadata: dict) -> List[dict]:
         """
         This method attaches metadata to the records in the data list. It also generates the UniqueIdentifier for each record.
 
@@ -98,14 +98,24 @@ class HarvestUpdateTask(BaseTask):
             data (List[dict]): The list of records to attach metadata to.
             metadata (dict): The metadata to attach to the records.
         """
+        from copy import deepcopy
 
-        for record in data:
+        # Take the result from the second to last task in the task chain and attach the metadata to each record
+        # The last task in the chain is this harvest_update task, so results must be from the preceding task
+        data = self.task_chain.variables.get('result') or self.task_chain[-2].result or []
+
+        for record in self.task_chain.variables.get('result') or self.task_chain[-2].result or []:
+            record['Harvest'] = deepcopy(metadata)
+
             # Generate this record's unique filter
-            from CloudHarvestCoreTasks.functions import get_nested_values
-            unique_identifier = '-'.join([get_nested_values(s=field, d=record)[0] for field in metadata['UniqueIdentifierKeys']])
+            from CloudHarvestCoreTasks.dataset import WalkableDict
+            unique_identifier = '-'.join([
+                WalkableDict(record).walk(field)
+                for field in metadata['UniqueIdentifierKeys']
+            ])
 
             # Attach existing metadata to the record
-            record.update({'Harvest': metadata | {'UniqueIdentifier': unique_identifier}})
+            record.assign('Harvest.UniqueIdentifier', unique_identifier)
 
         return data
 
@@ -113,6 +123,9 @@ class HarvestUpdateTask(BaseTask):
         """
         This method generates metadata for the task chain based on the class attributes and the task chain's metadata.
         """
+        from CloudHarvestCoreTasks.dataset import WalkableDict
+        from datetime import datetime, timezone
+
 
         # PSTAR data
         pstar = {
@@ -134,7 +147,6 @@ class HarvestUpdateTask(BaseTask):
                 for k, v in getattr(self, '_harvest_plugin_metadata', {}).items()}
         }
 
-        from datetime import datetime, timezone
         dates = {
             'Dates': {
                 'DeactivatedOn': None,
@@ -151,13 +163,12 @@ class HarvestUpdateTask(BaseTask):
         }
 
         # Merge the components into a single metadata dictionary
-        result = pstar | build_components | dates | silo
+        result = WalkableDict(pstar | build_components | dates | silo)
 
         # Validate that all required metadata fields are present
-        from CloudHarvestCoreTasks.functions import get_nested_values
         missing_fields = [
             field for field in self.REQUIRED_METADATA_FIELDS
-            if not get_nested_values(s=field, d=result)
+            if result.walk(field) is None
         ]
 
         if missing_fields:
@@ -197,9 +208,9 @@ class HarvestUpdateTask(BaseTask):
                                           upsert=True)
 
             # Gather the extra metadata fields for the record
-            from CloudHarvestCoreTasks.functions import get_nested_values
+            from CloudHarvestCoreTasks.dataset import WalkableDict
             extras = {
-                field: get_nested_values(s=field, d=record)
+                field: WalkableDict(record).walk(field)
                 for field in self.task_chain.extra_metadata_fields
             }
 

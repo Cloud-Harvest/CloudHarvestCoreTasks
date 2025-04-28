@@ -83,7 +83,7 @@ class BaseHarvestTaskChain(BaseTaskChain):
         self.extra_metadata_fields = [extra_matadata_fields] if isinstance(extra_matadata_fields, str) else extra_matadata_fields or []
 
         # Computed attributes
-        self.replacement_collection_name = f'{self.platform}_{self.service}_{self.type}'
+        self.replacement_collection_name = '.'.join((self.platform, self.service, self.type))
 
         # Insert a HarvestTask template into the end of the task chain
         # This task will update the Harvest Persistent Storage with the latest data. We add a task to the task list

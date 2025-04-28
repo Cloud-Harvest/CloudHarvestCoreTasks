@@ -86,6 +86,8 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
                 }
             }
 
+        return None
+
     def _filter_count(self, *args, **kwargs) -> dict or None:
         """
         This method returns the count of the data.
@@ -93,6 +95,8 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
 
         if self.count:
             return {'$count': self.count}
+
+        return None
 
     def _filter_exclude_keys(self, *args, **kwargs) -> dict or None:
         # MongoDb does not have a built-in excludeKeys method. Instead, we use the $project stage to exclude keys.
@@ -112,6 +116,8 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
         """
         if self.limit:
             return {'$limit': self.limit}
+
+        return None
 
     def _filter_matches(self, *args, **kwargs) -> dict or None:
         """
@@ -175,7 +181,12 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
                 case '!=':
                     result = {
                         match.key: {
-                            "$ne": match.value
+                            "$not": {
+                                {
+                                    "$regex": str(match.value),
+                                    "options": "i"
+                                }
+                            }
                         }
                     }
 
@@ -263,6 +274,8 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
             return {
                 '$sort': result
             }
+
+        return None
 
     def method(self, *args, **kwargs):
         """

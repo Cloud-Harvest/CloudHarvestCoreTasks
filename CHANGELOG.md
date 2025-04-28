@@ -17,6 +17,7 @@
 - `WalkableDict`
   - Added `replace()` which replaces string values with respective values in a dictionary
   - Fixed an issue in `walk()` where indices would not transverse lists/tuples 
+- Fixed an issue in `MongoTask` where the `!=` filter did not properly exclude data
 
 ## 0.6.2
 - Updated to CloudHarvestCorePluginManager 0.5.0

@@ -120,6 +120,9 @@ class HarvestUpdateTask(BaseTask):
             # Attach existing metadata to the record
             record.assign('Harvest.UniqueIdentifier', unique_identifier)
 
+            # The 'Account' field is a special case. It can be either the AccountName or the AccountId, depending on the data source.
+            record['Harvest']['Account'] = record.walk('Harvest.AccountName') or record.walk('Harvest.AccountId') or record.walk('Harvest.Account')
+
         return data
 
     def build_metadata(self) -> dict:

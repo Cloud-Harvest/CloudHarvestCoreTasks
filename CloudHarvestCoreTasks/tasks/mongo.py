@@ -25,11 +25,6 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
 
         # The default command for MongoTasks is 'aggregate'
         self.command = self.command or 'aggregate'
-
-        # Make sure the default pipeline is a list
-        if self.command == 'aggregate' and not self.arguments.get('pipeline'):
-            self.arguments['pipeline'] = []
-
         self.collection = collection
         self.result_attribute = result_attribute
 

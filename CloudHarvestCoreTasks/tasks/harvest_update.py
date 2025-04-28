@@ -104,7 +104,11 @@ class HarvestUpdateTask(BaseTask):
         data = self.task_chain.variables.get('result') or self.task_chain[-2].result or []
 
         for record in self.task_chain.variables.get('result') or self.task_chain[-2].result or []:
-            record['Harvest'] = deepcopy(metadata)
+            # Make sure the Harvest metadata field exists
+            if 'Harvest' not in record.keys():
+                record['Harvest'] = {}
+
+            record['Harvest'] |= deepcopy(metadata)
 
             # Generate this record's unique filter
             from CloudHarvestCoreTasks.dataset import WalkableDict

@@ -95,7 +95,6 @@ class HarvestUpdateTask(BaseTask):
         This method attaches metadata to the records in the data list. It also generates the UniqueIdentifier for each record.
 
         Arguments:
-            data (List[dict]): The list of records to attach metadata to.
             metadata (dict): The metadata to attach to the records.
         """
         from copy import deepcopy

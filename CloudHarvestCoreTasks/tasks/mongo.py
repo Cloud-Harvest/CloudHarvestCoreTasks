@@ -211,6 +211,9 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
 
         matches_results = []
 
+        if not self.matches:
+            return None
+
         # Convert the matches to a MatchSetGroup
         self.matches = MatchSetGroup(self.matches)
 

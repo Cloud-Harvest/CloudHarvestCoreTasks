@@ -457,8 +457,9 @@ class BaseDataTask(BaseTask):
     # specific configuration keys.
     REQUIRED_CONFIGURATION_KEYS = ()
 
-    def __init__(self, command: str,
+    def __init__(self,
                  silo: str,
+                 command: str = None,
                  arguments: dict = None,
                  *args, **kwargs):
         """
@@ -471,9 +472,9 @@ class BaseDataTask(BaseTask):
         from the stored Silos dictionary. 'silo' always takes precedence over the host configuration.
 
         Args:
-            command (str): The command to run on the data provider.
-            arguments (dict, optional): Arguments to pass to the command.
             silo (str, optional): The name of the silo to use for the task. Defaults to None.
+            command (str, optional): The command to run on the data provider. Defaults to None. Subclasses should implement a default command.
+            arguments (dict, optional): Arguments to pass to the command.
         """
 
         # Initialize the BaseTask class

@@ -30,7 +30,6 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
 
         self.order_of_operations = (
             'matches',      # Filter the data
-            'add_keys',     # Need all possible keys for matching and sorting
             'sort',         # Sort the data
             'project',      # Project the data
             'limit',        # Limit the data
@@ -72,19 +71,24 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
 
         return self
 
-    def _filter_add_keys(self, *args, **kwargs) -> dict or None:
+    def _filter_add_keys(self, *args, **kwargs) -> None:
         """
-        This method returns the keys to be added to the data. If the keys already exist, their existing values are preserved.
+        This method identifies the first $projection in the pipeline and adds the desired keys to the projection.
+        Where the key contains the period character, the period is removed from the key.
+
+        Returns
+            None: This method does not return anything. It modifies the pipeline in place.
         """
+
         if self.add_keys:
-            return {
-                '$addFields': {
-                    key: {
-                        '$ifNull': [f'${key}', None]
-                    }
-                    for key in self.add_keys
-                }
-            }
+            # Find the first projection of the pipeline
+            for stage in self.arguments.get('pipeline') or []:
+                if list(stage.keys())[0] == '$project':
+                    # Add the keys to the projection
+                    for key in self.add_keys:
+                        stage['$project'][str(key).replace('.', '')] = f'${key}'
+
+                    break
 
         return None
 
@@ -255,11 +259,13 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
         """
         This method returns a Mongo projection of the desired keys. This stage is unique to Mongo.
         """
-        return {
-            '$project': {
+        result = {
                 key: 1
                 for key in self.filter_keys()
             }
+
+        return {
+            "$project": result
         }
 
     def _filter_sort(self) -> dict or None:

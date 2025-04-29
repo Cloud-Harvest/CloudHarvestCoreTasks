@@ -117,6 +117,10 @@ class HarvestUpdateTask(BaseTask):
         # The last task in the chain is this harvest_update task, so results must be from the preceding task
         data = self.task_chain.variables.get('result') or self.task_chain[-2].result or []
 
+        # Make sure the data is a DataSet object
+        from CloudHarvestCoreTasks.dataset import DataSet
+        data = DataSet(data) if not isinstance(data, DataSet) else data
+
         for record in self.task_chain.variables.get('result') or self.task_chain[-2].result or []:
             # Make sure the Harvest metadata field exists
             if 'Harvest' not in record.keys():
@@ -125,11 +129,16 @@ class HarvestUpdateTask(BaseTask):
             # Merges any existing metadata with the new metadata, overwriting any existing fields
             record['Harvest'] |= deepcopy(metadata)
 
-            # Generate this record's unique filter
-            unique_identifier = '-'.join([
-                WalkableDict(record).walk(field)
-                for field in metadata['UniqueIdentifierKeys']
-            ])
+            # Generate this record's unique filter, which is a single string which combines the values of the  unique
+            # identifier keys. We accept that some values might be null and ignore them.
+            unique_identifier = []
+            for field in metadata['UniqueIdentifierKeys']:
+                field_value = record.walk(field)
+
+                if field_value is not None:
+                    unique_identifier.append(str(field_value))
+
+            unique_identifier = '-'.join(unique_identifier)
 
             # Attach existing metadata to the record
             record['Harvest']['UniqueIdentifier'] = unique_identifier

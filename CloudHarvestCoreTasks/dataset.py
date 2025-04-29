@@ -277,6 +277,9 @@ class WalkableDict(dict):
         for part in path:
             try:
                 # If the part is a digit, convert it to an integer and use it as a list index or subscript
+                if str(part).isdigit() and '.' not in str(part):
+                    part = int(part)
+
                 target = target[part]
 
             except KeyError:

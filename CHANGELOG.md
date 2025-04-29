@@ -18,6 +18,8 @@
   - Added `replace()` which replaces string values with respective values in a dictionary
   - Fixed an issue in `walk()` where indices would not transverse lists/tuples 
 - Fixed an issue in `MongoTask` where the `!=` filter did not properly exclude data
+- Fixed an issue in `WalkableDict.walk()` which retreated `0` values as `None`
+- Various improvements to the `BaseHarvestTaskChain` and `HarvestUpdateTask` classes
 
 ## 0.6.2
 - Updated to CloudHarvestCorePluginManager 0.5.0

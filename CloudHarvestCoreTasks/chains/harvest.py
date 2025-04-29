@@ -21,6 +21,7 @@ class BaseHarvestTaskChain(BaseTaskChain):
                  unique_identifier_keys: (str or List[str]),
                  destination_silo: str = 'harvest-core',
                  extra_matadata_fields: (str or List[str]) = None,
+                 identifiers: List[str] = None,
                  mode: Literal['all', 'single'] = 'all',
                  *args, **kwargs):
 
@@ -35,6 +36,7 @@ class BaseHarvestTaskChain(BaseTaskChain):
         unique_identifier_keys (str or List[str]): The unique filter keys for the harvested data
         destination_silo (str, optional): The name of the destination silo where the harvested data will be stored
         extra_matadata_fields (str or List[str], optional): Additional metadata fields to include in the harvested data's metadata record
+        identifiers (List[str], optional): A list of identifiers to use for non-all modes
         mode (str, optional): The mode of the harvest task chain. 'all' will harvest all data, 'single' will harvest a single record
 
         Exposes
@@ -77,6 +79,7 @@ class BaseHarvestTaskChain(BaseTaskChain):
         self.type = type
         self.account = account
         self.region = region
+        self.identifiers = identifiers
         self.mode = mode
         self.destination_silo = destination_silo
         self.unique_identifier_keys = [unique_identifier_keys] if isinstance(unique_identifier_keys, str) else unique_identifier_keys
@@ -99,6 +102,7 @@ class BaseHarvestTaskChain(BaseTaskChain):
                 'type': self.type,
                 'account': self.account,
                 'region': self.region,
+                'identifiers': self.identifiers,
                 'unique_identifier_keys': self.unique_identifier_keys,
             }
         }

@@ -259,7 +259,13 @@ class WalkableDict(dict):
         # If the key does not contain the separator, bypass the walking logic and return the value directly
         # This is a performance optimization for top-level keys
         if separator not in key:
-            return self.get(key) or default
+            v = self.get(key)
+
+            if v is None:
+                return default
+
+            else:
+                return v
 
         # Split the key into individual path using the separator
         path = key.split(separator)
@@ -271,9 +277,6 @@ class WalkableDict(dict):
         for part in path:
             try:
                 # If the part is a digit, convert it to an integer and use it as a list index or subscript
-                if str(part).isdigit():
-                    part = int(part)
-
                 target = target[part]
 
             except KeyError:

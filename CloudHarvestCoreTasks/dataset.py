@@ -711,7 +711,7 @@ class DataSet(List[WalkableDict]):
 
         return self
 
-    def join(self, data: 'DataSet', left_keys: List[str], right_keys: List[str], inner: bool = False) -> 'DataSet':
+    def join(self, data: 'DataSet', left_keys: List[str], right_keys: List[str], inner: bool = False, target_key: str = None) -> 'DataSet':
         """
         Merges two DataSets based on the specified keys. The left DataSet is the one that calls this method while the
         right DataSet is passed as an argument. The join is performed by matching the values of the specified keys in
@@ -727,6 +727,7 @@ class DataSet(List[WalkableDict]):
         left_keys (str): The keys used on the left side of the join
         right_keys (str): The keys used on the right side of the join
         inner (bool): When true, an inner join is performed. Defaults to False.
+        target_key (str): The key to assign the matching right-hand records to. If not provided, the right-hand records are merged into the original record.
         """
 
         data = DataSet(data) if not isinstance(data, DataSet) else data
@@ -752,7 +753,14 @@ class DataSet(List[WalkableDict]):
                     for right_record in right_records:
                         # Create a new record by merging the left and right records
                         merged_record = WalkableDict(deepcopy(left_record))
-                        merged_record.update(right_record)
+
+                        if target_key:
+                            # If a target key is provided, assign the right record to the target key
+                            merged_record.assign(target_key, deepcopy(right_record))
+
+                        else:
+                            # Otherwise, merge the right record into the left record
+                            merged_record.update(right_record)
 
                         # Append the merged record to the joined_data DataSet
                         joined_data.append(merged_record)

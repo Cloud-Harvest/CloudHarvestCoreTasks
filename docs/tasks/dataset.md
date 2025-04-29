@@ -376,12 +376,13 @@ values are used.
 When the `inner` argument is True, only records that exist in both DataSets are included in the result. This is
 also known as an inner join. When `inner` is False, all records from the left DataSet are included in the result,
 
-| Directive    | Required | Default | Description                                                                     |
-|--------------|----------|---------|---------------------------------------------------------------------------------|
-| `data`       | Yes      |         | The right-hand DataSet to use.                                                  |
-| `left_keys`  | Yes      |         | The keys to use from the left-hand DataSet.                                     |
-| `right_keys` | Yes      |         | The keys to use from the right-hand DataSet.                                    |
-| `inner`      | No       | `False` | If `True`, only records that exist in both DataSets are included in the result. |
+| Directive    | Required | Default | Description                                                                                                                        |
+|--------------|----------|---------|------------------------------------------------------------------------------------------------------------------------------------|
+| `data`       | Yes      |         | The right-hand DataSet to use.                                                                                                     |
+| `left_keys`  | Yes      |         | The keys to use from the left-hand DataSet.                                                                                        |
+| `right_keys` | Yes      |         | The keys to use from the right-hand DataSet.                                                                                       |
+| `inner`      | No       | `False` | If `True`, only records that exist in both DataSets are included in the result.                                                    |
+| `target_key` | No       |         | The key to assign the matching right-hand records to. If not provided, the right-hand records are merged into the original record. |
 
 ```yaml
 stages:
@@ -394,6 +395,7 @@ stages:
           - key3
           - key4
       inner: True
+      target_key: joined_records
 ```
 
 

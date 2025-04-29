@@ -127,7 +127,16 @@ def template_task_configuration(task_configuration: dict or BaseTask,
     class_name = list(task_configuration.keys())[0]
 
     from CloudHarvestCorePluginManager.registry import Registry
-    task_class = Registry.find(result_key='cls', category='task', name=class_name)[0]
+    if class_name == 'part':
+        # The 'part' task is not a real task. Instead, it is a placeholder for a template of another task stored in
+        # a templates/parts directory. Parts reduce toil by allowing users to create reusable templates for tasks, such
+        # as the steps necessary to retrieve AWS tags using the separate list_tags_for_resource call, which involves
+        # multiple steps.
+        task_class = Registry.find(result_key='cls', category='template_parts', name=task_configuration[class_name]['part_name'])[0]
+
+    else:
+        # Normal task lookup
+        task_class = Registry.find(result_key='cls', category='task', name=class_name)[0]
 
     # Replace string object references with the objects themselves
     from CloudHarvestCoreTasks.dataset import WalkableDict

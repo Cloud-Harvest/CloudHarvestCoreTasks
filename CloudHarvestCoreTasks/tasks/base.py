@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from types import GeneratorType
 from typing import Any, List, Literal
 
 from logging import getLogger
@@ -88,6 +89,7 @@ class BaseTask:
                 >>> result_as = {
                 >>>     'name': 'variable_name',
                 >>>     'mode': 'append', 'extend', 'merge', 'overwrite'    # The mode to store the result in the variable. 'overwrite' is the default.
+                >>>     'include': {'key': 'value'}                         # A dictionary of values to include in the result.
                 >>> }
             filters (dict): A dictionary of user filters to apply to the data.
                 >>> filters = {
@@ -294,6 +296,19 @@ class BaseTask:
             raise TaskException(self, ex)
 
         finally:
+            # If defined in the `result_as`, included values will be populated into the result
+            if isinstance(self.result_as, dict):
+                include = self.result_as.get('include')
+
+                if isinstance(include, dict):
+                    if isinstance(self.result, dict):
+                        self.result |= include
+
+                    elif isinstance(self.result, list):
+                        for record in self.result:
+                            if isinstance(record, dict):
+                                record |= include
+
             # Update the metadata with the task's status, duration, and other information
             self.meta |= {
                 'attempts': self.attempts,
@@ -301,7 +316,8 @@ class BaseTask:
                 'duration': self.duration,
                 'status': self.status
             }
-        return self
+
+            return self
 
     def _run_on_directive(self, directive: str):
         """
@@ -341,7 +357,27 @@ class BaseTask:
 
         # Store the result in the task chain's variables if a result_as variable is provided
         if self.result_as and self.task_chain:
-            self.task_chain.variables[self.result_as] = self.result
+            if isinstance(self.result_as, dict):
+                result_as_name = self.result_as.get('name')
+                result_as_mode = self.result_as.get('mode') or 'overwrite'
+
+            else:
+                result_as_name = self.result_as
+                result_as_mode = 'overwrite'
+
+            match result_as_mode:
+                case 'append':
+                    self.task_chain.variables[result_as_name].append(self.result)
+
+                case 'extend':
+                    self.task_chain.variables[result_as_name].extend(self.result)
+
+                case 'merge':
+                    self.task_chain.variables[result_as_name] |= self.result
+
+                # The default behavior is to override the variable
+                case _:
+                    self.task_chain.variables[result_as_name] = self.result
 
         # Run the on_complete directive
         self._run_on_directive('complete')

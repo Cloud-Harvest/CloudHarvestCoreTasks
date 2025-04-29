@@ -4,10 +4,13 @@
 - Added the Environment package which provides a way to store configuration information made available to tasks
 - Added the `CachedData` class providing the means to store data temporarily
 - Various improvements to the task instantiation and templating process
+- `BaseTask`
+  - Added the `include` directive to `result_as`
+  - Fixed several missing catches for `result_as
 - `BaseTaskChain` 
   - Fixed a bug in  where a null result would the `results_to_silo()` to fail
   - Fixed an issue in `performance_report()` where `min` and `max` on date fields could raise a `ValueError`
-  - Fixed an `IndexError` in the `results` property which prevented the chain from returning the result
+  - Fixed an `IndexError` in the `results` property which prevented the chain from returning the result`
 - `DataSet` methods
   - Added `split_key_to_keys()`
   - Added `count_elements()`
@@ -22,6 +25,7 @@
   - which retreated `0` values as `None`
   - which did not properly walk integer values
 - Various improvements to the `BaseHarvestTaskChain` and `HarvestUpdateTask` classes
+
 
 ## 0.6.2
 - Updated to CloudHarvestCorePluginManager 0.5.0

@@ -534,9 +534,6 @@ class BaseTaskChain(List[BaseTask]):
                     task = template_task_configuration(task_configuration=task_template, task_chain=self)
 
                     if task.iterate:
-                        task.status = TaskStatusCodes.skipped
-                        task.meta['Info'] = 'Task was skipped because it was an iterated task.'
-
                         # Insert the iterated tasks into the task chain's configurations
                         [
                             self.task_templates.insert(self.position + 1, iter_task)
@@ -545,6 +542,10 @@ class BaseTaskChain(List[BaseTask]):
 
                         # Add the parent task to the task chain (it will not be executed)
                         self.append(task)
+
+                        # Flag this task as skipped
+                        task.status = TaskStatusCodes.skipped
+                        task.meta['Info'] = 'Task was skipped because it was an iterated task.'
 
                         # Increment the position
                         self.position += 1
@@ -604,18 +605,19 @@ class BaseTaskChain(List[BaseTask]):
 
         if result_as:
             result_as_mode = result_as.get('mode') or 'override' if isinstance(result_as, dict) else 'override'
+            result_as_name = result_as.get('name') if isinstance(result_as, dict) else result_as
 
             # Determine how the results should be stored then initialize the variable accordingly
             match result_as_mode:
                 case 'append' | 'extend':
-                    self.variables[result_as['name']] = []
+                    self.variables[result_as_name] = []
 
                 case 'merge':
-                    self.variables[result_as['name']] = {}
+                    self.variables[result_as_name] = {}
 
                 # The default behavior is to override the variable
                 case _:
-                    self.variables[result_as['name']] = None
+                    self.variables[result_as_name] = None
 
         # Template the original configuration to get the iterated items. We take this approach to leverage the templating
         # engine to resolve variables in the iterate directive.

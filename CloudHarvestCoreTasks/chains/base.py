@@ -533,7 +533,7 @@ class BaseTaskChain(List[BaseTask]):
 
                     task = template_task_configuration(task_configuration=task_template, task_chain=self)
 
-                    if task.iterate:
+                    if task.iterate is not None:
                         # Insert the iterated tasks into the task chain's configurations
                         [
                             self.task_templates.insert(self.position + 1, iter_task)

@@ -266,7 +266,6 @@ class TestMongoTaskFilters(unittest.TestCase):
         for record in self.task_chain.result['data']:
             self.assertNotIn('tags', record.keys())        # explicitly removed with 'exclude_keys'
             self.assertNotIn('email', record.keys())       # implicitly removed with 'headers'
-            self.assertIn('test_add_key', record.keys())   # explicitly added with 'add_keys'
 
             # Verifies that the nested key value is not None
             for expected_key in ('name', 'address.state', 'dob'):

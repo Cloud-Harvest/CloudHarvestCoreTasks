@@ -534,10 +534,11 @@ class BaseTaskChain(List[BaseTask]):
                     task = template_task_configuration(task_configuration=task_template, task_chain=self)
 
                     if task.iterate:
+                        from copy import deepcopy
                         # Insert the iterated tasks into the task chain's configurations
                         [
                             self.task_templates.insert(self.position + 1, iter_task)
-                            for iter_task in self.iterate_task(original_task_configuration=task_template)
+                            for iter_task in self.iterate_task(original_task_configuration=deepcopy(task_template))
                         ]
 
                         # Add the parent task to the task chain (it will not be executed)
@@ -601,7 +602,7 @@ class BaseTaskChain(List[BaseTask]):
         # Determine how results from the itemized processes will be stored. The default behavior is to override the
         # variable with the same name as the 'result_as' directive; however, itemized tasks may return results of
         # different types. The 'result_as' directive provides a way to specify how the results should be stored.
-        result_as = original_task_configuration.get('result_as')
+        result_as = original_task_configuration[list(original_task_configuration.keys())[0]].get('result_as')
 
         if result_as:
             result_as_mode = result_as.get('mode') or 'override' if isinstance(result_as, dict) else 'override'

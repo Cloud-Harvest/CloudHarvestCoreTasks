@@ -303,19 +303,6 @@ class BaseTask:
             raise TaskException(self, ex)
 
         finally:
-            # If defined in the `result_as`, included values will be populated into the result
-            if isinstance(self.result_as, dict):
-                include = self.result_as.get('include')
-
-                if isinstance(include, dict):
-                    if isinstance(self.result, dict):
-                        self.result |= include
-
-                    elif isinstance(self.result, list):
-                        for record in self.result:
-                            if isinstance(record, dict):
-                                record |= include
-
             # Update the metadata with the task's status, duration, and other information
             self.meta |= {
                 'attempts': self.attempts,
@@ -368,10 +355,23 @@ class BaseTask:
                 for record in self.result
             ]
 
-        if self.result_to_list_with_key:
+        if self.result_to_dict_key:
             self.result = {
-                self.result_to_list_with_key: self.result
+                self.result_to_dict_key: self.result
             }
+
+        # If defined in the `result_as`, included values will be populated into the result
+        if isinstance(self.result_as, dict):
+            include = self.result_as.get('include')
+
+            if isinstance(include, dict):
+                if isinstance(self.result, dict):
+                    self.result |= include
+
+                elif isinstance(self.result, list):
+                    for record in self.result:
+                        if isinstance(record, dict):
+                            record |= include
 
         # Store the result in the task chain's variables if a result_as variable is provided
         if self.result_as and self.task_chain:

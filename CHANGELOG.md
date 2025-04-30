@@ -3,6 +3,29 @@
 ## 0.6.3
 - Added the Environment package which provides a way to store configuration information made available to tasks
 - Added the `CachedData` class providing the means to store data temporarily
+- Various improvements to the task instantiation and templating process
+- `BaseTask`
+  - Added the `include` directive to `result_as`
+  - Fixed several missing catches for `result_as
+- `BaseTaskChain` 
+  - Fixed a bug in  where a null result would the `results_to_silo()` to fail
+  - Fixed an issue in `performance_report()` where `min` and `max` on date fields could raise a `ValueError`
+  - Fixed an `IndexError` in the `results` property which prevented the chain from returning the result`
+- `DataSet` methods
+  - Added `split_key_to_keys()`
+  - Added `count_elements()`
+  - Added `join()`
+  - Added `create_index()`, `drop_index()`, `find_index()`, and `refresh_index()` methods
+  - Fixed `title_keys()` by removing the `requires_flatten()` decorator and cleaned up the code
+- `WalkableDict`
+  - Added `replace()` which replaces string values with respective values in a dictionary
+  - Fixed an issue in `walk()` where indices would not transverse lists/tuples 
+- Fixed an issue in `MongoTask` where the `!=` filter did not properly exclude data
+- Fixed issues in `WalkableDict.walk()` 
+  - which retreated `0` values as `None`
+  - which did not properly walk integer values
+- Various improvements to the `BaseHarvestTaskChain` and `HarvestUpdateTask` classes
+
 
 ## 0.6.2
 - Updated to CloudHarvestCorePluginManager 0.5.0

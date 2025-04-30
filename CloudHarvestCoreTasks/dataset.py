@@ -28,6 +28,25 @@ def requires_flatten(method, preserve_lists: bool = False):
 
     return wrapper
 
+def rebuild_indexes(method):
+    """
+    Decorator to rebuild the indexes after a method is called.
+
+    Arguments
+    method (function): The method to decorate.
+    """
+
+    def wrapper(self, *args, **kwargs):
+        # Call the method
+        result = method(self, *args, **kwargs)
+
+        # Rebuild the indexes
+        [self.refresh_index(index_name) for index_name in self.indexes.keys()]
+
+        return result
+
+    return wrapper
+
 # CLASSES---------------------------------------------------------------------------------------------------------------
 class WalkableDict(dict):
 
@@ -156,6 +175,77 @@ class WalkableDict(dict):
         else:
             return type(item).__name__
 
+    def replace(self, variables: dict, die_on_unassigned: bool = False) -> 'WalkableDict':
+        """
+        Replaces string representations with variables in the self.
+
+        Arguments
+        variables (dict): The variable mapping used to replace string expressions in self. Each key in the dictionary
+        serves as a prefix for the variable name, and the corresponding value is the variable's value.
+        die_on_unassigned (bool, optional): When true, an exception is raised if a variable is not found. Defaults to False.
+        ```
+        {
+            "env": { }
+            "var": {
+                "my_var_1": "something",
+                "my_var_2": "something else"
+            }
+            "item": { }
+        }
+        ```
+        """
+        from flatten_json import flatten
+        from re import findall, sub
+
+        # If there are no keys in either dictionary, nothing can be replaced
+        if not self.keys() or not variables.keys():
+            return self
+
+        # Convert the variables to a WalkableDict to allow for nested key access
+        variables = WalkableDict(variables)
+
+        # Create a regex expression to match the variable prefixes
+        regex_expression = r'\b(?:' + '|'.join(variables.keys()) + r')\.[^\s]*'
+
+        # Flatten the self which will give us the key paths and values. We do not iterate over the values or unflatten
+        # this list because unflatten will fail if a replacement variable contains a list or dictionary structure.
+        flat_self = flatten(self, separator='.')
+
+        # Iterate through the flattened keys (effectively a list of self's paths) and check if the value is a string
+        for key in flat_self.keys():
+            # Starting value. We always walk to self's value because this is also the value we assign to the self key.
+            # Using the flat_self value would not work because we never change this value.
+            value = self.walk(key)
+
+            if isinstance(value, str):
+                # Iterate over matches in the regex expression
+                for match in findall(regex_expression, value) or []:
+                    value = self.walk(key)
+                    replacement_value = variables.walk(match)
+
+                    # If the replacement value is None, continue or die as specified
+                    if replacement_value is None:
+                        if die_on_unassigned:
+                            # When die_on_unassigned is true, raise an exception if the variable is not found
+                            raise ValueError(f'Variable `{match}` not found when replacing in `{key}`')
+
+                        else:
+                            # If the replacement value is None, skip to the next match. This allows us to support scenarios
+                            # where variables yet to be assigned can be used in the string in subsequent iterations
+                            continue
+
+                    # If the match and value are the same, assign the value to the key
+                    if match == value:
+                        self.assign(key, replacement_value)
+
+                    # Otherwise the variable reference is inside an existing string. Therefore, we replace the matching
+                    # variable name with a string representation of the variable value
+                    else:
+                        # Sub is used to replace whole words only
+                        self.assign(key, sub(pattern=r'\b' + match + r'\b', repl=str(replacement_value), string=str(value)))
+
+        return self
+
     def walk(self, key: str, default: Any = None, separator: str = '.') -> Any:
         """
         Walks the self to get the value of a key.
@@ -169,7 +259,13 @@ class WalkableDict(dict):
         # If the key does not contain the separator, bypass the walking logic and return the value directly
         # This is a performance optimization for top-level keys
         if separator not in key:
-            return self.get(key) or default
+            v = self.get(key)
+
+            if v is None:
+                return default
+
+            else:
+                return v
 
         # Split the key into individual path using the separator
         path = key.split(separator)
@@ -180,9 +276,31 @@ class WalkableDict(dict):
 
         for part in path:
             try:
+                # If the part is a digit, convert it to an integer and use it as a list index or subscript
+                if str(part).isdigit() and '.' not in str(part):
+                    part = int(part)
+
                 target = target[part]
 
-            except KeyError or IndexError or TypeError:
+            except KeyError:
+                # Check if this is a callable attribute, such as __len__ or keys()
+                if hasattr(target, part):
+                    try:
+                        if callable(getattr(target, part)):
+                            # If the attribute is callable, call it and assign the result
+                            result = getattr(target, part)()
+
+                        else:
+                            # If the attribute is not callable, assign it directly
+                            result = getattr(target, part)
+
+                    except Exception:
+                        result = default
+
+                else:
+                    result = default
+
+            except (IndexError, TypeError, ValueError):
                 result = default
                 break
 
@@ -201,6 +319,7 @@ class DataSet(List[WalkableDict]):
         if args:
             self.add_records(args)
 
+        self.indexes = {}
         self.maths_results = WalkableDict()
 
     def __enter__(self):
@@ -223,7 +342,6 @@ class DataSet(List[WalkableDict]):
                         seen_keys.add(key)
                         yield key
 
-    @requires_flatten
     def add_keys(self, keys: List[str] or str, default_value: Any = None, clobber: bool = False) -> 'DataSet':
         """
         Adds keys to the data set.
@@ -410,6 +528,62 @@ class DataSet(List[WalkableDict]):
 
         return self
 
+    def count_elements(self, source_key: str, target_key: str = None) -> 'DataSet':
+        """
+        Counts the number of elements in an object and assigns the result to a new key.
+
+        Arguments
+        source_key (str): The key to count.
+        target_key (str, optional): The key to record the count to. If not provided, the source key is used.
+        """
+
+        target_key = target_key or source_key
+
+        for record in self:
+            source_value = record.walk(source_key, [])
+
+            result = None
+
+            if hasattr(source_value, '__len__'):
+                result = len(source_value)
+
+            record.assign(target_key, result)
+
+        return self
+
+    def create_index(self, name: str, keys: List[str]) -> 'DataSet':
+        """
+        Creates an index on the data set. Indexes are string representations of the keys in the data set. The index is
+        created by concatenating the keys with a separator. Indexes are not automatically updated when the data set is
+        modified.
+
+        Arguments
+        name (str): The name of the index.
+        keys (List[str]): The keys to use to create the index.
+        """
+
+        index_name = name
+        result = {
+            'keys': [keys] if isinstance(keys, str) else keys,
+            'values': {}
+        }
+
+        for record in self:
+            # Identify the index value for the record
+            record_index_value = '-'.join([str(record.walk(key, default='None')) for key in keys])
+
+            # Creates the index value if it does not exist
+            if record_index_value not in result['values'].keys():
+                result['values'][record_index_value] = []
+
+            # Append the record to the index. Python will use pointers here so the record is not copied.
+            result['values'][record_index_value].append(record)
+
+        # Store the index in the indexes attribute
+        self.indexes[index_name] = result
+
+        return self
+
     def create_key_from_keys(self, source_keys: List[str], target_key: str, separator: str = '-') -> 'DataSet':
         """
         Creates a key from multiple keys.
@@ -463,6 +637,19 @@ class DataSet(List[WalkableDict]):
 
         return self
 
+    def drop_index(self, name) -> 'DataSet':
+        """
+        Drops an index from the data set.
+
+        Arguments
+        name (str): The name of the index to drop.
+        """
+
+        if name in self.indexes.keys():
+            del self.indexes[name]
+
+        return self
+
     def drop_keys(self, keys: List[str] or str) -> 'DataSet':
         """
         Drops keys from the data set.
@@ -481,6 +668,28 @@ class DataSet(List[WalkableDict]):
         ]
 
         return self
+
+    def find_index(self, keys: List[str], create: bool = False) -> str or None:
+        """
+        Finds an index in the data set based on the keys used.
+
+        Arguments
+        keys (List[str]): The keys to use to find the index.
+        create (bool, optional): When true, a new index is created if it does not exist. Defaults to False.
+        """
+
+        keys = [keys] if isinstance(keys, str) else keys
+
+        for index_name, index in self.indexes.items():
+            if index['keys'] == keys:
+                return index_name
+
+        if create:
+            name = '_'.join(keys) + '_index'
+            self.create_index(name=name, keys=keys)
+            return name
+
+        return None
 
     def flatten(self, preserve_lists: bool = False, separator: str = '.') -> 'DataSet':
         """
@@ -502,6 +711,77 @@ class DataSet(List[WalkableDict]):
         # Clear the data set and add the flattened data
         self.clear()
         self.add_records(flat_data)
+
+        return self
+
+    def join(self, data: 'DataSet', left_keys: List[str], right_keys: List[str], inner: bool = False, target_key: str = None) -> 'DataSet':
+        """
+        Merges two DataSets based on the specified keys. The left DataSet is the one that calls this method while the
+        right DataSet is passed as an argument. The join is performed by matching the values of the specified keys in
+        both DataSets. The resulting DataSet contains all records from the left DataSet and the matching records from
+        the right DataSet. When keys exist in both the left- and right-handed DataSets, the right-handed DataSet's
+        values are used.
+
+        When the `inner` argument is True, only records that exist in both DataSets are included in the result. This is
+        also known as an inner join. When `inner` is False, all records from the left DataSet are included in the result,
+
+        Arguments
+        data (DataSet): The DataSet to join into this one.
+        left_keys (str): The keys used on the left side of the join
+        right_keys (str): The keys used on the right side of the join
+        inner (bool): When true, an inner join is performed. Defaults to False.
+        target_key (str): The key to assign the matching right-hand records to. If not provided, the right-hand records are merged into the original record.
+        """
+
+        data = DataSet(data) if not isinstance(data, DataSet) else data
+
+        # Find the index names for the left and right DataSets
+        left_index_name = self.find_index(left_keys, create=True)
+        right_index_name = data.find_index(right_keys, create=True)
+
+        # Create a new DataSet to hold the joined records
+        joined_data = DataSet()
+
+        # Iterate through the left DataSet.indexes[left_index_name]['values']
+        for left_index_value, left_records in self.indexes[left_index_name]['values'].items():
+            # Get the corresponding records from the right DataSet using the index name
+            right_records = data.indexes[right_index_name]['values'].get(left_index_value, [])
+
+            # Iterate through each record in the left DataSet
+            for left_record in left_records:
+                from copy import deepcopy
+
+                if right_records:
+                    # Create a new record for each matching right-hand record
+                    for right_record in right_records:
+                        # Create a new record by merging the left and right records
+                        merged_record = WalkableDict(deepcopy(left_record))
+
+                        if target_key:
+                            # If a target key is provided, assign the right record to the target key
+                            merged_record.assign(target_key, deepcopy(right_record))
+
+                        else:
+                            # Otherwise, merge the right record into the left record
+                            merged_record.update(right_record)
+
+                        # Append the merged record to the joined_data DataSet
+                        joined_data.append(merged_record)
+
+                else:
+                    # If there are no matching records in the right DataSet and an inner join is specified, skip the left record
+                    # This is what makes a join an "inner" join: records must exist in both DataSets
+                    if inner:
+                        continue
+
+                    # If there are no matching records in the right DataSet, append the left record to the joined_data DataSet
+                    joined_data.append(deepcopy(left_record))
+
+        # Update the DataSet with the joined data
+        [self.refresh_index(index_name) for index_name in self.indexes.keys()]
+        self.maths_results.clear()
+        self.clear()
+        self.add_records(joined_data)
 
         return self
 
@@ -655,6 +935,19 @@ class DataSet(List[WalkableDict]):
 
         return self
 
+    def refresh_index(self, name: str) -> 'DataSet':
+        """
+        Refreshes the index in the data set.
+
+        Arguments
+        name (str): The name of the index to refresh.
+        """
+
+        if name in self.indexes.keys():
+            self.create_index(name, self.indexes[name]['keys'])
+
+        return self
+
     def remove_duplicate_records(self) -> 'DataSet':
         """
         Removes duplicate records from the data set.
@@ -791,6 +1084,50 @@ class DataSet(List[WalkableDict]):
 
         return self
 
+    def split_key_to_keys(self, source_key: str, target_keys: List[str], separator: str = '.', max_split: int = None, default_value: Any = None, preserve_source_key: bool = False) -> 'DataSet':
+        """
+        Splits a key's value in a record into multiple keys. The split value is assigned to the target keys. If there are
+        not enough values to assign to the target keys, the remaining target keys are assigned to the default value.
+
+        Arguments
+        source_key (str): The key to split.
+        target_keys (List[str]): The keys to assign the split value to.
+        separator (str, optional): The separator to split the value by. Defaults to '.'.
+        max_split (int, optional): The maximum number of times to split the separator. Defaults to None which means no limit.
+        default_value (Any, optional): The default value to assign to the target keys. Defaults to None.
+        preserve_source_key (bool, optional): When true, the source key will be preserved. Defaults to False.
+        """
+
+        for record in self:
+            source_data = record.walk(source_key)
+
+            # Can only split on a string
+            if isinstance(source_data, str):
+                source_data = source_data.split(separator, maxsplit=max_split or -1)    # maxsplit=None raises an error
+
+            # But we can still support list/tuple
+            elif isinstance(source_data, (list, tuple)):
+                source_data = list(source_data)
+
+            # If the source data is not a string, list, or tuple, set it to an empty list. This allows us to assign the
+            # default value to the target keys
+            else:
+                source_data = []
+
+            # Always add the default values to the target keys, even if the source data is empty
+            for i, target_key in enumerate(target_keys):
+                try:
+                    record.assign(target_key, source_data[i])
+
+                except IndexError:
+                    record.assign(target_key, default_value)
+
+            # Remove the source key from the record if it is not preserved
+            if not preserve_source_key:
+                record.drop(source_key, None)
+
+        return self
+
     def sort_records(self, keys: List[str]) -> 'DataSet':
         """
         Sort the records in the record set by one or more keys.
@@ -871,24 +1208,25 @@ class DataSet(List[WalkableDict]):
 
         return self
 
-    @requires_flatten
     def title_keys(self, remove_characters: List[str] = None, replacement_character: str = ''):
         """
-        Titles all keys in the data set, removing unwanted characters and replacing them with a provided character.
+        Titles all root keys in the data set.
 
         Arguments
         remove_characters (List[str], optional): A list of characters to remove from the keys. Defaults to None.
-        replacement_character (str, optional): The character to replace the removed characters with. Defaults to ''.
+        replacement_character (str, optional): The character to replace the removed characters with. Defaults to '' for CamelCase.
         """
 
         for record in self:
             for key in list(record.keys()):
+                # Assign the new key to a variable for further modification
                 new_key = key.title()
 
-                if remove_characters:
-                    for character in remove_characters:
-                        new_key = new_key.replace(character, replacement_character)
+                # Remove characters if specified
+                for character in remove_characters:
+                    new_key = new_key.replace(character, replacement_character)
 
+                # Assign the new key to the record
                 record[new_key] = record.pop(key)
 
         return self

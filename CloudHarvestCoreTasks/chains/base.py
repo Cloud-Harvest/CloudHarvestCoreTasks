@@ -80,7 +80,7 @@ class BaseTaskChain(List[BaseTask]):
         # Starting variables can be added using the `variables` parameter.
         self.variables: Dict[str, Any] = {} | (variables or {})
 
-        self.task_templates: List[dict or BaseTask] = template.get('tasks', [])
+        self.task_templates: dict or List[dict or BaseTask] = template.get('tasks', [])
 
         self.status = TaskStatusCodes.initialized
         self.pool = BaseTaskPool(chain=self,
@@ -93,12 +93,15 @@ class BaseTaskChain(List[BaseTask]):
         self.start = None
         self.end = None
 
-        self.meta = {}
+        self.meta = {
+            'Errors': []
+        }
 
         # When set, the TaskChain will send results to this silo when it completes or errors. Can only be set after the
         # TaskChain has been instantiated. This is to prevent users from setting the silo in the template, thus sending
         # results to the wrong silo.
         self.results_silo = None
+        self.required_variables = template.get('required_variables') or []
 
     def __enter__(self) -> 'BaseTaskChain':
         """
@@ -214,8 +217,8 @@ class BaseTaskChain(List[BaseTask]):
             # Add a total row to the task metrics
             total_records = sum(total_records)
             total_result_size = sum(total_result_size)
-            starts = min([dt for dt in starts if dt])
-            ends = max([dt for dt in ends if dt])
+            starts = min([dt for dt in starts if dt]) if any(starts) else None
+            ends = max([dt for dt in ends if dt]) if any(ends) else None
 
             task_metrics.append({
                 'Position': 'Total',
@@ -246,7 +249,6 @@ class BaseTaskChain(List[BaseTask]):
                 'End': self.end,
             }]
 
-
         return task_metrics
 
     @property
@@ -255,24 +257,21 @@ class BaseTaskChain(List[BaseTask]):
         Returns the result of the task chain.
         """
 
-        result = None
-
         try:
             data = self.variables.get('result') or self[-1].result
 
-            result = {
-                'data': data,
-                'errors': self.errors,
-                'meta': self.meta,
-                'metrics': self.performance_metrics,
-                'template': self.original_template
-            }
-
         except IndexError:
-            result = None
+            data = []
 
-        finally:
-            return result
+        result = {
+            'data': data,
+            'errors': self.errors,
+            'meta': self.meta,
+            'metrics': self.performance_metrics,
+            'template': self.original_template
+        }
+
+        return result
 
     @property
     def total(self) -> int:
@@ -447,7 +446,7 @@ class BaseTaskChain(List[BaseTask]):
         """
 
         self.status = TaskStatusCodes.error
-        self.meta['error'] = str(ex.args)
+        self.meta['Errors'].append(str(ex.args))
 
         if self.pool.queue_size:
             self.pool.terminate()
@@ -474,6 +473,8 @@ class BaseTaskChain(List[BaseTask]):
         Sends the TaskChain results to a remote silo.
         """
 
+        results = self.result or {}
+
         if self.results_silo:
             from CloudHarvestCoreTasks.silos import get_silo
             from json import dumps
@@ -486,7 +487,7 @@ class BaseTaskChain(List[BaseTask]):
                     name=self.id,
                     mapping={
                         key: dumps(value, default=str)
-                        for key, value in self.result.items()
+                        for key, value in results.items()
                     }
                 )
 
@@ -512,26 +513,40 @@ class BaseTaskChain(List[BaseTask]):
             self.on_start()
             self.position = 0
 
+            # Validate the required variables are present for the task chain
+            if self.required_variables:
+                for var in self.required_variables:
+                    if var not in self.variables:
+                        raise Exception(self, f'Missing required variable: {var}')
+
             while True:
                 # Instantiate the task from the task configuration
                 try:
-                    from CloudHarvestCoreTasks.factories import task_from_dict
+                    from CloudHarvestCoreTasks.factories import template_task_configuration
                     task_template = self.task_templates[self.position]
 
-                    task = task_from_dict(task_configuration=task_template, task_chain=self)
+                    # # Check if this task has a `mode` key after the `tasks` directive
+                    # # and that the task chain includes a `mode` directive
+                    # if isinstance(task_template.get('tasks'), dict) and hasattr(self, 'mode'):
+                    #     # Updates the template by replacing `tasks` with the associated mode
+                    #     task_template['tasks'] = task_template['tasks'].get(self.mode) or task_template['tasks'].get('all')
+
+                    task = template_task_configuration(task_configuration=task_template, task_chain=self)
 
                     if task.iterate:
-                        task.status = TaskStatusCodes.skipped
-                        task.meta['Info'] = 'Task was skipped because it was an iterated task.'
-
+                        from copy import deepcopy
                         # Insert the iterated tasks into the task chain's configurations
                         [
                             self.task_templates.insert(self.position + 1, iter_task)
-                            for iter_task in self.iterate_task(original_task_configuration=task_template)
+                            for iter_task in self.iterate_task(original_task_configuration=deepcopy(task_template))
                         ]
 
                         # Add the parent task to the task chain (it will not be executed)
                         self.append(task)
+
+                        # Flag this task as skipped
+                        task.status = TaskStatusCodes.skipped
+                        task.meta['Info'] = 'Task was skipped because it was an iterated task.'
 
                         # Increment the position
                         self.position += 1
@@ -587,27 +602,28 @@ class BaseTaskChain(List[BaseTask]):
         # Determine how results from the itemized processes will be stored. The default behavior is to override the
         # variable with the same name as the 'result_as' directive; however, itemized tasks may return results of
         # different types. The 'result_as' directive provides a way to specify how the results should be stored.
-        result_as = original_task_configuration.get('result_as')
+        result_as = original_task_configuration[list(original_task_configuration.keys())[0]].get('result_as')
 
         if result_as:
             result_as_mode = result_as.get('mode') or 'override' if isinstance(result_as, dict) else 'override'
+            result_as_name = result_as.get('name') if isinstance(result_as, dict) else result_as
 
             # Determine how the results should be stored then initialize the variable accordingly
             match result_as_mode:
                 case 'append' | 'extend':
-                    self.variables[result_as['name']] = []
+                    self.variables[result_as_name] = []
 
                 case 'merge':
-                    self.variables[result_as['name']] = {}
+                    self.variables[result_as_name] = {}
 
                 # The default behavior is to override the variable
                 case _:
-                    self.variables[result_as['name']] = None
+                    self.variables[result_as_name] = None
 
         # Template the original configuration to get the iterated items. We take this approach to leverage the templating
         # engine to resolve variables in the iterate directive.
-        from CloudHarvestCoreTasks.factories import task_from_dict
-        task = task_from_dict(task_configuration=original_task_configuration, task_chain=self)
+        from CloudHarvestCoreTasks.factories import template_task_configuration
+        task = template_task_configuration(task_configuration=original_task_configuration, task_chain=self)
         iter_var = task.iterate
 
         # We employ reversed() here because we want the order of the tasks to be the same as the order of the iterated
@@ -630,8 +646,11 @@ class BaseTaskChain(List[BaseTask]):
             task_configuration[class_key]['name'] = f'{task_configuration[class_key]["name"]} - {iter_var.index(item) + 1}/{len(iter_var)}'
 
             # Template the file with the item
-            from CloudHarvestCoreTasks.factories import walk_and_replace
-            itemized_task_configuration = walk_and_replace(obj=task_configuration, task_chain=self, item=item)
+            from CloudHarvestCoreTasks.factories import template_task_configuration
+            itemized_task_configuration = template_task_configuration(task_configuration,
+                                                                      task_chain=self,
+                                                                      item=item,
+                                                                      instantiate=False)
 
             yield itemized_task_configuration
 
@@ -669,7 +688,8 @@ class BaseTaskPool:
         status (TaskStatusCodes): The current status of the task pool.
     """
 
-    def __init__(self, chain: BaseTaskChain, max_workers: int, idle_refresh_rate: float = 3, worker_refresh_rate: float = .5):
+    def __init__(self, chain: BaseTaskChain, max_workers: int, idle_refresh_rate: float = 3,
+                 worker_refresh_rate: float = .5):
         """
         Initializes a new instance of the BaseTaskPool class.
 
@@ -684,9 +704,9 @@ class BaseTaskPool:
         self.worker_refresh_rate = worker_refresh_rate
         self.idle_refresh_rate = idle_refresh_rate
 
-        self._pool = []         # List of tasks waiting to be executed
-        self._active = []       # List of tasks currently being executed
-        self._complete = []     # List of tasks that have completed execution
+        self._pool = []  # List of tasks waiting to be executed
+        self._active = []  # List of tasks currently being executed
+        self._complete = []  # List of tasks that have completed execution
 
         from threading import Thread
         self._minder_thread = Thread(target=self._worker, daemon=True)  # Thread to manage the task pool
@@ -822,5 +842,3 @@ class BaseTaskPool:
                 return pool
 
         return []
-
-

@@ -411,36 +411,36 @@ class TestMongoTask(BaseTestCase):
         self.assertFalse(task_chain.errors)
         self.assertEqual(len(task_chain.result['data']), 10)
 
-    def test_method_subcommand(self):
-        """
-        This test checks if commands like 'find.explain()' return the expected result.
-        """
-
-        task_chain_configuration = {
-            'chain': {
-                'name': 'test_chain',
-                'tasks': [
-                    {
-                        'mongo': {
-                            'name': 'find.explain test',
-                            'silo': 'test_silo',
-                            'collection': 'users',
-                            'result_as': 'mongo_result',
-                            'command': 'find.explain',
-                            'arguments': {
-                                'filter': {}
-                            }
-                         }
-                    }
-                ]
-            }
-        }
-
-        task_chain = task_chain_from_dict(template=task_chain_configuration)
-        task_chain.run()
-
-        self.assertFalse(task_chain.errors)
-        self.assertIn('command', task_chain.result['data'].keys())
+    # def test_method_subcommand(self):
+    #     """
+    #     This test checks if commands like 'find.explain()' return the expected result.
+    #     """
+    #
+    #     task_chain_configuration = {
+    #         'chain': {
+    #             'name': 'test_chain',
+    #             'tasks': [
+    #                 {
+    #                     'mongo': {
+    #                         'name': 'find.explain test',
+    #                         'silo': 'test_silo',
+    #                         'collection': 'users',
+    #                         'result_as': 'mongo_result',
+    #                         'command': 'find.explain',
+    #                         'arguments': {
+    #                             'filter': {}
+    #                         }
+    #                      }
+    #                 }
+    #             ]
+    #         }
+    #     }
+    #
+    #     task_chain = task_chain_from_dict(template=task_chain_configuration)
+    #     task_chain.run()
+    #
+    #     self.assertFalse(task_chain.errors)
+    #     self.assertIn('command', task_chain.result['data'].keys())
 
 
 class TestRedisTask(BaseTestCase):

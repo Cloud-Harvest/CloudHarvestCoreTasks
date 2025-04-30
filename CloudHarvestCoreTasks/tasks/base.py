@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from types import GeneratorType
 from typing import Any, List, Literal
 
 from logging import getLogger
@@ -46,13 +47,15 @@ class BaseTask:
                  data: Any = None,
                  description: str = None,
                  ignore_filters: bool = False,
-                 iterate: dict = None,
+                 iterate: str = None,
                  on: dict = None,
                  task_chain: Any = None,
                  result_as: (dict or str) = None,
                  retry: dict = None,
                  filters:dict = None,
                  when: str = None,
+                 result_to_dict_key: str = None,
+                 result_to_list_with_key: str = None,
                  **kwargs):
 
         """
@@ -88,6 +91,7 @@ class BaseTask:
                 >>> result_as = {
                 >>>     'name': 'variable_name',
                 >>>     'mode': 'append', 'extend', 'merge', 'overwrite'    # The mode to store the result in the variable. 'overwrite' is the default.
+                >>>     'include': {'key': 'value'}                         # A dictionary of values to include in the result.
                 >>> }
             filters (dict): A dictionary of user filters to apply to the data.
                 >>> filters = {
@@ -102,6 +106,9 @@ class BaseTask:
                 >>> }
             when (str): A string representing a conditional argument using Jinja2 templating. If provided, the task
                 will only run if the condition evaluates to True.
+            result_to_dict_key (str, optional): the results are converted to a dictionary under the specified key
+            result_to_list_with_key (str, optional): the list of results is converted to a list of dictionaries under the specified key
+
                 >>> when: {{ var.variable_name == "value" }}
         """
 
@@ -111,7 +118,7 @@ class BaseTask:
         self.data = data
         self.description = description
         self.ignore_filters = ignore_filters
-        self.iterate = iterate or {}
+        self.iterate = iterate
         self.on = on or {}
         self.output = None
         self.result_as = result_as
@@ -119,6 +126,8 @@ class BaseTask:
         from CloudHarvestCoreTasks.chains.base import BaseTaskChain
         self.task_chain: BaseTaskChain = task_chain
         self.when = when
+        self.result_to_dict_key = result_to_dict_key
+        self.result_to_list_with_key = result_to_list_with_key
 
         # Programmatic attributes
         self.attempts = 0
@@ -301,7 +310,8 @@ class BaseTask:
                 'duration': self.duration,
                 'status': self.status
             }
-        return self
+
+            return self
 
     def _run_on_directive(self, directive: str):
         """
@@ -339,9 +349,57 @@ class BaseTask:
             BaseTask: The instance of the task.
         """
 
+        if self.result_to_list_with_key:
+            self.result = [
+                {self.result_to_list_with_key: record}
+                for record in self.result
+            ]
+
+        if self.result_to_dict_key:
+            self.result = {
+                self.result_to_dict_key: self.result
+            }
+
+        # If defined in the `result_as`, included values will be populated into the result
+        if isinstance(self.result_as, dict):
+            include = self.result_as.get('include')
+
+            if isinstance(include, dict):
+                if isinstance(self.result, dict):
+                    self.result |= include
+
+                elif isinstance(self.result, list):
+                    for record in self.result:
+                        if isinstance(record, dict):
+                            record |= include
+
         # Store the result in the task chain's variables if a result_as variable is provided
         if self.result_as and self.task_chain:
-            self.task_chain.variables[self.result_as] = self.result
+            if isinstance(self.result_as, dict):
+                result_as_name = self.result_as.get('name')
+                result_as_mode = self.result_as.get('mode') or 'overwrite'
+
+            else:
+                result_as_name = self.result_as
+                result_as_mode = 'overwrite'
+
+            match result_as_mode:
+                case 'append':
+                    self.task_chain.variables[result_as_name].append(self.result)
+
+                case 'extend':
+                    self.task_chain.variables[result_as_name].extend(self.result)
+
+                case 'locked':
+                    if result_as_mode not in self.task_chain.variables:
+                        self.task_chain.variables[result_as_name] = self.result
+
+                case 'merge':
+                    self.task_chain.variables[result_as_name] |= self.result
+
+                # The default behavior is to override the variable
+                case _:
+                    self.task_chain.variables[result_as_name] = self.result
 
         # Run the on_complete directive
         self._run_on_directive('complete')
@@ -457,8 +515,9 @@ class BaseDataTask(BaseTask):
     # specific configuration keys.
     REQUIRED_CONFIGURATION_KEYS = ()
 
-    def __init__(self, command: str,
+    def __init__(self,
                  silo: str,
+                 command: str = None,
                  arguments: dict = None,
                  *args, **kwargs):
         """
@@ -471,9 +530,9 @@ class BaseDataTask(BaseTask):
         from the stored Silos dictionary. 'silo' always takes precedence over the host configuration.
 
         Args:
-            command (str): The command to run on the data provider.
-            arguments (dict, optional): Arguments to pass to the command.
             silo (str, optional): The name of the silo to use for the task. Defaults to None.
+            command (str, optional): The command to run on the data provider. Defaults to None. Subclasses should implement a default command.
+            arguments (dict, optional): Arguments to pass to the command.
         """
 
         # Initialize the BaseTask class
@@ -495,52 +554,52 @@ class BaseDataTask(BaseTask):
     def __exit__(self, exc_type, exc_val, exc_tb):
         return None
 
-    @property
-    def base_command_part(self):
-        """
-        Extracts the actual command from 'self.command' and returns it while preserving the path of the original command.
-        """
-
-        result = self.command
-
-        if '.' in self.command:
-            # Extract the command from the string
-            result = self.command.split('.')[0]
-
-        elif '[' and ']' in self.command:
-            # Extract the command from the string
-            result = self.command.split('[')[0]
-
-        return result
-
-    def walk_result_command_path(self, result: Any) -> Any:
-        """
-        Walks the command path and returns the result, if applicable.
-
-        >>> # The Task Configuration supplies the command 'find.row_count'. row_count is a property of the find command.
-        >>> self.command = 'find.row_count'
-        >>> # The find command returns CursorType() which is stored in the variable 'result'.
-        >>> result = CursorType()
-        >>> # The walk_result_command_path() method will walk the command path and return CursorType().row_count.
-        >>> self.walk_result_command_path(result)
-        >>> # The final result is returned.
-        >>> 10
-        """
-
-        if '.' in self.command or ('[' and ']') in self.command:
-            # Walk the command path and return the result, if applicable
-            self.task_chain.variables[self.base_command_part] = result
-
-            # Walks the command path and returns the result. This allows commands such as MongoDb's 'find.row_count'.
-            from CloudHarvestCoreTasks.factories import replace_variable_path_with_value
-            result: Any = replace_variable_path_with_value(original_string=f'var.{self.command}',
-                                                           task_chain=self.task_chain,
-                                                           fail_on_unassigned=True)
-
-            # Removes the command from the variables
-            self.task_chain.variables.pop(self.base_command_part)
-
-        return result
+    # @property
+    # def base_command_part(self):
+    #     """
+    #     Extracts the actual command from 'self.command' and returns it while preserving the path of the original command.
+    #     """
+    #
+    #     result = self.command
+    #
+    #     if '.' in self.command:
+    #         # Extract the command from the string
+    #         result = self.command.split('.')[0]
+    #
+    #     elif '[' and ']' in self.command:
+    #         # Extract the command from the string
+    #         result = self.command.split('[')[0]
+    #
+    #     return result
+    #
+    # def walk_result_command_path(self, result: Any) -> Any:
+    #     """
+    #     Walks the command path and returns the result, if applicable.
+    #
+    #     >>> # The Task Configuration supplies the command 'find.row_count'. row_count is a property of the find command.
+    #     >>> self.command = 'find.row_count'
+    #     >>> # The find command returns CursorType() which is stored in the variable 'result'.
+    #     >>> result = CursorType()
+    #     >>> # The walk_result_command_path() method will walk the command path and return CursorType().row_count.
+    #     >>> self.walk_result_command_path(result)
+    #     >>> # The final result is returned.
+    #     >>> 10
+    #     """
+    #
+    #     if '.' in self.command or ('[' and ']') in self.command:
+    #         # Walk the command path and return the result, if applicable
+    #         self.task_chain.variables[self.base_command_part] = result
+    #
+    #         # Walks the command path and returns the result. This allows commands such as MongoDb's 'find.row_count'.
+    #         from CloudHarvestCoreTasks.factories import replace_variable_path_with_value
+    #         result: Any = replace_variable_path_with_value(original_string=f'var.{self.command}',
+    #                                                        task_chain=self.task_chain,
+    #                                                        fail_on_unassigned=True)
+    #
+    #         # Removes the command from the variables
+    #         self.task_chain.variables.pop(self.base_command_part)
+    #
+    #     return result
 
 
 class BaseFilterableTask(BaseTask):

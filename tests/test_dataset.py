@@ -107,6 +107,12 @@ class TestDataSet(unittest.TestCase):
         self.assertEqual(len(self.dataset), 4)
         self.assertEqual(self.dataset[-1], self.dataset[0])
 
+    def test_count_elements(self):
+        self.dataset.count_elements(source_key='tags', target_key='tags_count')
+        for record in self.dataset:
+            self.assertIn('tags_count', record)
+            self.assertEqual(record['tags_count'], len(record['tags']))
+
     def test_flatten_and_unflatten(self):
         self.dataset.flatten()
         for record in self.dataset:
@@ -299,6 +305,22 @@ class TestDataSet(unittest.TestCase):
         self.assertEqual(self.dataset[2]['name'], 'Jane Smith')
         self.assertEqual(self.dataset[2].walk('address.zip'), '67890')
 
+    def split_key_to_keys(self):
+        self.dataset.split_key_to_keys(
+            source_key='address.street',
+            target_keys=['address.street_number', 'address.street_name', 'address.street_type'],
+            separator=' ',
+            preserve_source_key=True
+        )
+
+        for record in self.dataset:
+            self.assertIn('address.street_number', record)
+            self.assertIn('address.street_name', record)
+            self.assertIn('address.street_type', record)
+            self.assertEqual(record['address.street_number'], record['address.street'].split(' ')[0])
+            self.assertEqual(record['address.street_name'], record['address.street'].split(' ')[0])
+            self.assertEqual(record['address.street_type'], record['address.street'].split(' ')[0])
+
     def test_unwind_and_wind(self):
         self.dataset.unwind('tags')
         self.assertEqual(len(self.dataset), 4)
@@ -310,6 +332,92 @@ class TestDataSet(unittest.TestCase):
         self.assertEqual(len(self.dataset), 3)
         for record in self.dataset:
             self.assertIsInstance(record['tags'], list)
+
+    def test_create_index(self):
+        self.dataset.create_index(name='address_state_index', keys=['address.state'])
+
+        self.assertEqual(self.dataset.indexes['address_state_index']['keys'], ['address.state'])
+        self.assertEqual(list(self.dataset.indexes['address_state_index']['values'].keys()), ['CA', 'TX', 'NY'])
+
+        for index_definition, records in self.dataset.indexes['address_state_index']['values'].items():
+            self.assertEqual(len(records), 1)
+            self.assertEqual(index_definition, records[0].walk('address.state'))
+
+    def test_drop_index(self):
+        self.dataset.create_index(name='address_state_index', keys=['address.state'])
+        self.dataset.drop_index('address_state_index')
+
+        self.assertNotIn('address_state_index', self.dataset.indexes)
+
+    def test_find_index(self):
+        self.dataset.create_index(name='address_state_index', keys=['address.state'])
+        index = self.dataset.find_index(keys=['address.state'])
+
+        self.assertEqual(index, 'address_state_index')
+
+    def test_refresh_index(self):
+        self.dataset.create_index(name='address_state_index', keys=['address.state'])
+
+        self.dataset[0].assign('address.state', 'TX')
+        self.dataset.refresh_index('address_state_index')
+
+        self.assertEqual(len(self.dataset.indexes['address_state_index']['values']), 2)
+        self.assertEqual(list(self.dataset.indexes['address_state_index']['values'].keys()), ['TX', 'NY'])
+
+    def test_inner_join(self):
+        righthand_dataset = DataSet([
+            {
+                'name': 'John Doe',
+                'dob': '1990-01-01',
+                'medications': ['med-1, med-2']
+            },
+            {
+                'name': 'Jane Smith',
+                'dob': '1985-05-15',
+                'medications': ['med-3']
+            },
+            # intentionally not included for inner join test
+            # {
+            #     'name': 'Jane Smith',
+            #     'dob': '1992-07-20',
+            # }
+
+        ])
+
+        self.dataset.join(righthand_dataset, left_keys=['name', 'dob'], right_keys=['name', 'dob'], inner=True)
+
+        self.assertEqual(len(self.dataset), 2)
+        for record in self.dataset:
+            self.assertIn('medications', record)
+            self.assertIsInstance(record['medications'], list)
+            self.assertEqual(record['medications'], ['med-1, med-2'] if record['name'] == 'John Doe' else ['med-3'])
+
+    def test_join(self):
+        righthand_dataset = DataSet([
+            {
+                'name': 'John Doe',
+                'dob': '1990-01-01',
+                'medications': ['med-1, med-2']
+            },
+            {
+                'name': 'Jane Smith',
+                'dob': '1985-05-15',
+                'medications': ['med-3']
+            },
+            # intentionally not included for inner join test
+            # {
+            #     'name': 'Jane Smith',
+            #     'dob': '1992-07-20',
+            # }
+
+        ])
+
+        self.dataset.join(righthand_dataset, left_keys=['name', 'dob'], right_keys=['name', 'dob'], inner=False)
+
+        self.assertEqual(len(self.dataset), 3)
+        self.assertEqual(self.dataset[0]['medications'], ['med-1, med-2'])
+        self.assertEqual(self.dataset[1]['medications'], ['med-3'])
+        self.assertNotIn('medications', self.dataset)
 
 class TestWalkableDict(unittest.TestCase):
     def setUp(self):
@@ -370,6 +478,30 @@ class TestWalkableDict(unittest.TestCase):
         }
         for record in self.dataset:
             self.assertEqual(record.map(), expected_map)
+
+    def test_replace(self):
+        from CloudHarvestCoreTasks.dataset import WalkableDict
+        test_dict = WalkableDict({
+            'whole_string_replacement': 'var.test-string',
+            'substring_replacement': 'my var.test-string is here',
+            'multi_var_replacement': 'var.test-string var.test-string-2',
+            'nested_substring_replacement': [
+                {'nested_key': 'my var.test-string is here'},
+                'var.test-dict'
+            ],
+            'no_change': 'this should not change',
+            'no_replacement_var': 'var.does-not-exist',
+        })
+
+        result = test_dict.replace(variables={'var': {'test-string': 'replaced', 'test-string-2': 'replaced2', 'test-dict': {'key': 'value'}}})
+
+        self.assertEqual(result['whole_string_replacement'], 'replaced')
+        self.assertEqual(result['substring_replacement'], 'my replaced is here')
+        self.assertEqual(result['multi_var_replacement'], 'replaced replaced-2')
+        self.assertEqual(result['nested_substring_replacement'][0]['nested_key'], 'my replaced is here')
+        self.assertEqual(result['nested_substring_replacement'][1], {'key': 'value'})
+        self.assertEqual(result['no_change'], 'this should not change')
+        self.assertEqual(result['no_replacement_var'], 'var.does-not-exist')
 
     def test_walk(self):
         for record in self.dataset:

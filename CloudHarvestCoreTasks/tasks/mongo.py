@@ -23,16 +23,14 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
         """
         super().__init__(*args, **kwargs)
 
-        # Make sure the default pipeline is a list
-        if self.command == 'aggregate' and not self.arguments.get('pipeline'):
-            self.arguments['pipeline'] = []
-
+        # The default command for MongoTasks is 'aggregate'
+        self.command = self.command or 'aggregate'
         self.collection = collection
         self.result_attribute = result_attribute
 
         self.order_of_operations = (
             'matches',      # Filter the data
-            'add_keys',     # Need all possible keys for matching and sorting
+            'add_keys',     # Add keys to the data
             'sort',         # Sort the data
             'project',      # Project the data
             'limit',        # Limit the data
@@ -74,19 +72,26 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
 
         return self
 
-    def _filter_add_keys(self, *args, **kwargs) -> dict or None:
+    def _filter_add_keys(self, *args, **kwargs) -> None:
         """
-        This method returns the keys to be added to the data. If the keys already exist, their existing values are preserved.
+        This method identifies the first $projection in the pipeline and adds the desired keys to the projection.
+        Where the key contains the period character, the period is removed from the key.
+
+        Returns
+            None: This method does not return anything. It modifies the pipeline in place.
         """
+
         if self.add_keys:
-            return {
-                '$addFields': {
-                    key: {
-                        '$ifNull': [f'${key}', None]
-                    }
-                    for key in self.add_keys
-                }
-            }
+            # Find the first projection of the pipeline
+            for stage in self.arguments.get('pipeline') or []:
+                if list(stage.keys())[0] == '$project':
+                    # Add the keys to the projection
+                    for key in self.add_keys:
+                        stage['$project'][key] = 1
+
+                    break
+
+        return None
 
     def _filter_count(self, *args, **kwargs) -> dict or None:
         """
@@ -95,6 +100,8 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
 
         if self.count:
             return {'$count': self.count}
+
+        return None
 
     def _filter_exclude_keys(self, *args, **kwargs) -> dict or None:
         # MongoDb does not have a built-in excludeKeys method. Instead, we use the $project stage to exclude keys.
@@ -114,6 +121,8 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
         """
         if self.limit:
             return {'$limit': self.limit}
+
+        return None
 
     def _filter_matches(self, *args, **kwargs) -> dict or None:
         """
@@ -177,7 +186,12 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
                 case '!=':
                     result = {
                         match.key: {
-                            "$ne": match.value
+                            "$not": {
+                                {
+                                    "$regex": str(match.value),
+                                    "options": "i"
+                                }
+                            }
                         }
                     }
 
@@ -201,6 +215,9 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
             return result
 
         matches_results = []
+
+        if not self.matches:
+            return None
 
         # Convert the matches to a MatchSetGroup
         self.matches = MatchSetGroup(self.matches)
@@ -243,11 +260,13 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
         """
         This method returns a Mongo projection of the desired keys. This stage is unique to Mongo.
         """
-        return {
-            '$project': {
+        result = {
                 key: 1
                 for key in self.filter_keys()
             }
+
+        return {
+            "$project": result
         }
 
     def _filter_sort(self) -> dict or None:
@@ -265,6 +284,8 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
             return {
                 '$sort': result
             }
+
+        return None
 
     def method(self, *args, **kwargs):
         """
@@ -295,9 +316,7 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
         # Execute the command on the database or collection
         self.calls += 1
 
-        result = self.walk_result_command_path(
-            getattr(database_object, self.base_command_part)(**self.arguments)
-        )
+        result = getattr(database_object, self.command)(**self.arguments)
 
         # Convert the result to a list if it is a generator or cursor
         from types import GeneratorType

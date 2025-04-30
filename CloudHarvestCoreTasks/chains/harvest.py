@@ -21,6 +21,7 @@ class BaseHarvestTaskChain(BaseTaskChain):
                  unique_identifier_keys: (str or List[str]),
                  destination_silo: str = 'harvest-core',
                  extra_matadata_fields: (str or List[str]) = None,
+                 identifiers: List[str] = None,
                  mode: Literal['all', 'single'] = 'all',
                  *args, **kwargs):
 
@@ -35,6 +36,7 @@ class BaseHarvestTaskChain(BaseTaskChain):
         unique_identifier_keys (str or List[str]): The unique filter keys for the harvested data
         destination_silo (str, optional): The name of the destination silo where the harvested data will be stored
         extra_matadata_fields (str or List[str], optional): Additional metadata fields to include in the harvested data's metadata record
+        identifiers (List[str], optional): A list of identifiers to use for non-all modes
         mode (str, optional): The mode of the harvest task chain. 'all' will harvest all data, 'single' will harvest a single record
 
         Exposes
@@ -69,11 +71,6 @@ class BaseHarvestTaskChain(BaseTaskChain):
         >>> }
         """
 
-        # Update the template based on the mode
-        if isinstance(kwargs['tasks'], dict):
-            if kwargs['tasks'].get('all') and kwargs['tasks'].get('single'):
-                kwargs['tasks'] = kwargs['tasks']['mode']
-
         super().__init__(*args, **kwargs)
 
         # Set the class attributes
@@ -82,28 +79,50 @@ class BaseHarvestTaskChain(BaseTaskChain):
         self.type = type
         self.account = account
         self.region = region
+        self.identifiers = identifiers
         self.mode = mode
         self.destination_silo = destination_silo
         self.unique_identifier_keys = [unique_identifier_keys] if isinstance(unique_identifier_keys, str) else unique_identifier_keys
         self.extra_metadata_fields = [extra_matadata_fields] if isinstance(extra_matadata_fields, str) else extra_matadata_fields or []
 
         # Computed attributes
-        self.replacement_collection_name = f'{self.platform}_{self.service}_{self.type}'
+        self.replacement_collection_name = '.'.join((self.platform, self.service, self.type))
 
         # Insert a HarvestTask template into the end of the task chain
-        template = {
+        # This task will update the Harvest Persistent Storage with the latest data. We add a task to the task list
+        # to reduce the toil of having to do this manually for each template. Further, we add it as a separate task to
+        # capture metrics on the time it takes to update the Harvest Persistent Storage.
+        record_update_template = {
             'harvest_update': {
                 'name': f'{self.destination_silo}:{self.platform}/{self.service}/{self.type}/{self.account}/{self.region}',
                 'description': 'Updates the Harvest Persistent Storage with the latest data',
-                'data': 'var.result',
                 'result_as': 'result',
+                'platform': self.platform,
+                'service': self.service,
+                'type': self.type,
+                'account': self.account,
+                'region': self.region,
+                'identifiers': self.identifiers,
+                'unique_identifier_keys': self.unique_identifier_keys,
             }
         }
 
-        self.task_templates.append(template)
+        # Update the task templates based on the mode
+        if isinstance(self.task_templates, dict):
+            if kwargs['tasks'].get(self.mode):
+                self.task_templates = kwargs['tasks'][self.mode]
+
+            elif 'all' in kwargs['tasks'].keys():
+                self.task_templates = kwargs['tasks']['all']
+
+            else:
+                from CloudHarvestCoreTasks.exceptions import TaskChainException
+                raise TaskChainException(f'Invalid mode: {self.mode} for {self.name}. Valid modes are {list(self.task_templates.keys())}.')
+
+        self.task_templates.append(record_update_template)
 
         # Expose the platform, service, type, account, and region as variables
-        self.variables['pstar'] = {
+        self.variables |= {
             'platform': self.platform,
             'service': self.service,
             'type': self.type,

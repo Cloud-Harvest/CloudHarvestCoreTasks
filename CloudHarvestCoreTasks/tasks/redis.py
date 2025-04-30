@@ -37,6 +37,9 @@ class RedisTask(BaseDataTask):
         # Initialize the BaseDataTask class
         super().__init__(*args, **kwargs)
 
+        # The default command for RedisTask is 'get'
+        self.command = self.command or 'get'
+
         self.expire = expire
         self.serialization = serialization
 
@@ -58,9 +61,7 @@ class RedisTask(BaseDataTask):
         of the Redis api and the need to serialize and deserialize data.
         """
 
-        result = self.walk_result_command_path(
-            getattr(self, f'redis_{self.base_command_part}')()
-        )
+        result = getattr(self, f'redis_{self.command}')()
 
         self.result = result
 

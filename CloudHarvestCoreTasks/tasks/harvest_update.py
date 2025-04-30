@@ -1,8 +1,10 @@
 from CloudHarvestCorePluginManager import register_definition
+from CloudHarvestCoreTasks.dataset import WalkableDict
 from CloudHarvestCoreTasks.tasks.base import BaseTask
 from CloudHarvestCoreTasks.exceptions import TaskException
 
 from typing import List
+from pymongo import ReplaceOne
 
 
 @register_definition(name='harvest_update', category='task')
@@ -18,12 +20,11 @@ class HarvestUpdateTask(BaseTask):
         'Type',                         # The Service subtype, if applicable (ie RDS instance, EC2 event)
         'Account',                      # The Platform account name or identifier
         'Region',                       # The geographic region name for the Platform
-        'UniqueIdentifierKeys',             # UniqueIdentifierKeys requires at least one value, so .0 is expected
+        'UniqueIdentifierKeys',         # UniqueIdentifierKeys requires at least one value, so .0 is expected
         'Module.Author',                # The author of the Harvest module
         'Module.Name',                  # The name of the Harvest module that collected the data
         'Module.Url',                   # The repository where the Harvest module is stored
         'Module.Version',               # The version of the Harvest module
-        'Dates.DeactivatedOn',          # The date the record was deactivated, if applicable
         'Dates.LastSeen',               # The date indicating when the record was last collected by Harvest
         'Active'                        # A boolean indicating if the record is active
     )
@@ -31,8 +32,8 @@ class HarvestUpdateTask(BaseTask):
     def __init__(self, *args, **kwargs):
         """
         Initializes a new instance of the HarvestRecordUpdateTask class. This class is used to update records in the
-        destination silo and the metadata silo with the data collected in the BaseHarvestTaskChain. This task is
-        automatically added to the end of the task chain by the BaseHarvestTaskChain class.
+        destination silo, pstar, and the metadata silos with the data collected in the BaseHarvestTaskChain. This task
+        is automatically added to the end of the task chain by the BaseHarvestTaskChain class.
 
         HarvestRecordUpdateTask accepts no arguments. They are instead supplied by the BaseHarvestTaskChain. Indeed,
         the HarvestRecordUpdateTask exists to separate the functionality of updating records from the BaseHarvestTaskChain
@@ -53,11 +54,21 @@ class HarvestUpdateTask(BaseTask):
         from typing import cast
         self.task_chain = cast(BaseHarvestTaskChain, self.task_chain)
 
+    @property
+    def pstar_identifier(self) -> dict:
+        return {
+            'Platform': self.task_chain.platform,
+            'Service': self.task_chain.service,
+            'Type': self.task_chain.type,
+            'Account': self.task_chain.account,
+            'Region': self.task_chain.region or 'global'
+        }
+
     def method(self) -> 'HarvestUpdateTask':
         """
         Executes the task.
 
-        Returns:
+        Returns
             HarvestUpdateTask: The current instance of the HarvestTask class.
         """
 
@@ -73,39 +84,67 @@ class HarvestUpdateTask(BaseTask):
                 raise TaskException(self, f'Unable to connect to the {silo_name} silo. {str(ex)}')
 
         # Attach metadata to the records
-        data = self.attach_metadata_to_records(data=self.data, metadata=self.build_metadata())
+        data = self.attach_metadata_to_records()
 
         # Bulk Replace the records in the destination silo and the metadata in the metadata silo
-        unique_filters = self.replace_bulk_records(data=data)
+        unique_identifiers = self.replace_bulk_records(data)
 
         # Deactivate records that were not found in this data collection operation on the destination silo and the metadata silo
-        deactivation_results = self.deactivate_records(unique_filters=unique_filters)
+        deactivation_results = self.deactivate_records(unique_identifiers)
 
         self.result = {
             'RecordsProcessed': len(data),
-            'RecordsReplaced': len(unique_filters),
+            'RecordsReplaced': len(unique_identifiers),
             'DeactivationResults': deactivation_results
         }
 
+        self.record_pstar()
+
         return self
 
-    @staticmethod
-    def attach_metadata_to_records(data: List[dict], metadata: dict) -> List[dict]:
+    def attach_metadata_to_records(self) -> List[dict]:
         """
         This method attaches metadata to the records in the data list. It also generates the UniqueIdentifier for each record.
 
-        Arguments:
-            data (List[dict]): The list of records to attach metadata to.
-            metadata (dict): The metadata to attach to the records.
+        Returns
+            List[dict]: The list of records with the attached metadata.
         """
+        from copy import deepcopy
 
-        for record in data:
-            # Generate this record's unique filter
-            from CloudHarvestCoreTasks.functions import get_nested_values
-            unique_identifier = '-'.join([get_nested_values(s=field, d=record)[0] for field in metadata['UniqueIdentifierKeys']])
+        metadata = self.build_metadata()
+
+        # Take the result from the second to last task in the task chain and attach the metadata to each record
+        # The last task in the chain is this harvest_update task, so results must be from the preceding task
+        data = self.task_chain.variables.get('result') or self.task_chain[-2].result or []
+
+        # Make sure the data is a DataSet object
+        from CloudHarvestCoreTasks.dataset import DataSet
+        data = DataSet(data) if not isinstance(data, DataSet) else data
+
+        for record in self.task_chain.variables.get('result') or self.task_chain[-2].result or []:
+            # Make sure the Harvest metadata field exists
+            if 'Harvest' not in record.keys():
+                record['Harvest'] = {}
+
+            # Merges any existing metadata with the new metadata, overwriting any existing fields
+            record['Harvest'] |= deepcopy(metadata)
+
+            # Generate this record's unique filter, which is a single string which combines the values of the  unique
+            # identifier keys. We accept that some values might be null and ignore them.
+            unique_identifier = []
+            for field in metadata['UniqueIdentifierKeys']:
+                field_value = record.walk(field)
+
+                if field_value is not None:
+                    unique_identifier.append(str(field_value))
+
+            unique_identifier = '-'.join(unique_identifier)
 
             # Attach existing metadata to the record
-            record.update({'Harvest': metadata | {'UniqueIdentifier': unique_identifier}})
+            record['Harvest']['UniqueIdentifier'] = unique_identifier
+
+            # The 'Account' field is a special case. It can be either the AccountName or the AccountId, depending on the data source.
+            record['Harvest']['Account'] = record.walk('Harvest.AccountName') or record.walk('Harvest.AccountId') or record.walk('Harvest.Account')
 
         return data
 
@@ -113,6 +152,7 @@ class HarvestUpdateTask(BaseTask):
         """
         This method generates metadata for the task chain based on the class attributes and the task chain's metadata.
         """
+        from datetime import datetime, timezone
 
         # PSTAR data
         pstar = {
@@ -134,7 +174,6 @@ class HarvestUpdateTask(BaseTask):
                 for k, v in getattr(self, '_harvest_plugin_metadata', {}).items()}
         }
 
-        from datetime import datetime, timezone
         dates = {
             'Dates': {
                 'DeactivatedOn': None,
@@ -151,13 +190,12 @@ class HarvestUpdateTask(BaseTask):
         }
 
         # Merge the components into a single metadata dictionary
-        result = pstar | build_components | dates | silo
+        result = WalkableDict(pstar | build_components | dates | silo)
 
         # Validate that all required metadata fields are present
-        from CloudHarvestCoreTasks.functions import get_nested_values
         missing_fields = [
             field for field in self.REQUIRED_METADATA_FIELDS
-            if not get_nested_values(s=field, d=result)
+            if result.walk(field) is None
         ]
 
         if missing_fields:
@@ -173,15 +211,11 @@ class HarvestUpdateTask(BaseTask):
         Args:
             data (List[dict]): The list of records to Replace.
 
-        Returns:
+        Returns
             list: The list of unique filters for the records that were processed.
         """
         replacements = []
         metadata =[]
-
-        from datetime import datetime, timezone
-        from pymongo import ReplaceOne
-        from CloudHarvestCoreTasks.silos import get_silo
 
         for record in data:
             # Remove an existing MongoDb _id field if it exists. This happens if the data source is MongoDB. We don't
@@ -197,9 +231,8 @@ class HarvestUpdateTask(BaseTask):
                                           upsert=True)
 
             # Gather the extra metadata fields for the record
-            from CloudHarvestCoreTasks.functions import get_nested_values
             extras = {
-                field: get_nested_values(s=field, d=record)
+                field: WalkableDict(record).walk(field)
                 for field in self.task_chain.extra_metadata_fields
             }
 
@@ -210,64 +243,40 @@ class HarvestUpdateTask(BaseTask):
             replacements.append(replace_resource)
             metadata.append(replace_meta)
 
-        def bulk_replace(silo_name: str, collection: str, prepared_replacements: List[ReplaceOne]) -> dict:
-            """
-            This method performs a bulk Replace operation on the specified silo.
-
-            Args:
-                silo_name (str): The name of the silo where the records will be Replaced.
-                collection (str): The name of the collection where the records will be Replaced.
-                prepared_replacements (List[ReplaceOne]): The list of Replace operations to perform.
-
-            Returns:
-                dict: The result of the Replace operation.
-            """
-            start_time = datetime.now(tz=timezone.utc)
-
-            silo = get_silo(silo_name)
-            client = silo.connect()
-
-            bulk_replace_results = client[silo.database][collection].bulk_write(requests=prepared_replacements)
-
-            end_time = datetime.now(tz=timezone.utc)
-
-            return {
-                'StartTime': start_time,
-                'BulkReplaceResults': bulk_replace_results,
-                'EndTime': end_time,
-            }
-
+        # Perform database replacement operations
         if replacements:
-            # Perform the bulk Replace operations
-            replacement_results = bulk_replace(silo_name=self.task_chain.destination_silo,
-                                               collection=self.task_chain.replacement_collection_name,
-                                               prepared_replacements=replacements)
+            # Replace the existing resource records
+            replacement_results = self.bulk_replace(silo_name=self.task_chain.destination_silo,
+                                                    collection=self.task_chain.replacement_collection_name,
+                                                    prepared_replacements=replacements)
 
             self.meta['Stages'].append({'BulkReplaceDocuments': replacement_results})
 
 
         if metadata:
-            metadata_results = bulk_replace(silo_name='harvest-core',
-                                            collection='metadata',
-                                            prepared_replacements=metadata)
+            # Replace the existing metadata records
+            metadata_results = self.bulk_replace(silo_name='harvest-core',
+                                                 collection='metadata',
+                                                 prepared_replacements=metadata)
 
             # Store the results in the metadata
             self.meta['Stages'].append({'BulkReplaceMetadata': metadata_results})
 
         # Gather ObjectId's of all the records that were processed based on the record['Harvest']['UniqueIdentifier']
         # and return them as a list for use in the deactivation process
-        unique_filters = [record['Harvest']['UniqueIdentifier'] for record in data]
+        return [
+            record['Harvest']['UniqueIdentifier']
+            for record in data
+        ]
 
-        return unique_filters
-
-    def deactivate_records(self, unique_filters: List[str]) -> dict:
+    def deactivate_records(self, unique_identifiers: List[str]) -> dict:
         """
         This method deactivates records that were not found in the current collection based on their unique filters.
 
         Args:
-            unique_filters (List[str]): The list of unique filters for the records to deactivate.
+            unique_identifiers (List[str]): The list of unique filters for the records to deactivate.
 
-        Returns:
+        Returns
             dict: The result of the deactivation operation.
         """
         try:
@@ -279,14 +288,39 @@ class HarvestUpdateTask(BaseTask):
             # - UniqueIdentifier not in the list of unique filters
             # - Account
             # - Region
+
             deactivate_records_start = datetime.now(tz=timezone.utc)
             deactivation_timestamp = datetime.now(tz=timezone.utc).isoformat()
 
+            from pymongo import MongoClient
             silo = get_silo(self.task_chain.destination_silo)
+            client: MongoClient = silo.connect()
 
+            collection = client[silo.database][self.task_chain.replacement_collection_name]
+
+            if self.task_chain.mode == 'all':
+                # Records to be deactivated
+                deactivate_records = [
+                    record['UniqueIdentifier']
+                    for record in collection.find({
+                        'Harvest.Account': self.task_chain.account,
+                        'Harvest.Region': self.task_chain.region,
+                    }, {'UniqueIdentifier': '$Harvest.UniqueIdentifier'})
+                    if record not in unique_identifiers
+                ]
+
+            else:
+                # More selective subset of entries
+                deactivate_records = [
+                    record
+                    for record in self.task_chain.identifiers
+                    if record not in unique_identifiers
+                ]
+
+            # Deactivate Records that were not found in this data collection operation (assumed to be inactive)
             deactivated_replacements = silo.connect()[silo.database][self.task_chain.replacement_collection_name].update_many(
                 filter={
-                    'Harvest.UniqueIdentifier': {'$nin': unique_filters},
+                    'Harvest.UniqueIdentifier': {'$in': deactivate_records},
                     'Harvest.Account': self.task_chain.account,
                     'Harvest.Region': self.task_chain.region
                 },
@@ -305,7 +339,7 @@ class HarvestUpdateTask(BaseTask):
                     'matched': deactivated_replacements.matched_count,
                     'modified': deactivated_replacements.modified_count
                 },
-                'EndTime': datetime.now(tz=timezone.utc)
+                'EndTime': deactivate_records_start
             }})
 
             # Deactivate Metadata records that were not found in this data collection operation (assumed to be inactive)
@@ -321,7 +355,7 @@ class HarvestUpdateTask(BaseTask):
             deactivated_metadata = silo.connect()[silo.database]['metadata'].update_many(
 
                 filter={
-                    'UniqueIdentifier': {'$nin': unique_filters},
+                    'UniqueIdentifier': {'$nin': unique_identifiers},
                     'Silo': self.task_chain.destination_silo,
                     'Collection': self.task_chain.replacement_collection_name,
                     'Harvest.Account': self.task_chain.account,
@@ -361,3 +395,72 @@ class HarvestUpdateTask(BaseTask):
                     'modified': deactivated_metadata.modified_count
                 }
             }
+
+    def record_pstar(self) -> 'HarvestUpdateTask':
+        """
+        This method records metadata about data collection operations in the harvest-core/pstar collection
+
+        Returns
+            HarvestUpdateTask: The current instance of the HarvestUpdateTask class.
+        """
+
+        from CloudHarvestCoreTasks.silos import get_silo
+        from pymongo import MongoClient
+
+        silo = get_silo('harvest-core')
+        client: MongoClient = silo.connect()
+
+        collection = client['harvest']['pstar']
+
+        # Get the old PSTAR record
+        old_pstar = collection.find_one(self.pstar_identifier) or {}
+
+        original_count = old_pstar.get('Count') or 0
+
+        from copy import deepcopy
+        metrics = deepcopy(self.task_chain.result['metrics'][-1])     # Provides totals for all metric stages
+        metrics['Stages'] = len(self.task_chain)
+
+        if original_count > 0 and self.result['RecordsProcessed'] == 0:
+            # Indicates that records were previously seen for this PSTAR, but no longer
+            metrics['Records'] = -1
+
+        else:
+            metrics['Records'] = self.result['RecordsProcessed']
+
+        result = self.pstar_identifier | metrics | {'Errors': self.task_chain.result['errors']}
+
+        collection.replace_one(self.pstar_identifier, result, upsert=True)
+
+        return self
+
+    @staticmethod
+    def bulk_replace(silo_name: str, collection: str, prepared_replacements: List[ReplaceOne]) -> dict:
+        """
+        This method performs a bulk Replace operation on the specified silo.
+
+        Args:
+            silo_name (str): The name of the silo where the records will be Replaced.
+            collection (str): The name of the collection where the records will be Replaced.
+            prepared_replacements (List[ReplaceOne]): The list of Replace operations to perform.
+
+        Returns
+            dict: The result of the Replace operation.
+        """
+        from datetime import datetime, timezone
+        from CloudHarvestCoreTasks.silos import get_silo
+
+        start_time = datetime.now(tz=timezone.utc)
+
+        silo = get_silo(silo_name)
+        client = silo.connect()
+
+        bulk_replace_results = client[silo.database][collection].bulk_write(requests=prepared_replacements)
+
+        end_time = datetime.now(tz=timezone.utc)
+
+        return {
+            'StartTime': start_time,
+            'BulkReplaceResults': bulk_replace_results,
+            'EndTime': end_time,
+        }

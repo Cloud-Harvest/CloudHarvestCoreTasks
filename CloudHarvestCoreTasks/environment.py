@@ -17,18 +17,11 @@ logger = getLogger('harvest')
 
 
 class Environment:
-    variables = WalkableDict()
+    _variables = WalkableDict()
 
-    @staticmethod
-    def __getitem__(key: str) -> Any:
-        return Environment.variables[key]
 
-    @staticmethod
-    def __setitem__(key: str, value: Any) -> None:
-        Environment.variables[key] = value
-
-    @staticmethod
-    def add(name: str, value: Any, overwrite: bool = False):
+    @classmethod
+    def add(cls, name: str, value: Any, overwrite: bool = False):
         """
         Adds an environment variable to the Environment class.
 
@@ -41,26 +34,30 @@ class Environment:
             None
         """
 
-        if name not in Environment.variables or overwrite:
-            Environment.variables[name] = value
+        if name not in cls._variables or overwrite:
+            cls._variables[name] = value
 
-    @staticmethod
-    def get(name: str, default: Any = None) -> Any:
+    @classmethod
+    def get(cls, name: str = None, default: Any = None) -> Any:
         """
         Retrieves the value of an environment variable from the Environment class.
 
         Arguments
-            name (str): The name of the environment variable.
+            name (str, optional): The name of the environment variable. If not provided, the method will return all variables.
             default (Any, optional): The default value to return if the variable does not exist. Defaults to None.
 
         Returns
             Any: The value of the environment variable, or the default value if it does not exist.
         """
 
-        return Environment.variables.get(name) or default
+        if name:
+            return cls._variables.walk(name) or default
 
-    @staticmethod
-    def load(path: str) -> None:
+        else:
+            return cls._variables
+
+    @classmethod
+    def load(cls, path: str) -> None:
         """
         Loads environment variables from a file into the Environment class. Accepted file formats are '.yaml' and '.json'.
 
@@ -80,11 +77,11 @@ class Environment:
             with open(path, 'r') as file:
                 if path.endswith('.yaml') or path.endswith('.yml'):
                     from yaml import load, FullLoader
-                    Environment.variables |= load(file, Loader=FullLoader)
+                    cls._variables |= load(file, Loader=FullLoader)
 
                 elif path.endswith('.json'):
                     from json import load
-                    Environment.variables |= load(file)
+                    cls._variables |= load(file)
 
                 else:
                     raise ValueError("Unsupported file format. Only '.yaml', '.yml', and '.json' are supported.")
@@ -95,8 +92,27 @@ class Environment:
         else:
             logger.info(f'Environment: successfully loaded {path}')
 
-    @staticmethod
-    def purge():
+    @classmethod
+    def merge(cls, *args: dict) -> None:
+        """
+        Merges multiple dictionaries into the Environment class.
+
+        Arguments
+            *args (dict): The dictionaries to merge.
+
+        Returns
+            None
+        """
+
+        for arg in args:
+            if isinstance(arg, dict):
+                cls._variables |= arg
+
+            else:
+                logger.warning(f'Argument {arg} is not a dictionary and will be ignored.')
+
+    @classmethod
+    def purge(cls) -> None:
         """
         Clears all environment variables from the Environment class. This method is intended for testing and not
         recommended for production use.
@@ -105,10 +121,10 @@ class Environment:
             None
         """
 
-        Environment.variables.clear()
+        cls._variables.clear()
 
-    @staticmethod
-    def remove(name: str) -> Any:
+    @classmethod
+    def remove(cls, name: str) -> Any:
         """
         Removes an environment variable from the Environment class.
 
@@ -119,5 +135,5 @@ class Environment:
             Any: The value of the removed variable, or None if the variable did not exist.
         """
 
-        if name in Environment.variables:
-            return Environment.variables.pop(name)
+        if name in cls._variables:
+            return cls._variables.pop(name)

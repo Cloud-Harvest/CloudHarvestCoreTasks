@@ -5,6 +5,8 @@ provide custom behavior. The BaseTask is not meant to be used directly, but rath
 
 * [Configuration](#configuration)
 * [Directives](#directives)
+  * [`iterate`](#iterate-directive)
+  * [`filters`](#filters-directive)
   * [`on` Directive](#on-directive)
   * [`result_as` Directive](#result_as-directive)
   * [`retry` Directive](#retry-directive)
@@ -16,19 +18,28 @@ There is no configuration path for the BaseTask as it should not be called direc
 ## Directives
 The standard arguments for all tasks which inherit BaseTask are as follows:
 
-| Directive                           | Optional | Default | Description                                                                                                                                              |
-|-------------------------------------|----------|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `name`                              | No       | N/A     | The name of the task. It can be anything that helps the user identify what the Task does.                                                                |
-| `blocking`                          | Yes      | `False` | When `True`, Tasks in the TaskChain wait until this Task completes before continuing. When `False`, the Task will run asynchronously.                    |
-| `data`                              | Yes      | `None`  | The input data for the task.                                                                                                                             |
-| `description`                       | Yes      | `""`    | A brief description of what the task does.                                                                                                               |
-| `ignore_filters`                    | Yes      | `False` | Prevents the `filters` directive from being executed.                                                                                                    |
-| `iterate`                           | Yes      | `None`  | Performs the same task for each item in a variable.                                                                                                      |
-| [`on`](#on-directive)               | Yes      | `{}`    | A dictionary of directives to run on specific events (e.g., `error`).                                                                                    |
-| [`result_as`](#result_as-directive) | Yes      | `""`    | The name under which the result will be stored in the task chain's variables. This makes the output of a Task available to other Tasks in the TaskChain. |
-| [`retry`](#retry-directive)         | Yes      | `{}`    | A dictionary containing retry configuration.                                                                                                             |
-| [`filters`](../filters.md)          | Yes      | `{}`    | Modifies the output of some tasks. See [filtering](../filters.md) for more information.                                                                  |
-| `when`                              | Yes      | `""`    | A condition that determines if the task should run. Uses Jinja2 formatting: `when: {{ var.variable_name == "value" }}`                                   |
+| Directive                           | Optional | Default | Description                                                                                                                                                                                 |
+|-------------------------------------|----------|---------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `name`                              | No       | N/A     | The name of the task. It can be anything that helps the user identify what the Task does.                                                                                                   |
+| `blocking`                          | Yes      | `False` | When `True`, Tasks in the TaskChain wait until this Task completes before continuing. When `False`, the Task will run asynchronously.                                                       |
+| `data`                              | Yes      |         | The input data for the task.                                                                                                                                                                |
+| `description`                       | Yes      |         | A brief description of what the task does.                                                                                                                                                  |
+| `ignore_filters`                    | Yes      | `False` | Prevents the `filters` directive from being executed.                                                                                                                                       |
+| `iterate`                           | Yes      |         | Performs the same task for each item in a variable.                                                                                                                                         |
+| [`on`](#on-directive)               | Yes      | `{}`    | A dictionary of directives to run on specific events (e.g., `error`).                                                                                                                       |
+| [`result_as`](#result_as-directive) | Yes      |         | The name under which the result will be stored in the task chain's variables. This makes the output of a Task available to other Tasks in the TaskChain.                                    |
+| [`retry`](#retry-directive)         | Yes      | `{}`    | A dictionary containing retry configuration.                                                                                                                                                |
+| [`filters`](../filters.md)          | Yes      | `{}`    | Modifies the output of some tasks. See [filtering](../filters.md) for more information.                                                                                                     |
+| `result_dict_to_keys`               | Yes      |         | The results are converted to a dictionary under the specified key.                                                                                                                          |
+| `result_to_list_with_key`           | Yes      |         | The list of results is converted to a list of dictionaries under the specified key. When `result_dict_to_keys` is also specified, this directive is performed first is performed **first**. |
+| `when`                              | Yes      |         | A condition that determines if the task should run. Uses Jinja2 formatting: `when: {{ var.variable_name == "value" }}`                                                                      |
+
+### `iterate` Directive
+
+| Directive | Optional | Default | Description                                                                                                                                                                                 |
+|-----------|----------|---------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `name`    | No       | N/A     | The name of the task. It can be anything that helps the user identify what the Task does.                                                                                                   |
+
 
 ### `on` Directive
 Executes a Task when a specific event occurs. Each event is a key in the dictionary, and the value is a list of Tasks to
@@ -36,10 +47,10 @@ run when the event occurs.
 
 | Directive  | Optional | Default | Description                                                                                                                                                                |
 |------------|----------|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `complete` | Yes      | `None`  | A Task to run when the Task completes successfully. This event may be redundant in a Task Chain. Instead, consider simply adding another Task in the chain after this one. |
-| `error`    | Yes      | `None`  | A Task to run when the Task encounters an error.                                                                                                                           |
-| `skipped`  | Yes      | `None`  | A Task to run when the Task is skipped.                                                                                                                                    |
-| `start`    | Yes      | `None`  | A Task to run when the Task starts. This event may be redundant in the Task Chain. Instead, consider simply adding another Task in the chain before this one.              |
+| `complete` | Yes      |   | A Task to run when the Task completes successfully. This event may be redundant in a Task Chain. Instead, consider simply adding another Task in the chain after this one. |
+| `error`    | Yes      |   | A Task to run when the Task encounters an error.                                                                                                                           |
+| `skipped`  | Yes      |   | A Task to run when the Task is skipped.                                                                                                                                    |
+| `start`    | Yes      |   | A Task to run when the Task starts. This event may be redundant in the Task Chain. Instead, consider simply adding another Task in the chain before this one.              |
 
 ```yaml
 error:
@@ -53,24 +64,55 @@ error:
 ```
 
 ### `result_as` Directive
-The `result_as` directive allows you to specify the name under which the result will be stored in the task chain's variables. 
-This makes the output of a Task available to other Tasks in the TaskChain. Information stored in this way can be accessed 
-by referencing the value of `result_as` and the `vars.` prefix. Therefore, if the `result_as` directive is set to `my_task_results`,
-the output of the Task can be accessed using `vars.my_task_results`.
+
+#### As a string
+The `result_as` directive stores the result of a task in the task chain as a variable which can be referenced later. Using
+the `var.` prefix. For example, a `result_as: my_variable` directive can be retrieved in a later task using the
+`var.my_variable` value.
 
 > If the same `result_as` name is used in multiple tasks, the value will be overwritten by the most recent task to use that name.
 
-Optionally, `result_as` accepts a dictionary with the following keys: `name` (as described above) and `mode`:
+```yaml
+tasks:
+  - dummy:
+      name: My Dummy Task
+      description: A task that does nothing when run.
+      result_as: my_variable
+```
 
-### `result_as` Modes
-When not specified, the default mode is `overwrite`.
+#### As a dictionary
 
-| Directive   | Description                                                                          |
-|-------------|--------------------------------------------------------------------------------------|
-| `append`    | Appends the result to the existing value of the variable. Expects a list.            |
-| `extend`    | Extends the existing value of the variable with the result. Expects a list.          |
-| `merge`     | Merges the existing value of the variable with the result. Expects a dictionary.     |
-| `overwrite` | Overwrites the existing value of the variable with the result. Expects a dictionary. |
+**Directives**
+
+| Directive  | Optional | Default     | Description                                             |
+|------------|----------|-------------|---------------------------------------------------------|
+| `name`     | No       |             | The variable name to use.                               |
+| `mode`     | Yes      | `overwrite` | How assignments of the same variable should be treated. |
+| `include`  | Yes      |             | A dictionary of key/values to include in the result.    |
+
+**Modes**
+
+| Directive   | Description                                                                                                                                                               |
+|-------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `append`    | Appends the result to the existing value of the variable. Expects a list.                                                                                                 |
+| `extend`    | Extends the existing value of the variable with the result. Expects a list.                                                                                               |
+| `locked`    | Once assigned, the variable cannot be modified by a task which uses the same `result_as` configuration (but may be modified by other tasks which do not specify `locked`) |
+| `merge`     | Merges the existing value of the variable with the result. Expects a dictionary.                                                                                          |
+| `overwrite` | (default) Overwrites the existing value of the variable with the result. Does not expect any specific type.                                                               |
+
+```yaml
+tasks:
+  - dummy:
+      name: My Dummy Task
+      description: A task that does nothing when run.
+      result_as:
+        name: my_variable
+        mode: append
+        include:
+          - key1: value1
+          - key2: value2
+
+```
 
 ### `retry` Directive
 The `retry` directive allows you to specify how many times a task should be retried and how long to wait between retries.
@@ -94,21 +136,25 @@ dummy:
 
 ## Example
 The following example describes how to use Tasks in a Report Task Chain to display the status of data collection jobs.
-Note that several of the directives mentioned in this document appear in each Task (`redis` and `dataset`).
+Note that several of the directives mentioned in this document appear in each Task (`redis` and `dataset`). This example
+is taken from the [CloudHarvestAgent](https://github.com/Cloud-Harvest/CloudHarvestAgent/tree/main/CloudHarvestAgent/templates/reports/harvest/jobs.yaml).
 
 ```yaml
 report:
+  name: Harvest Jobs
   description: Displays the data collection jobs and their status.
   headers:
+    - Start
+    - End
     - Id
     - Stage
     - Name
-    - Description
-    - Status
-    - Records
     - Duration
-    - Start
-    - End
+    - Status
+    - Errors
+    - Records
+    - Bytes
+    - Description
 
   tasks:
     # Data retrieval tasks
@@ -140,7 +186,10 @@ report:
         command: get
         arguments:
           patterns: "*"
-          keys: "meta"
+          keys:
+            - template
+            - metrics
+            - errors
         serialization: true
 
     # Data formatting tasks
@@ -169,9 +218,8 @@ report:
           - splice_key:
               source_key: _id
               start: 6
-          - unnest_records:
-              key_pattern: "meta.*"
-              nest_level: 1
+          - nest_keys:
+              source_keys: meta
 
     - dataset:
         name: Modify completed task data
@@ -183,17 +231,29 @@ report:
               keys: Stage
               default_value:  completed
           - unwind:
-              source_key: meta
-          - unnest_records:
-              key_pattern: "meta.*"
-              nest_level: 1
+              source_key: metrics
           - match_and_remove:
               matching_expressions:
-                - 'Position==Total'
+                - 'metrics.Position==Total'
+          - rename_keys:
+              mapping:
+                template.name: Name
+                template.description: Description
+                metrics.Position: Position
+                metrics.Status: Status
+                metrics.Records: Records
+                metrics.DataBytes: Bytes
+                metrics.Duration: Duration
+                metrics.Start: Start
+                metrics.End: End
+          - count_elements:
+              source_key: errors
+              target_key: Errors
 
     - dataset:
         name: Consolidate data
         description: Combines the data from the enqueued, active, and completed tasks.
+        filters: '.*'
         result_as: harvest_jobs
         stages:
           - add_records:

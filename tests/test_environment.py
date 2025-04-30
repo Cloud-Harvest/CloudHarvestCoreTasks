@@ -64,6 +64,8 @@ class TestEnvironment(unittest.TestCase):
         self.env.load('test_env.json')
         self.assertEqual(self.env.get('FILE_TEST_VAR'), 'file_test_value')
 
-    def test_splices(self):
-        self.env.add('SPLICE_TEST', 'test_value')
-        self.assertEqual(self.env['SPLICE_TEST'], 'test_value')
+    def test_merge(self):
+        self.env.load('test_env.yaml')
+        self.env.merge({'MERGED_VAR': 'merged_value'}, {'MERGED_VAR_2': 'merged_value_2'})
+        self.assertEqual(self.env.get('MERGED_VAR'), 'merged_value')
+        self.assertEqual(self.env.get('MERGED_VAR_2'), 'merged_value_2')

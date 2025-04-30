@@ -30,6 +30,7 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
 
         self.order_of_operations = (
             'matches',      # Filter the data
+            'add_keys',     # Add keys to the data
             'sort',         # Sort the data
             'project',      # Project the data
             'limit',        # Limit the data
@@ -86,7 +87,7 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
                 if list(stage.keys())[0] == '$project':
                     # Add the keys to the projection
                     for key in self.add_keys:
-                        stage['$project'][str(key).replace('.', '')] = f'${key}'
+                        stage['$project'][key] = 1
 
                     break
 

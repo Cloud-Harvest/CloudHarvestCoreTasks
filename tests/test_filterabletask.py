@@ -237,7 +237,7 @@ class TestMongoTaskFilters(unittest.TestCase):
 
         self.filters = {
             'accepted': '.*',
-            'add_keys': ['test_add_key'],
+            'add_keys': ['notes'],
             'exclude_keys': ['tags'],
             'headers': ['name', 'address.state', 'dob'],
             'matches': [['address.state=CA|TX']],
@@ -264,11 +264,12 @@ class TestMongoTaskFilters(unittest.TestCase):
         # Verify the records are properly filtered / processed
         self.assertEqual(len(self.task_chain.result['data']), 2)
         for record in self.task_chain.result['data']:
-            self.assertNotIn('tags', record.keys())        # explicitly removed with 'exclude_keys'
-            self.assertNotIn('email', record.keys())       # implicitly removed with 'headers'
+            self.assertNotIn('tags', record.keys())         # explicitly removed with 'exclude_keys'
+            self.assertNotIn('email', record.keys())        # implicitly removed with 'headers'
+            self.assertIn('notes', record.keys())           # explicitly added with 'add_keys'
 
             # Verifies that the nested key value is not None
-            for expected_key in ('name', 'address.state', 'dob'):
+            for expected_key in ('name', 'address.state', 'dob', 'notes'):
                 self.assertIsNotNone(record.walk(expected_key))
 
         self.assertEqual(self.task_chain.result['data'][0]['name'], 'Jane Smith')

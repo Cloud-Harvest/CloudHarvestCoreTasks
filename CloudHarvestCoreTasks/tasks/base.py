@@ -47,13 +47,15 @@ class BaseTask:
                  data: Any = None,
                  description: str = None,
                  ignore_filters: bool = False,
-                 iterate: dict = None,
+                 iterate: str = None,
                  on: dict = None,
                  task_chain: Any = None,
                  result_as: (dict or str) = None,
                  retry: dict = None,
                  filters:dict = None,
                  when: str = None,
+                 result_to_dict_key: str = None,
+                 result_to_list_with_key: str = None,
                  **kwargs):
 
         """
@@ -104,6 +106,9 @@ class BaseTask:
                 >>> }
             when (str): A string representing a conditional argument using Jinja2 templating. If provided, the task
                 will only run if the condition evaluates to True.
+            result_to_dict_key (str, optional): the results are converted to a dictionary under the specified key
+            result_to_list_with_key (str, optional): the list of results is converted to a list of dictionaries under the specified key
+
                 >>> when: {{ var.variable_name == "value" }}
         """
 
@@ -113,7 +118,7 @@ class BaseTask:
         self.data = data
         self.description = description
         self.ignore_filters = ignore_filters
-        self.iterate = iterate or {}
+        self.iterate = iterate
         self.on = on or {}
         self.output = None
         self.result_as = result_as
@@ -121,6 +126,8 @@ class BaseTask:
         from CloudHarvestCoreTasks.chains.base import BaseTaskChain
         self.task_chain: BaseTaskChain = task_chain
         self.when = when
+        self.result_to_dict_key = result_to_dict_key
+        self.result_to_list_with_key = result_to_list_with_key
 
         # Programmatic attributes
         self.attempts = 0
@@ -355,6 +362,17 @@ class BaseTask:
             BaseTask: The instance of the task.
         """
 
+        if self.result_to_list_with_key:
+            self.result = [
+                {self.result_to_list_with_key: record}
+                for record in self.result
+            ]
+
+        if self.result_to_list_with_key:
+            self.result = {
+                self.result_to_list_with_key: self.result
+            }
+
         # Store the result in the task chain's variables if a result_as variable is provided
         if self.result_as and self.task_chain:
             if isinstance(self.result_as, dict):
@@ -371,6 +389,10 @@ class BaseTask:
 
                 case 'extend':
                     self.task_chain.variables[result_as_name].extend(self.result)
+
+                case 'locked':
+                    if result_as_mode not in self.task_chain.variables:
+                        self.task_chain.variables[result_as_name] = self.result
 
                 case 'merge':
                     self.task_chain.variables[result_as_name] |= self.result

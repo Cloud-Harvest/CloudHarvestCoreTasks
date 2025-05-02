@@ -271,6 +271,7 @@ class BaseTaskChain(List[BaseTask]):
         """
 
         return {
+            'redis_name': self.redis_name,
             'id': self.id,
             'parent': self.parent,
             'name': self.name,

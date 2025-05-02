@@ -93,6 +93,9 @@ def task_chain_from_dict(template: dict, **kwargs) -> BaseTaskChain:
     if 'name' not in task_chain_configuration.keys():
         task_chain_configuration['name'] = task_chain_registered_class_name
 
+    # records the class name of the task chain in the configuration.
+    task_chain_configuration['chain_type'] = chain_class
+
     # Instantiate the task chain class.
     result = chain_class(template=task_chain_configuration, **task_chain_configuration | kwargs)
 

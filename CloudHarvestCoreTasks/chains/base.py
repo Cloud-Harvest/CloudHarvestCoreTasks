@@ -49,6 +49,8 @@ class BaseTaskChain(List[BaseTask]):
 
     def __init__(self,
                  template: dict,
+                 chain_type: str = None,
+                 parent: str = None,
                  variables: dict = None,
                  filters: dict = None,
                  *args, **kwargs):
@@ -59,8 +61,10 @@ class BaseTaskChain(List[BaseTask]):
             template(dict): The configuration for the task chain.
                 name(str): The name of the task chain.
                 tasks(List[dict]): A list of task configurations for the tasks in the chain.
+                chain_type(str): The type of the task chain (e.g., 'report', 'harvest').
                 description(str, optional): A brief description of what the task chain does. Defaults to None.
                 max_workers(int, optional): The maximum number of concurrent workers that are permitted.
+            parent (str, optional): A parent request uuid to associate with the task chain. Defaults to None.
             variables(dict, optional): Variables that can be used by the tasks in the chain. The dictionary is merged
                                         with into the BaseTaskChain.variables attribute. Defaults to None.
             filters(dict, optional): A dictionary of user filters to apply to the data. Defaults to an empty dictionary.
@@ -73,6 +77,8 @@ class BaseTaskChain(List[BaseTask]):
         self.id = str(uuid4())
 
         self.name = template['name']
+        self.parent = parent
+        self.chain_type = chain_type
         self.description = template.get('description')
         self.filters = filters or {}
 
@@ -252,6 +258,33 @@ class BaseTaskChain(List[BaseTask]):
         return task_metrics
 
     @property
+    def redis_name(self) -> str:
+        """
+        Returns the unique record identifier for the task.
+        """
+
+        return f'task:{self.parent or ""}:{self.id}'
+
+    def redis_struct(self) -> dict:
+        """
+        Returns specific keys stored in Redis.
+        """
+
+        return {
+            'id': self.id,
+            'parent': self.parent,
+            'name': self.name,
+            'type': self.chain_type,
+            'status': self.status,
+            'agent': None,  # populated by the agent,
+            'position': self.position,
+            'total': self.total,
+            'start': self.start,
+            'end': self.end,
+            'result': self.result
+        }
+
+    @property
     def result(self) -> dict:
         """
         Returns the result of the task chain.
@@ -315,7 +348,7 @@ class BaseTaskChain(List[BaseTask]):
             'counts': count_result
         }
 
-    def find_task_by_name(self, task_name: str) -> 'BaseTask':
+    def find_task_by_name(self, task_name: str) -> 'BaseTask' or None:
         """
         This method finds a task in the task chain by its name.
 
@@ -329,6 +362,8 @@ class BaseTaskChain(List[BaseTask]):
         for task in self:
             if task.name == task_name:
                 return task
+
+        return None
 
     def find_task_position_by_name(self, task_name: str) -> int:
         """
@@ -344,6 +379,8 @@ class BaseTaskChain(List[BaseTask]):
         for position, task in enumerate(self.task_templates):
             if task.name == task_name:
                 return position
+
+        return 0
 
     def get_variables_by_names(self, *variable_names) -> dict:
         """
@@ -481,10 +518,9 @@ class BaseTaskChain(List[BaseTask]):
             silo = get_silo(self.results_silo)
 
             try:
-                from redis import StrictRedis
-                client: StrictRedis = silo.connect()
+                client = silo.connect()
                 client.hset(
-                    name=self.id,
+                    name=self.redis_name,
                     mapping={
                         key: dumps(value, default=str)
                         for key, value in results.items()

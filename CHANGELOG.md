@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.4
+- Part of the [Redis Task Standardization Effort](https://github.com/Cloud-Harvest/CloudHarvestAgent/issues/8)
+- Updated `BaseTaskChain` 
+  - Added `parent` and `chain_type` arguments
+  - Added `redis_` properties
+- The task chain factory now populates `chain_type` from the chain's original template
+
 ## 0.6.3
 - Added the Environment package which provides a way to store configuration information made available to tasks
 - Added the `CachedData` class providing the means to store data temporarily

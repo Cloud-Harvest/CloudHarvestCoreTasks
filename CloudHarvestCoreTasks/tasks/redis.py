@@ -2,7 +2,7 @@ from CloudHarvestCorePluginManager import register_definition
 from CloudHarvestCoreTasks.tasks.base import BaseDataTask
 
 from logging import getLogger
-from typing import Literal
+from typing import Any, Literal
 
 logger = getLogger('harvest')
 
@@ -169,22 +169,28 @@ def format_hset(dictionary: dict) -> dict:
 
     return result
 
-def unformat_hset(dictionary: dict) -> dict:
+def unformat_hset(data: Any) -> Any:
     """
-    Unformats a dictionary to be used with HSET.
+    Unformats a dictionary to be used with HSET. HSET stores data as JSON strings, but we do not know the underlying
+    type of the data. Therefore, we take a recursive approach when decoding the input. This is unfortunatelly necessary
+     because different Redis Hash command return different data types. HGET returns a string, MHGET returns a list of
+     strings, and HGETALL returns a dictionary of strings (which may in turn be dictionaries or lists).
 
-    Args:
-        dictionary:
+    From a performance perspective, this is the most efficient when the incoming object is already a string, as the
+    first pass against the data will only necessitate one decoding operation. More complex data types such as lists or
+    dictionaries require more processing, as we need to decode each element in the list or each value in the dictionary.
+
+    Arguments
+        data (Any): The data to unformat.
 
     Returns:
-        A dictionary formatted for HSET.
+        A decoded object from the input data.
     """
 
     from json import JSONDecodeError, loads
     from copy import deepcopy
-    from typing import Any
 
-    dictionary = deepcopy(dictionary)
+    data = deepcopy(data)
 
     def decode_value(value: Any) -> Any:
         if isinstance(value, str):
@@ -205,4 +211,4 @@ def unformat_hset(dictionary: dict) -> dict:
             # If the value is not a string, list, tuple, or dict, return it as is
             return value
 
-    return decode_value(dictionary)
+    return decode_value(data)

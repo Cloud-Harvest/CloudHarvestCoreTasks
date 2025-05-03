@@ -522,10 +522,8 @@ class BaseTaskChain(List[BaseTask]):
                 client = silo.connect()
                 client.hset(
                     name=self.redis_name,
-                    mapping={
-                        key: dumps(value, default=str)
-                        for key, value in results.items()
-                    }
+                    key='result',
+                    value=dumps(results, default=str)
                 )
 
                 # Sets an expiration to retrieve the results

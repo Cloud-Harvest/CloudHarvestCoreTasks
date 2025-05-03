@@ -181,20 +181,28 @@ def unformat_hset(dictionary: dict) -> dict:
     """
 
     from json import JSONDecodeError, loads
+    from copy import deepcopy
+    from typing import Any
 
-    result = {}
+    dictionary = deepcopy(dictionary)
 
-    if isinstance(dictionary, dict):
-        for key, value in dictionary.items():
-            if isinstance(value, str):
-                try:
-                    result[key] = loads(value)
+    def decode_value(value: Any) -> Any:
+        if isinstance(value, str):
+            try:
+                return loads(value)
 
-                except JSONDecodeError:
-                    # it will often be the case that any arbitrary string is not JSON
-                    result[key] = value
+            except JSONDecodeError:
+                # it will often be the case that any arbitrary string is not JSON
+                 return value
 
-            else:
-                result[key] = value
+        elif isinstance(value, (list, tuple)):
+            return [decode_value(v) for v in value]
 
-    return result
+        elif isinstance(value, dict):
+            return {k: decode_value(v) for k, v in value.items()}
+
+        else:
+            # If the value is not a string, list, tuple, or dict, return it as is
+            return value
+
+    return decode_value(dictionary)

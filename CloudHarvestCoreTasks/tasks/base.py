@@ -300,7 +300,15 @@ class BaseTask:
 
 
         except Exception as ex:
-            raise TaskException(self, ex)
+            if hasattr(ex, 'args'):
+                if isinstance(ex.args, (tuple, list)):
+                    ex_args = '. '.join(ex.args)
+                else:
+                    ex_args = str(ex.args)
+            else:
+                ex_args = str(ex)
+
+            raise TaskException(self, ex_args)
 
         finally:
             # Update the metadata with the task's status, duration, and other information

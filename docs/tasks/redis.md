@@ -9,178 +9,55 @@ This task connects to a Redis database and performs some operation.
 
 ### Directives
 
-| Directive       | Required | Default | Description                                                                                               |
-|-----------------|----------|---------|-----------------------------------------------------------------------------------------------------------|
-| `command`       | Yes      | None    | One of `delete`, `expire`, `flushall`, `get`, `keys`, or `set`                                            |
-| `expire`        | No       | None    | The expiration time for records in the Redis database. Defaults to None.                                  |
-| `serialization` | No       | False   | When True: data being written will be serialized while data read will be deserialized. Defaults to False. |
+| Directive        | Required  | Default | Description                                                                                                                                                  |
+|------------------|-----------|---------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `command`        | Yes       | None    | Any Redis client command. Commands can be provided in any case; they will be converted to lower case at runtime.                                             |
+| `rekey`          | No        | False   | Certain commands, such as `hget`, will only return a record's values but not the keys. When true, keys are added back to the result.                         |
+| `serializer`     | No        | None    | One of `hset`, `hget`, `serialize`, `deserialize`. Formats data when reading/writing from/to Redis. See subsection on serializers for more information.      |
+| `serializer_key` | Sometimes | None    | Required `serializer` is set to `hset` or `serialize`. Indicates what argument field the serialization method will act upon (typically `mapping` or `value`) |
 
-#### `command`
-The Redis command to be executed. One of `delete`, `expire`, `flushall`, `get`, `keys`, or `set`.
 
-Note that all the directives described in the following sections fall under the `arguments` directive.
+### Serializers
 
-For example, the `keys` directive in the `delete` command is `arguments.keys`:
-```yaml
-redis:
-  command: get
-  arguments:
-    keys:
-      - 'my_key'
-      - 'my_other_key'
-```
+| Serializer    | When to use                                                      | Description                                                                                                                            |
+|---------------|------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------|
+| `hset`        | When writing with Redis Hashes (e.g., `HSET`, `HMSET`)           | Serializes the data into a Redis hash, leaving the top-level keys in place but ensuring all values are properly encoded Redis objects. |
+| `hget`        | When reading data serialized with `hset` (e.g., `HGET`, `HMGET`) | Deserializes the data from a Redis hash, converting results from a previous `hset` serialization operation.                            |
+| `serialize`   | When writing an entire object as a single string (e.g., `SET`)   | Serializes the entire object to be written into a string.                                                                              |
+| `deserialize` | When reading an object serialized as a string (e.g., `GET`)      | Deserializes the entire object from a string.                                                                                          |
 
-##### `delete`
-Deletes records from the Redis database.
-
-| Directives | Required | Default | Description                                 |
-|------------|----------|---------|---------------------------------------------|
-| `keys`     | No       | None    | A list of keys to delete.                   |
-| `patterns` | No       | None    | A list of patterns to match keys to delete. |
-
-```yaml
-redis:
-  name: My Redis Task
-  description: A task which performs a Redis command.
-  silo: harvest-jobs
-  command: delete
-  arguments:
-    keys:
-      - 'my_key'
-      - 'my_other_key'
-    patterns:
-      - 'some_prefix*'
-```
-
-##### `expire`
-Sets an expiration time for records in the Redis database in seconds.
-
-| Directives | Required | Default | Description                                                              |
-|------------|----------|---------|--------------------------------------------------------------------------|
-| `expire`   | No       | None    | The expiration time for records in the Redis database. Defaults to None. |
-| `keys`     | No       | None    | A list of keys to expire.                                                |
-| `patterns` | No       | None    | A list of patterns to match keys to expire.                              |
-
-```yaml
-redis:
-  name: My Redis Task
-  description: A task which performs a Redis command.
-  silo: harvest-jobs
-  command: expire
-  arguments:
-    expire: 3600
-    pattern: 'some_prefix*'
-```
-
-##### `flushall`
-
-```yaml
-redis:
-  name: My Redis Task
-  description: A task which performs a Redis command.
-  silo: harvest-jobs
-  command: flushall
-```
-
-##### `get`
-Retrieve records from the Redis database.
-
-| Directives | Required | Default | Description                                   |
-|------------|----------|---------|-----------------------------------------------|
-| `keys`     | No       | None    | A list of keys to retrieve.                   |
-| `patterns` | No       | None    | A list of patterns to match keys to retrieve. |
-
-```yaml
-redis:
-  name: My Redis Task
-  description: A task which performs a Redis command.
-  silo: harvest-jobs
-  command: get
-  result_as: my_redis_data
-  arguments:
-    keys:
-      - 'my_key'
-      - 'my_other_key'
-    pattern: 'some_prefix*'
-```
-
-##### `keys`
-Gets a list of keys from the Redis database.
-
-| Directives | Required | Default | Description                                   |
-|------------|----------|---------|-----------------------------------------------|
-| `keys`     | No       | None    | A list of keys to retrieve.                   |
-| `patterns` | No       | None    | A list of patterns to match keys to retrieve. |
-
-```yaml
-redis:
-  name: My Redis Task
-  description: A task which performs a Redis command.
-  silo: harvest-jobs
-  result_as: my_redis_keys
-  command: keys
-  arguments:
-    keys:
-      - 'my_key'
-      - 'my_other_key'
-    pattern: 'some_prefix*'
-```
-
-##### `set`
-Inserts data into a Redis database.
-
-| Directives | Required    | Default | Description                                                                       |
-|------------|-------------|---------|-----------------------------------------------------------------------------------|
-| `name`     | Yes         | None    | The record identifier.                                                            |
-| `value`    | Yes         | None    | A list of values to set.                                                          |
-| `keys`     | Conditional | None    | A list of keys to set. Required when setting multiple values for the same record. |
-
-```yaml
-redis:
-  name: My Redis Task
-  description: This task sets a simple value in a Redis database.
-  silo: harvest-jobs
-  command: set
-  arguments:
-      name: 'my_key'
-      value: 'my_value'
-```
-
-```yaml
-redis:
-  name: My Redis Task
-  description: This task sets the values of my_sub_key and my_other_sub_key in a Redis database.
-  silo: harvest-jobs
-  command: set
-  data: var.my_data
-  arguments:
-      name: my_record_identifier
-      keys:
-        - my_sub_key
-        - my_other_sub_key
-```
-
-```yaml
-redis:
-  name: My Redis Task
-  description: This task uses the iteration directive to set the names and values of multiple records in a Redis database.
-  silo: harvest-jobs
-  data: var.my_data
-  iterate: var.my_data    
-  command: set
-  arguments:
-      name: item.my_data_name
-      keys: '*'   # All keys
-```
-
+> Most internal Harvest operations will use either `HSET`, `HGET`, or `HGETALL` because these operations allow us to 
+> read or manipulate the data in a more granular way, thus reducing operational overhead. However, you can use `SET` 
+> and `GET` as necessary.
 
 ## Example
+In the following example, we will demonstrate how to `SCAN` for matching records based on a pattern, then retrieve the
+actual record content for each matching record using `HSET`. This is likely to be one of the most common scenarios when
+working with Redis and Harvest.
+
 ```yaml
-redis:
-  name: My Redis Task
-  description: A task which performs a Redis command.
-  silo: harvest-jobs
-  command: get
-  arguments:
-    patterns: 'my_key'
+tasks:
+  - redis:
+      name: My Redis Scan Task
+      description: Scan Redis for matching keys
+      command: scan
+      arguments:
+        pattern: "some*pattern*"
+        count: 100
+      result_as: matching_redis_names
+      result_to_list_with_key: redis_name   # Converts the list to a list of dictionaries with the key `redis_name`
+  
+  - redis:
+      name: My Redis Task
+      command: hget
+      arguments:
+        name: item.redis_name
+        serializer: hget
+        serializer_key: my_redis_key
+      iterate: var.matching_redis_names     # Iterates over the earlier list of matching Redis names
+      result_as:
+        name: result                        # Resulting task variable name
+        mode: append                        # Append the result of each iteration to the variable
+        include:                            # A dictionary of key/value pairs to include in the result (or each item of the result)
+          redis_name: item.redis_name
 ```

@@ -6,7 +6,9 @@
   - Added `parent` and `chain_type` arguments
   - Added `redis_` properties
 - The task chain factory now populates `chain_type` from the chain's original template
-- Added Redis helper methods for (un)formatting HSET and HGET commands
+- Refactored `RedisTask` to be more flexible
+  - Added Redis helper methods for (un)formatting `HSET` and `HGET` style commands
+  - Rewrote documentation for this task
 
 ## 0.6.3
 - Added the Environment package which provides a way to store configuration information made available to tasks

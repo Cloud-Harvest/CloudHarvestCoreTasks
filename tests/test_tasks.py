@@ -3,6 +3,7 @@ import os
 import tempfile
 import unittest
 
+from tasks.redis import unformat_hset
 from tests.data import MONGO_TEST_RECORDS
 from CloudHarvestCorePluginManager import register_all
 
@@ -453,7 +454,7 @@ class TestRedisTask(BaseTestCase):
                  engine='redis',
                  host='localhost',
                  port=6379,
-                 database=0,
+                 database=10,
                  password='default-harvest-password',
                  decode_responses=True)
 
@@ -471,333 +472,76 @@ class TestRedisTask(BaseTestCase):
     def tearDown(self):
         self.connection.flushall()
 
-    def test_redis_delete(self):
-        self.connection.set('key1', 'value1')
-        self.connection.set('key2', 'value2')
+    def test_hash_get_and_set(self):
+        from CloudHarvestCoreTasks.tasks.redis import RedisTask
 
-        task_chain_configuration = {
-            'chain': {
-                'name': 'test_chain',
-                'tasks': [
-                    {
-                        'redis': {
-                            'name': 'delete test',
-                            'silo': 'test_silo',
-                            'command': 'delete',
-                            'arguments': {'keys': ['key1', 'key2']}
-                        }
-                    }
-                ]
-            }
+        from uuid import uuid4
+        record_name = str(uuid4())
+        data = {
+            'redis_name': record_name,
+            'name': {
+                'first': 'John',
+                'last': 'Doe'
+            },
+            'dob': '1990-01-01',
+            'age': 30,
+            'city': 'New York',
+            'state': 'NY',
+            'country': 'USA',
+            'tags': ['tag1', 'tag2', 'tag3'],
         }
-        task_chain = task_chain_from_dict(template=task_chain_configuration)
-        task_chain.run()
 
-        result = task_chain.result
-        self.assertEqual(result['data']['deleted'], 2)
-        self.assertEqual(result['data']['keys'], ['key1', 'key2'])
-
-    def test_redis_expire(self):
-        self.connection.set('key1', 'value1')
-        self.connection.set('key2', 'value2')
-
-        task_chain_configuration = {
-            'chain': {
-                'name': 'test_chain',
-                'tasks': [
-                    {
-                        'redis': {
-                            'name': 'expire test',
-                            'command': 'expire',
-                            'silo': 'test_silo',
-                            'arguments': {'expire': 3600, 'keys': ['key1', 'key2']},
-                        }
-                    }
-                ]
-            }
-        }
-        task_chain = task_chain_from_dict(template=task_chain_configuration)
-        task_chain.run()
-
-        result = task_chain.result
-        self.assertEqual(result['data'], ['key1', 'key2'])
-        self.assertTrue(self.connection.ttl('key1') > 0)
-        self.assertTrue(self.connection.ttl('key2') > 0)
-
-    def test_redis_flushall(self):
-        self.connection.set('key1', 'value1')
-
-        task_chain_configuration = {
-            'chain': {
-                'name': 'test_chain',
-                'tasks': [
-                    {
-                        'redis': {
-                            'name': 'flushall test',
-                            'silo': 'test_silo',
-                            'command': 'flushall',
-                        }
-                    }
-                ]
-            }
-        }
-        task_chain = task_chain_from_dict(template=task_chain_configuration)
-        task_chain.run()
-
-        result = task_chain.result
-        self.assertTrue(result['data']['deleted'])
-        self.assertEqual(self.connection.keys('*'), [])
-
-    def test_redis_get_single_name(self):
-        self.connection.set('test_key', 'test_value')
-
-        task_chain_configuration = {
-            'chain': {
-                'name': 'test_chain',
-                'tasks': [
-                    {
-                        'redis': {
-                            'name': 'get test',
-                            'command': 'get',
-                            'silo': 'test_silo',
-                            'arguments': {
-                                'names': 'test_key'
-                            }
-                        }
-                    }
-                ]
-            }
-        }
-        task_chain = task_chain_from_dict(template=task_chain_configuration)
-        task_chain.run()
-
-        result = task_chain.result
-        self.assertEqual(result['data'], [{'_id': 'test_key', 'value': 'test_value'}])
-
-    def test_redis_get_names(self):
-        self.connection.set('test_key', 'test_value')
-        self.connection.set('test_key2', 'test_value2')
-
-        task_chain_configuration = {
-            'chain': {
-                'name': 'test_chain',
-                'tasks': [
-                    {
-                        'redis': {
-                            'name': 'get test',
-                            'command': 'get',
-                            'silo': 'test_silo',
-                            'arguments': {
-                                'names': [
-                                    'test_key',
-                                    'test_key2'
-                                ]
-                            }
-                        }
-                    }
-                ]
-            }
-        }
-        task_chain = task_chain_from_dict(template=task_chain_configuration)
-        task_chain.run()
-
-        result = task_chain.result
-        expected_records = (
-            {'_id': 'test_key', 'value': 'test_value'},
-            {'_id': 'test_key2', 'value': 'test_value2'}
+        set_task = RedisTask(
+            name='test_hash_set',
+            description='This is a test Redis hash set task',
+            silo='test_silo',
+            command='hset',
+            arguments={
+                'name': record_name,
+                'mapping': data
+            },
+            serializer='hset',          # will make sure keys are preserved but list data (like 'tags') are converted to strings
+            serializer_key='mapping',
         )
 
-        for record in expected_records:
-            self.assertIn(record, result['data'])
+        set_task.run()
 
-    def test_redis_get_pattern(self):
-        self.connection.set('test_name', 'test_value')
-        self.connection.set('test_name2', 'test_value2')
+        self.assertFalse(set_task.errors)
 
-        task_chain_configuration = {
-            'chain': {
-                'name': 'test_chain',
-                'tasks': [
-                    {
-                        'redis': {
-                            'name': 'get test',
-                            'command': 'get',
-                            'silo': 'test_silo',
-                            'arguments': {
-                                'patterns': 'test_name*'
-                            }
-                        }
-                    }
-                ]
-            }
-        }
-        task_chain = task_chain_from_dict(template=task_chain_configuration)
-        task_chain.run()
+        from CloudHarvestCoreTasks.silos import get_silo
+        silo = get_silo('test_silo')
 
-        result = task_chain.result
-        expected_records = (
-            {'_id': 'test_name', 'value': 'test_value'},
-            {'_id': 'test_name2', 'value': 'test_value2'}
+        # Check that the data was set correctly
+        from CloudHarvestCoreTasks.tasks.redis import unformat_hset
+        redis_data = unformat_hset(silo.connect().hgetall(record_name))
+        self.assertEqual(redis_data['name'], data['name'])
+        self.assertEqual(redis_data['dob'], data['dob'])
+        self.assertEqual(redis_data['age'], data['age'])
+        self.assertEqual(redis_data['city'], data['city'])
+        self.assertEqual(redis_data['state'], data['state'])
+        self.assertEqual(redis_data['country'], data['country'])
+        self.assertEqual(redis_data['tags'], data['tags'])
+
+
+        desired_keys = ['name', 'dob', 'age', 'city', 'state', 'country', 'tags']
+        get_task = RedisTask(
+            name='test_hash_get',
+            description='This is a test Redis hash get task',
+            silo='test_silo',
+            command='hmget',
+            arguments={
+                'name': record_name,
+                'keys': desired_keys
+            },
+            serializer='hget',
+            rekey=True
         )
 
-        for record in expected_records:
-            self.assertIn(record, result['data'])
-
-    def test_redis_get_keys(self):
-        self.connection.hset('test_name', 'key_a', 'value_a')
-        self.connection.hset('test_name', 'key_b', 'value_b')
-        self.connection.hset('test_name2', 'key_a', 'value_a2')
-        self.connection.hset('test_name2', 'key_b', 'value_b2')
-
-        task_chain_configuration = {
-            'chain': {
-                'name': 'test_chain',
-                'tasks': [
-                    {
-                        'redis': {
-                            'name': 'get test',
-                            'command': 'get',
-                            'silo': 'test_silo',
-                            'arguments': {
-                                'patterns': 'test_name*',
-                                'keys': '*'
-                            }
-                        }
-                    }
-                ]
-            }
-        }
-
-        task_chain = task_chain_from_dict(template=task_chain_configuration)
-        task_chain.run()
-
-        result = task_chain.result
-
-        expected_records = [
-            {'_id': 'test_name', 'key_a': 'value_a', 'key_b': 'value_b'},
-            {'_id': 'test_name2', 'key_a': 'value_a2', 'key_b': 'value_b2'}
-        ]
-
-        for record in expected_records:
-            self.assertIn(record, result['data'])
-
-    def test_redis_keys(self):
-        self.connection.set('key1', 'value1')
-        self.connection.set('key2', 'value2')
-
-        task_chain_configuration = {
-            'chain': {
-                'name': 'test_chain',
-                'tasks': [
-                    {
-                        'redis': {
-                            'name': 'keys test',
-                            'silo': 'test_silo',
-                            'command': 'keys',
-                            'arguments': {'patterns': 'key*'}
-                        }
-                    }
-                ]
-            }
-        }
-        task_chain = task_chain_from_dict(template=task_chain_configuration)
-        task_chain.run()
-
-        result = task_chain.result
-        self.assertEqual(set(result['data']), {'key1', 'key2'})
-
-    def test_redis_set(self):
-        task_chain_configuration = {
-            'chain': {
-                'name': 'test_chain',
-                'tasks': [
-                    {
-                        'redis': {
-                            'name': 'set test',
-                            'command': 'set',
-                            'silo': 'test_silo',
-                            'arguments': {
-                                'name': 'test_key',
-                                'value': 'test_value'
-                            },
-                        }
-                    }
-                ]
-            }
-        }
-        task_chain = task_chain_from_dict(template=task_chain_configuration)
-        task_chain.run()
-
-        result = task_chain.result
-        self.assertEqual(result['data']['added'], 1)
-        self.assertEqual(result['data']['errors'], 0)
-        self.assertEqual(result['data']['updated'], 0)
-        self.assertEqual(self.connection.get('test_key'), 'test_value')
-
-    def test_redis_serialize_set(self):
-        nested_dict = {'key1': {'subkey1': 'value1', 'subkey2': 'value2'}}
-        task_chain_configuration = {
-            'chain': {
-                'name': 'test_chain',
-                'tasks': [
-                    {
-                        'redis': {
-                            'name': 'serialize set test',
-                            'command': 'set',
-                            'silo': 'test_silo',
-                            'serialization': True,
-                            'arguments': {
-                                'name': 'test_key',
-                                'value': nested_dict
-                            }
-                        }
-                    }
-                ]
-            }
-        }
-        task_chain = task_chain_from_dict(template=task_chain_configuration)
-        task_chain.run()
-
-        result = task_chain.result
-        serialized_value = self.connection.get('test_key')
-        self.assertEqual(result['data']['added'], 1)
-        self.assertEqual(serialized_value, '{"key1": {"subkey1": "value1", "subkey2": "value2"}}')
-
-    def test_redis_set_dict(self):
-        dict_to_set = {'field1': 'value1', 'field2': 'value2'}
-        task_chain_configuration = {
-            'chain': {
-                'name': 'test_chain',
-                'tasks': [
-                    {
-                        'redis': {
-                            'name': 'set dict test',
-                            'command': 'set',
-                            'silo': 'test_silo',
-                            'data': 'var.dict_to_set',
-                            'arguments': {
-                                'name': 'test_hash',
-                                'keys': [
-                                    'field1',
-                                    'field2'
-                                ]
-                            },
-                        }
-                    }
-                ]
-            }
-        }
-        task_chain = task_chain_from_dict(template=task_chain_configuration)
-        task_chain.variables['dict_to_set'] = dict_to_set
-
-        task_chain.run()
-
-        result = task_chain.result
-        self.assertEqual(result['data']['added'], 1)
-        self.assertEqual(result['data']['errors'], 0)
-        self.assertEqual(result['data']['updated'], 0)
-        self.assertEqual(self.connection.hget('test_hash', 'field1'), 'value1')
-        self.assertEqual(self.connection.hget('test_hash', 'field2'), 'value2')
+        get_task.run()
+        self.assertFalse(get_task.errors)
+        for key in desired_keys:
+            self.assertIn(key, get_task.result.keys())
+            self.assertEqual(get_task.result[key], data[key])
 
 class TestPruneTask(BaseTestCase):
     def setUp(self):

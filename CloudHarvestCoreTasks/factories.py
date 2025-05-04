@@ -94,7 +94,8 @@ def task_chain_from_dict(template: dict, **kwargs) -> BaseTaskChain:
         task_chain_configuration['name'] = task_chain_registered_class_name
 
     # records the class name of the task chain in the configuration.
-    task_chain_configuration['chain_type'] = chain_class
+    # "<class 'CloudHarvestCoreTasks.chains.report.ReportTaskChain'>".split(' ')[1].split('.')[-1][:-2]
+    task_chain_configuration['chain_type'] = str(type(chain_class)).split(' ')[1].split('.')[-1][:-2]
 
     # Instantiate the task chain class.
     result = chain_class(template=task_chain_configuration, **task_chain_configuration | kwargs)

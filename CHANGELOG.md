@@ -5,6 +5,7 @@
 - Updated `BaseTaskChain` 
   - Added `parent` and `chain_type` arguments
   - Added `redis_` properties
+  - Added `update_status()` which is now responsible for sending status reports to Redis (instead of the Agent)
 - The task chain factory now populates `chain_type` from the chain's original template
 - Refactored `RedisTask` to be more flexible
   - Added Redis helper methods for (un)formatting `HSET` and `HGET` style commands

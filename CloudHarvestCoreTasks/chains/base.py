@@ -109,6 +109,16 @@ class BaseTaskChain(List[BaseTask]):
         self.results_silo = None
         self.required_variables = template.get('required_variables') or []
 
+        self.update_status_client = None
+
+        from CloudHarvestCoreTasks.silos import get_silo
+        try:
+            self.update_status_client = get_silo('harvest-tasks').connect()
+            self.update_status()
+
+        except Exception as ex:
+            logger.error(f'{self.redis_name} failed to connect to `harvest-tasks` silo: %s', ex)
+
     def __enter__(self) -> 'BaseTaskChain':
         """
         This method is called when the context management protocol is initiated using the 'with' statement.
@@ -471,6 +481,7 @@ class BaseTaskChain(List[BaseTask]):
         self.end = datetime.now(tz=timezone.utc)
 
         self.results_to_silo()
+        self.update_status()
 
         return self
 
@@ -489,9 +500,10 @@ class BaseTaskChain(List[BaseTask]):
         if self.pool.queue_size:
             self.pool.terminate()
 
-        logger.error(f'{self.id}: Error running task chain {self.name}: {ex}')
+        logger.error(f'{self.redis_name}: Error running task chain {self.name}: {ex}')
 
         self.results_to_silo()
+        self.update_status()
 
         return self
 
@@ -503,6 +515,7 @@ class BaseTaskChain(List[BaseTask]):
 
         self.status = TaskStatusCodes.running
         self.start = datetime.now(tz=timezone.utc)
+        self.update_status()
 
         return self
 
@@ -530,10 +543,10 @@ class BaseTaskChain(List[BaseTask]):
                 client.expire(self.id, 3600)
 
             except Exception as ex:
-                logger.error(f'{self.id}: Error storing task chain results in silo {self.results_silo}: {ex}')
+                logger.error(f'{self.redis_name}: Error storing task chain results in silo {self.results_silo}: {ex}')
 
             else:
-                logger.debug(f'{self.id}: Stored task chain results in silo {self.results_silo}')
+                logger.debug(f'{self.redis_name}: Stored task chain results in silo {self.results_silo}')
 
     def run(self) -> 'BaseTaskChain':
         """
@@ -559,14 +572,9 @@ class BaseTaskChain(List[BaseTask]):
                 try:
                     from CloudHarvestCoreTasks.factories import template_task_configuration
                     task_template = self.task_templates[self.position]
-
-                    # # Check if this task has a `mode` key after the `tasks` directive
-                    # # and that the task chain includes a `mode` directive
-                    # if isinstance(task_template.get('tasks'), dict) and hasattr(self, 'mode'):
-                    #     # Updates the template by replacing `tasks` with the associated mode
-                    #     task_template['tasks'] = task_template['tasks'].get(self.mode) or task_template['tasks'].get('all')
-
                     task = template_task_configuration(task_configuration=task_template, task_chain=self)
+
+                    self.update_status()
 
                     if task.iterate:
                         from copy import deepcopy
@@ -699,9 +707,23 @@ class BaseTaskChain(List[BaseTask]):
         """
 
         self.status = TaskStatusCodes.terminating
+        self.update_status()
+        self.pool.terminate()
 
         return self
 
+    def update_status(self):
+        """
+        Sends the TaskChain status to Redis.
+        """
+        if self.update_status_client:
+            try:
+                self.update_status_client.hset(name=self.redis_name, mapping=self.redis_struct())
+                self.update_status_client.expire(name=self.redis_name, time=3600)
+
+            except Exception as ex:
+                logger.error(f'{self.redis_name} failed to update task chain status: %s', ex)
+                self.meta['Errors'].append(f'Error updating task chain status: {ex}')
 
 class BaseTaskPool:
     """

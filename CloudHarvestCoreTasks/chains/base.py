@@ -111,9 +111,12 @@ class BaseTaskChain(List[BaseTask]):
 
         self.update_status_client = None
 
+        # Set up the client used to update the task chain status in Redis
         from CloudHarvestCoreTasks.silos import get_silo
+        silo = get_silo('harvest-tasks')
+
         try:
-            self.update_status_client = get_silo('harvest-tasks').connect()
+            self.update_status_client = silo.connect()
             self.update_status()
 
         except Exception as ex:
@@ -716,9 +719,10 @@ class BaseTaskChain(List[BaseTask]):
         """
         Sends the TaskChain status to Redis.
         """
+        from CloudHarvestCoreTasks.tasks.redis import format_hset
         if self.update_status_client:
             try:
-                self.update_status_client.hset(name=self.redis_name, mapping=self.redis_struct())
+                self.update_status_client.hset(name=self.redis_name, mapping=format_hset(self.redis_struct()))
                 self.update_status_client.expire(name=self.redis_name, time=3600)
 
             except Exception as ex:

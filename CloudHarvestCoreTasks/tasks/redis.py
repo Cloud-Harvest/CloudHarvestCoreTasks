@@ -80,6 +80,10 @@ class RedisTask(BaseDataTask):
         # Execute the command using the RedisClient
         result = getattr(client, self.command)(**self.arguments)
 
+        if self.command == 'scan':
+            # The scan command returns a tuple of (cursor, data), so we need to extract the data
+            result = result[1]
+
         # Converts list results back into a dictionary based on the keys provided in self.arguments, but only if the
         # results are a list
         if self.rekey and isinstance(result, list):

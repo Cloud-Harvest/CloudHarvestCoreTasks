@@ -71,6 +71,8 @@ class HarvestUpdateTask(BaseTask):
         Returns
             HarvestUpdateTask: The current instance of the HarvestTask class.
         """
+        # Do this first in the event that the unique index does not already exist
+        self.ensure_unique_identifier_index()
 
         self.meta['Stages'] = []
 
@@ -464,3 +466,30 @@ class HarvestUpdateTask(BaseTask):
             'BulkReplaceResults': bulk_replace_results,
             'EndTime': end_time,
         }
+
+    def ensure_unique_identifier_index(self) -> 'HarvestUpdateTask':
+        """
+        This method ensures that the UniqueIdentifier index is created on the specified silo and collection.
+
+        Returns
+            bool: True if the index was created successfully, False otherwise.
+        """
+        from CloudHarvestCoreTasks.silos import get_silo
+        from pymongo import MongoClient
+
+        # On the collection where the records are being replaced
+        silo = get_silo(self.task_chain.destination_silo)
+        client: MongoClient = silo.connect()
+
+        collection = client[silo.database][self.task_chain.replacement_collection_name]
+
+        # Create the UniqueIdentifier index if it doesn't exist
+        collection.create_index([('Harvest.UniqueIdentifier', 1)], unique=True)
+
+        # On the metadata collection
+        silo = get_silo('harvest-core')
+        client: MongoClient = silo.connect()
+        collection = client[silo.database]['metadata']
+        collection.create_index([('UniqueIdentifier', 1)], unique=True)
+
+        return self

@@ -96,6 +96,7 @@ class BaseTaskChain(List[BaseTask]):
 
         self.position = 0
 
+        self.agent = None       # populated by agent
         self.start = None
         self.end = None
 
@@ -290,7 +291,7 @@ class BaseTaskChain(List[BaseTask]):
             'name': self.name,
             'type': self.chain_type,
             'status': self.status,
-            'agent': None,  # populated by the agent,
+            'agent': self.agent,
             'position': self.position,
             'total': self.total,
             'start': self.start,

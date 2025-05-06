@@ -671,7 +671,11 @@ class BaseFilterableTask(BaseTask):
             return default_value
 
         from re import compile
-        filters = compile(self.filters)
+        try:
+            filters = compile(self.filters)
+
+        except Exception as ex:
+            raise ValueError(f'Invalid filter regex: `{self.filters}`') from ex
 
         return filter_value or default_value if filters.match(filter_name) else default_value
 

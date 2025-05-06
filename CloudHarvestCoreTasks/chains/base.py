@@ -74,7 +74,7 @@ class BaseTaskChain(List[BaseTask]):
         super().__init__()
 
         from uuid import uuid4
-        self.id = str(uuid4())
+        self.id = kwargs.get('id') or str(uuid4())
 
         self.name = template['name']
         self.parent = parent
@@ -117,8 +117,9 @@ class BaseTaskChain(List[BaseTask]):
         silo = get_silo('harvest-tasks')
 
         try:
-            self.update_status_client = silo.connect()
-            self.update_status()
+            if silo:
+                self.update_status_client = silo.connect()
+                self.update_status()
 
         except Exception as ex:
             logger.error(f'{self.redis_name} failed to connect to `harvest-tasks` silo: %s', ex)
@@ -580,7 +581,31 @@ class BaseTaskChain(List[BaseTask]):
 
                     self.update_status()
 
-                    if task.iterate:
+                    if task.iterate is not None:
+                        # Determine how results from the itemized processes will be stored. The default behavior is to override the
+                        # variable with the same name as the 'result_as' directive; however, itemized tasks may return results of
+                        # different types. The 'result_as' directive provides a way to specify how the results should be stored.
+                        result_as = task_template[list(task_template.keys())[0]].get('result_as')
+
+                        if result_as:
+                            result_as_mode = result_as.get('mode') or 'override' if isinstance(result_as,dict) else 'override'
+                            result_as_name = result_as.get('name') if isinstance(result_as, dict) else result_as
+
+                            # Determine how the results should be stored then initialize the variable accordingly. It is
+                            # important to set the variable type here because the results are likely expected in subsequent
+                            # tasks. To ensure the next tasks complete successfully, we need to set the variable type
+                            # to the expected type.
+                            match result_as_mode:
+                                case 'append' | 'extend':
+                                    self.variables[result_as_name] = []
+
+                                case 'merge':
+                                    self.variables[result_as_name] = {}
+
+                                # The default behavior is to override the variable
+                                case _:
+                                    self.variables[result_as_name] = None
+
                         from copy import deepcopy
                         # Insert the iterated tasks into the task chain's configurations
                         [
@@ -646,27 +671,6 @@ class BaseTaskChain(List[BaseTask]):
             original_task_configuration (dict): The original task configuration with the 'iterate' directive.
         """
 
-        # Determine how results from the itemized processes will be stored. The default behavior is to override the
-        # variable with the same name as the 'result_as' directive; however, itemized tasks may return results of
-        # different types. The 'result_as' directive provides a way to specify how the results should be stored.
-        result_as = original_task_configuration[list(original_task_configuration.keys())[0]].get('result_as')
-
-        if result_as:
-            result_as_mode = result_as.get('mode') or 'override' if isinstance(result_as, dict) else 'override'
-            result_as_name = result_as.get('name') if isinstance(result_as, dict) else result_as
-
-            # Determine how the results should be stored then initialize the variable accordingly
-            match result_as_mode:
-                case 'append' | 'extend':
-                    self.variables[result_as_name] = []
-
-                case 'merge':
-                    self.variables[result_as_name] = {}
-
-                # The default behavior is to override the variable
-                case _:
-                    self.variables[result_as_name] = None
-
         # Template the original configuration to get the iterated items. We take this approach to leverage the templating
         # engine to resolve variables in the iterate directive.
         from CloudHarvestCoreTasks.factories import template_task_configuration
@@ -679,9 +683,8 @@ class BaseTaskChain(List[BaseTask]):
         # in the reverse order of the iterated items.
         # iter_var = list(reversed(iter_var))
         for item in reversed(iter_var):
-            from copy import deepcopy
-
             # Create a deep copy of the original task configuration to avoid mangling the original configuration
+            from copy import deepcopy
             task_configuration = deepcopy(original_task_configuration)
 
             class_key = list(task_configuration.keys())[0]
@@ -692,7 +695,7 @@ class BaseTaskChain(List[BaseTask]):
             # Update the task's name
             task_configuration[class_key]['name'] = f'{task_configuration[class_key]["name"]} - {iter_var.index(item) + 1}/{len(iter_var)}'
 
-            # Template the file with the item
+            # Template the task with the item
             from CloudHarvestCoreTasks.factories import template_task_configuration
             itemized_task_configuration = template_task_configuration(task_configuration,
                                                                       task_chain=self,

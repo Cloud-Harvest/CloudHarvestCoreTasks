@@ -142,6 +142,9 @@ class HarvestUpdateTask(BaseTask):
 
             unique_identifier = '-'.join(unique_identifier)
 
+            if not unique_identifier:
+                raise ValueError("UniqueIdentifier cannot be empty. Ensure that at least one of the UniqueIdentifierKeys has a value.")
+
             # Attach existing metadata to the record
             record['Harvest']['UniqueIdentifier'] = unique_identifier
 

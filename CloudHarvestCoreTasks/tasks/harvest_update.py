@@ -123,7 +123,7 @@ class HarvestUpdateTask(BaseTask):
         from CloudHarvestCoreTasks.dataset import DataSet
         data = DataSet(data) if not isinstance(data, DataSet) else data
 
-        for record in self.task_chain.variables.get('result') or self.task_chain[-2].result or []:
+        for record in data or []:
             # Make sure the Harvest metadata field exists
             if 'Harvest' not in record.keys():
                 record['Harvest'] = {}

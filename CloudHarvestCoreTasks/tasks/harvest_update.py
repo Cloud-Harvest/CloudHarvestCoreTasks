@@ -229,9 +229,8 @@ class HarvestUpdateTask(BaseTask):
             if isinstance(record.get('_id'), ObjectId):
                 record.pop('_id')
 
-            replace_filter = {'Harvest.UniqueIdentifier': record['Harvest']['UniqueIdentifier']}
-
-            replace_resource = ReplaceOne(filter=replace_filter,
+            # Create/replace the data records
+            replace_resource = ReplaceOne(filter={'Harvest.UniqueIdentifier': record['Harvest']['UniqueIdentifier']},
                                           replacement=record,
                                           upsert=True)
 
@@ -241,7 +240,8 @@ class HarvestUpdateTask(BaseTask):
                 for field in self.task_chain.extra_metadata_fields
             }
 
-            replace_meta = ReplaceOne(filter=replace_filter,
+            # Create/replace the metadata record
+            replace_meta = ReplaceOne(filter={'UniqueIdentifier': record['Harvest']['UniqueIdentifier']},
                                       replacement=record['Harvest'] | {'Tags': record.get('Tags') or {}} | extras,
                                       upsert=True)
 

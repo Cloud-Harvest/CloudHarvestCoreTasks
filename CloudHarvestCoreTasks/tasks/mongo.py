@@ -187,10 +187,8 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
                     result = {
                         match.key: {
                             "$not": {
-                                {
-                                    "$regex": str(match.value),
-                                    "options": "i"
-                                }
+                                "$regex": str(match.value),
+                                "$options": "i"
                             }
                         }
                     }

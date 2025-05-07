@@ -71,6 +71,8 @@ class HarvestUpdateTask(BaseTask):
         Returns
             HarvestUpdateTask: The current instance of the HarvestTask class.
         """
+        # Do this first in the event that the unique index does not already exist
+        self.ensure_unique_identifier_index()
 
         self.meta['Stages'] = []
 
@@ -121,7 +123,7 @@ class HarvestUpdateTask(BaseTask):
         from CloudHarvestCoreTasks.dataset import DataSet
         data = DataSet(data) if not isinstance(data, DataSet) else data
 
-        for record in self.task_chain.variables.get('result') or self.task_chain[-2].result or []:
+        for record in data or []:
             # Make sure the Harvest metadata field exists
             if 'Harvest' not in record.keys():
                 record['Harvest'] = {}
@@ -139,6 +141,9 @@ class HarvestUpdateTask(BaseTask):
                     unique_identifier.append(str(field_value))
 
             unique_identifier = '-'.join(unique_identifier)
+
+            if not unique_identifier:
+                raise ValueError("UniqueIdentifier cannot be empty. Ensure that at least one of the UniqueIdentifierKeys has a value.")
 
             # Attach existing metadata to the record
             record['Harvest']['UniqueIdentifier'] = unique_identifier
@@ -224,9 +229,8 @@ class HarvestUpdateTask(BaseTask):
             if isinstance(record.get('_id'), ObjectId):
                 record.pop('_id')
 
-            replace_filter = {'Harvest.UniqueIdentifier': record['Harvest']['UniqueIdentifier']}
-
-            replace_resource = ReplaceOne(filter=replace_filter,
+            # Create/replace the data records
+            replace_resource = ReplaceOne(filter={'Harvest.UniqueIdentifier': record['Harvest']['UniqueIdentifier']},
                                           replacement=record,
                                           upsert=True)
 
@@ -236,7 +240,8 @@ class HarvestUpdateTask(BaseTask):
                 for field in self.task_chain.extra_metadata_fields
             }
 
-            replace_meta = ReplaceOne(filter=replace_filter,
+            # Create/replace the metadata record
+            replace_meta = ReplaceOne(filter={'UniqueIdentifier': record['Harvest']['UniqueIdentifier']},
                                       replacement=record['Harvest'] | {'Tags': record.get('Tags') or {}} | extras,
                                       upsert=True)
 
@@ -464,3 +469,30 @@ class HarvestUpdateTask(BaseTask):
             'BulkReplaceResults': bulk_replace_results,
             'EndTime': end_time,
         }
+
+    def ensure_unique_identifier_index(self) -> 'HarvestUpdateTask':
+        """
+        This method ensures that the UniqueIdentifier index is created on the specified silo and collection.
+
+        Returns
+            bool: True if the index was created successfully, False otherwise.
+        """
+        from CloudHarvestCoreTasks.silos import get_silo
+        from pymongo import MongoClient
+
+        # On the collection where the records are being replaced
+        silo = get_silo(self.task_chain.destination_silo)
+        client: MongoClient = silo.connect()
+
+        collection = client[silo.database][self.task_chain.replacement_collection_name]
+
+        # Create the UniqueIdentifier index if it doesn't exist
+        collection.create_index([('Harvest.UniqueIdentifier', 1)], unique=True)
+
+        # On the metadata collection
+        silo = get_silo('harvest-core')
+        client: MongoClient = silo.connect()
+        collection = client[silo.database]['metadata']
+        collection.create_index([('UniqueIdentifier', 1)], unique=True)
+
+        return self

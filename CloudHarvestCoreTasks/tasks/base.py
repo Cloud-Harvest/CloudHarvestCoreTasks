@@ -300,7 +300,15 @@ class BaseTask:
 
 
         except Exception as ex:
-            raise TaskException(self, ex)
+            if hasattr(ex, 'args'):
+                if isinstance(ex.args, (tuple, list)):
+                    ex_args = '. '.join(ex.args)
+                else:
+                    ex_args = str(ex.args)
+            else:
+                ex_args = str(ex)
+
+            raise TaskException(self, ex_args)
 
         finally:
             # Update the metadata with the task's status, duration, and other information
@@ -663,7 +671,11 @@ class BaseFilterableTask(BaseTask):
             return default_value
 
         from re import compile
-        filters = compile(self.filters)
+        try:
+            filters = compile(self.filters)
+
+        except Exception as ex:
+            raise ValueError(f'Invalid filter regex: `{self.filters}`') from ex
 
         return filter_value or default_value if filters.match(filter_name) else default_value
 

@@ -49,6 +49,8 @@ class BaseTaskChain(List[BaseTask]):
 
     def __init__(self,
                  template: dict,
+                 chain_type: str = None,
+                 parent: str = None,
                  variables: dict = None,
                  filters: dict = None,
                  *args, **kwargs):
@@ -59,8 +61,10 @@ class BaseTaskChain(List[BaseTask]):
             template(dict): The configuration for the task chain.
                 name(str): The name of the task chain.
                 tasks(List[dict]): A list of task configurations for the tasks in the chain.
+                chain_type(str): The type of the task chain (e.g., 'report', 'harvest').
                 description(str, optional): A brief description of what the task chain does. Defaults to None.
                 max_workers(int, optional): The maximum number of concurrent workers that are permitted.
+            parent (str, optional): A parent request uuid to associate with the task chain. Defaults to None.
             variables(dict, optional): Variables that can be used by the tasks in the chain. The dictionary is merged
                                         with into the BaseTaskChain.variables attribute. Defaults to None.
             filters(dict, optional): A dictionary of user filters to apply to the data. Defaults to an empty dictionary.
@@ -70,9 +74,11 @@ class BaseTaskChain(List[BaseTask]):
         super().__init__()
 
         from uuid import uuid4
-        self.id = str(uuid4())
+        self.id = kwargs.get('id') or str(uuid4())
 
         self.name = template['name']
+        self.parent = parent
+        self.chain_type = chain_type
         self.description = template.get('description')
         self.filters = filters or {}
 
@@ -90,6 +96,7 @@ class BaseTaskChain(List[BaseTask]):
 
         self.position = 0
 
+        self.agent = None       # populated by agent
         self.start = None
         self.end = None
 
@@ -102,6 +109,20 @@ class BaseTaskChain(List[BaseTask]):
         # results to the wrong silo.
         self.results_silo = None
         self.required_variables = template.get('required_variables') or []
+
+        self.update_status_client = None
+
+        # Set up the client used to update the task chain status in Redis
+        from CloudHarvestCoreTasks.silos import get_silo
+        silo = get_silo('harvest-tasks')
+
+        try:
+            if silo:
+                self.update_status_client = silo.connect()
+                self.update_status()
+
+        except Exception as ex:
+            logger.error(f'{self.redis_name} failed to connect to `harvest-tasks` silo: %s', ex)
 
     def __enter__(self) -> 'BaseTaskChain':
         """
@@ -252,6 +273,34 @@ class BaseTaskChain(List[BaseTask]):
         return task_metrics
 
     @property
+    def redis_name(self) -> str:
+        """
+        Returns the unique record identifier for the task.
+        """
+
+        return f'task:{self.parent or ""}:{self.id}'
+
+    def redis_struct(self) -> dict:
+        """
+        Returns specific keys stored in Redis.
+        """
+
+        return {
+            'redis_name': self.redis_name,
+            'id': self.id,
+            'parent': self.parent,
+            'name': self.name,
+            'type': self.chain_type,
+            'status': self.status,
+            'agent': self.agent,
+            'position': self.position,
+            'total': self.total,
+            'start': self.start,
+            'end': self.end,
+            'result': self.result
+        }
+
+    @property
     def result(self) -> dict:
         """
         Returns the result of the task chain.
@@ -315,7 +364,7 @@ class BaseTaskChain(List[BaseTask]):
             'counts': count_result
         }
 
-    def find_task_by_name(self, task_name: str) -> 'BaseTask':
+    def find_task_by_name(self, task_name: str) -> 'BaseTask' or None:
         """
         This method finds a task in the task chain by its name.
 
@@ -329,6 +378,8 @@ class BaseTaskChain(List[BaseTask]):
         for task in self:
             if task.name == task_name:
                 return task
+
+        return None
 
     def find_task_position_by_name(self, task_name: str) -> int:
         """
@@ -344,6 +395,8 @@ class BaseTaskChain(List[BaseTask]):
         for position, task in enumerate(self.task_templates):
             if task.name == task_name:
                 return position
+
+        return 0
 
     def get_variables_by_names(self, *variable_names) -> dict:
         """
@@ -433,6 +486,7 @@ class BaseTaskChain(List[BaseTask]):
         self.end = datetime.now(tz=timezone.utc)
 
         self.results_to_silo()
+        self.update_status()
 
         return self
 
@@ -451,9 +505,10 @@ class BaseTaskChain(List[BaseTask]):
         if self.pool.queue_size:
             self.pool.terminate()
 
-        logger.error(f'{self.id}: Error running task chain {self.name}: {ex}')
+        logger.error(f'{self.redis_name}: Error running task chain {self.name}: {ex}')
 
         self.results_to_silo()
+        self.update_status()
 
         return self
 
@@ -465,6 +520,7 @@ class BaseTaskChain(List[BaseTask]):
 
         self.status = TaskStatusCodes.running
         self.start = datetime.now(tz=timezone.utc)
+        self.update_status()
 
         return self
 
@@ -481,24 +537,21 @@ class BaseTaskChain(List[BaseTask]):
             silo = get_silo(self.results_silo)
 
             try:
-                from redis import StrictRedis
-                client: StrictRedis = silo.connect()
+                client = silo.connect()
                 client.hset(
-                    name=self.id,
-                    mapping={
-                        key: dumps(value, default=str)
-                        for key, value in results.items()
-                    }
+                    name=self.redis_name,
+                    key='result',
+                    value=dumps(results, default=str)
                 )
 
                 # Sets an expiration to retrieve the results
                 client.expire(self.id, 3600)
 
             except Exception as ex:
-                logger.error(f'{self.id}: Error storing task chain results in silo {self.results_silo}: {ex}')
+                logger.error(f'{self.redis_name}: Error storing task chain results in silo {self.results_silo}: {ex}')
 
             else:
-                logger.debug(f'{self.id}: Stored task chain results in silo {self.results_silo}')
+                logger.debug(f'{self.redis_name}: Stored task chain results in silo {self.results_silo}')
 
     def run(self) -> 'BaseTaskChain':
         """
@@ -524,16 +577,35 @@ class BaseTaskChain(List[BaseTask]):
                 try:
                     from CloudHarvestCoreTasks.factories import template_task_configuration
                     task_template = self.task_templates[self.position]
-
-                    # # Check if this task has a `mode` key after the `tasks` directive
-                    # # and that the task chain includes a `mode` directive
-                    # if isinstance(task_template.get('tasks'), dict) and hasattr(self, 'mode'):
-                    #     # Updates the template by replacing `tasks` with the associated mode
-                    #     task_template['tasks'] = task_template['tasks'].get(self.mode) or task_template['tasks'].get('all')
-
                     task = template_task_configuration(task_configuration=task_template, task_chain=self)
 
-                    if task.iterate:
+                    self.update_status()
+
+                    if task.iterate is not None:
+                        # Determine how results from the itemized processes will be stored. The default behavior is to override the
+                        # variable with the same name as the 'result_as' directive; however, itemized tasks may return results of
+                        # different types. The 'result_as' directive provides a way to specify how the results should be stored.
+                        result_as = task_template[list(task_template.keys())[0]].get('result_as')
+
+                        if result_as:
+                            result_as_mode = result_as.get('mode') or 'override' if isinstance(result_as,dict) else 'override'
+                            result_as_name = result_as.get('name') if isinstance(result_as, dict) else result_as
+
+                            # Determine how the results should be stored then initialize the variable accordingly. It is
+                            # important to set the variable type here because the results are likely expected in subsequent
+                            # tasks. To ensure the next tasks complete successfully, we need to set the variable type
+                            # to the expected type.
+                            match result_as_mode:
+                                case 'append' | 'extend':
+                                    self.variables[result_as_name] = []
+
+                                case 'merge':
+                                    self.variables[result_as_name] = {}
+
+                                # The default behavior is to override the variable
+                                case _:
+                                    self.variables[result_as_name] = None
+
                         from copy import deepcopy
                         # Insert the iterated tasks into the task chain's configurations
                         [
@@ -599,27 +671,6 @@ class BaseTaskChain(List[BaseTask]):
             original_task_configuration (dict): The original task configuration with the 'iterate' directive.
         """
 
-        # Determine how results from the itemized processes will be stored. The default behavior is to override the
-        # variable with the same name as the 'result_as' directive; however, itemized tasks may return results of
-        # different types. The 'result_as' directive provides a way to specify how the results should be stored.
-        result_as = original_task_configuration[list(original_task_configuration.keys())[0]].get('result_as')
-
-        if result_as:
-            result_as_mode = result_as.get('mode') or 'override' if isinstance(result_as, dict) else 'override'
-            result_as_name = result_as.get('name') if isinstance(result_as, dict) else result_as
-
-            # Determine how the results should be stored then initialize the variable accordingly
-            match result_as_mode:
-                case 'append' | 'extend':
-                    self.variables[result_as_name] = []
-
-                case 'merge':
-                    self.variables[result_as_name] = {}
-
-                # The default behavior is to override the variable
-                case _:
-                    self.variables[result_as_name] = None
-
         # Template the original configuration to get the iterated items. We take this approach to leverage the templating
         # engine to resolve variables in the iterate directive.
         from CloudHarvestCoreTasks.factories import template_task_configuration
@@ -632,9 +683,8 @@ class BaseTaskChain(List[BaseTask]):
         # in the reverse order of the iterated items.
         # iter_var = list(reversed(iter_var))
         for item in reversed(iter_var):
-            from copy import deepcopy
-
             # Create a deep copy of the original task configuration to avoid mangling the original configuration
+            from copy import deepcopy
             task_configuration = deepcopy(original_task_configuration)
 
             class_key = list(task_configuration.keys())[0]
@@ -645,7 +695,7 @@ class BaseTaskChain(List[BaseTask]):
             # Update the task's name
             task_configuration[class_key]['name'] = f'{task_configuration[class_key]["name"]} - {iter_var.index(item) + 1}/{len(iter_var)}'
 
-            # Template the file with the item
+            # Template the task with the item
             from CloudHarvestCoreTasks.factories import template_task_configuration
             itemized_task_configuration = template_task_configuration(task_configuration,
                                                                       task_chain=self,
@@ -664,9 +714,24 @@ class BaseTaskChain(List[BaseTask]):
         """
 
         self.status = TaskStatusCodes.terminating
+        self.update_status()
+        self.pool.terminate()
 
         return self
 
+    def update_status(self):
+        """
+        Sends the TaskChain status to Redis.
+        """
+        from CloudHarvestCoreTasks.tasks.redis import format_hset
+        if self.update_status_client:
+            try:
+                self.update_status_client.hset(name=self.redis_name, mapping=format_hset(self.redis_struct()))
+                self.update_status_client.expire(name=self.redis_name, time=3600)
+
+            except Exception as ex:
+                logger.error(f'{self.redis_name} failed to update task chain status: %s', ex)
+                self.meta['Errors'].append(f'Error updating task chain status: {ex}')
 
 class BaseTaskPool:
     """

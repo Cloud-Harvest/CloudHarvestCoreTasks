@@ -11,6 +11,7 @@
   - Added Redis helper methods for (un)formatting `HSET` and `HGET` style commands
   - Rewrote documentation for this task
 - `HarvestUpdateTask` will now make sure the `Harvest.UniqueIdentifier` key is uniquely indexed on the target and `metadata` collections
+- Corrected a syntax error in `MongoTask`'s sort method
 
 ## 0.6.3
 - Added the Environment package which provides a way to store configuration information made available to tasks

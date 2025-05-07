@@ -29,12 +29,12 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
         self.result_attribute = result_attribute
 
         self.order_of_operations = (
-            'matches',      # Filter the data
-            'add_keys',     # Add keys to the data
-            'sort',         # Sort the data
-            'project',      # Project the data
-            'limit',        # Limit the data
-            'count'         # Return a count of the data
+            'matches',  # Filter the data
+            'add_keys',  # Add keys to the data
+            'sort',  # Sort the data
+            'project',  # Project the data
+            'limit',  # Limit the data
+            'count'  # Return a count of the data
         )
 
     def apply_filters(self) -> 'MongoTask':
@@ -251,7 +251,7 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
                 # https://www.mongodb.com/docs/manual/reference/operator/aggregation/or/
 
                 return {
-                    '$match':{
+                    '$match': {
                         '$or': matches_results
                     }
                 }
@@ -261,9 +261,9 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
         This method returns a Mongo projection of the desired keys. This stage is unique to Mongo.
         """
         result = {
-                key: 1
-                for key in self.filter_keys()
-            }
+            key: 1
+            for key in self.filter_keys()
+        }
 
         return {
             "$project": result
@@ -276,6 +276,13 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
             for sort in self.sort:
                 if ':' in sort:
                     field, direction = sort.split(':')
+
+                    if direction == 'asc':
+                        direction = 1
+
+                    else:
+                        direction = -1
+
                     result[field] = direction
 
                 else:

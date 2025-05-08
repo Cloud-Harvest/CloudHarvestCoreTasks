@@ -207,6 +207,13 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
                         }
                     }
 
+                case '!==':
+                    result = {
+                        "$expr": {
+                            "$ne": [f"${match.key}", match.value]
+                        }
+                    }
+
                 case _:
                     raise ValueError('No valid matching statement returned')
 

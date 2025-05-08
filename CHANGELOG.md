@@ -2,12 +2,13 @@
 
 ## 0.6.5
 - Issue [#23](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/23) (Error Message Improvements)
-  - Improves error messages in `BaseTaskChain` and `BaseTask`
-  - Improves error messages in other tasks by calling `TaskError` instead of `Exception`
-  - `BaseTaskChain().results_to_silo()` now maps the entire `results` object to Redis instead of individual keys
-  - Changed how `BaseTaskChain` stores records to the harvest-tasks silo
-  - Fixed a bug with the `template_task_configuration()` factory method which prevented `chain_type` from being set properly
-  - Fixed an issue where performance metrics did not return the correct position identifier for tasks
+- Improves error messages in `BaseTaskChain` and `BaseTask`
+- Improves error messages in other tasks by calling `TaskError` instead of `Exception`
+- `BaseTaskChain().results_to_silo()` now maps the entire `results` object to Redis instead of individual keys
+- Changed how `BaseTaskChain` stores records to the harvest-tasks silo
+- Fixed a bug with the `template_task_configuration()` factory method which prevented `chain_type` from being set properly
+- Fixed an issue where performance metrics did not return the correct position identifier for tasks
+- Fixed some type conversion issues in DataSet and MongoTask filters (`None` and boolean types)
 
 ## 0.6.4
 - Part of the [Redis Task Standardization Effort](https://github.com/Cloud-Harvest/CloudHarvestAgent/issues/8)

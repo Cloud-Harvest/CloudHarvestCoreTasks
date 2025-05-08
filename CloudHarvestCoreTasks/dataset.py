@@ -1389,6 +1389,25 @@ class Match:
 
             self.value = None
 
+        # Configure bools
+        if self.value == 'true':
+            if self.operator == '=':
+                self.operator = '=='
+
+            elif self.operator == '!=':
+                self.operator = '!=='
+
+            self.value = True
+
+        elif self.value == 'false':
+            if self.operator == '=':
+                self.operator = '=='
+
+            elif self.operator == '!=':
+                self.operator = '!=='
+
+            self.value = False
+
     @property
     def final_operator(self):
         """

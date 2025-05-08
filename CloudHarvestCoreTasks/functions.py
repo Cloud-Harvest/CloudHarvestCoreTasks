@@ -104,49 +104,54 @@ def delimiter_list_to_string(value: list, delimiter: str) -> str:
     return delimiter.join(value)
 
 
-def is_bool(value: str) -> bool:
+def is_bool(value: Any) -> bool:
     """
     Determines if a value is a boolean.
     :param value: The value to check.
     :return: A boolean indicating if the value is a boolean.
     """
 
-    if value in ('False', 'false', 'No', 'no', 'True', 'true', 'Yes', 'yes'):
+    if str(value) in ('False', 'false', 'No', 'no', 'True', 'true', 'Yes', 'yes'):
         return True
 
+    else:
+        return False
 
-def is_datetime(value: str) -> bool:
+def is_datetime(value: Any) -> bool:
     """
     Determines if a value is a datetime.
     :param value: The value to check.
     :return: A boolean indicating if the value is a datetime.
     """
     try:
-        datetime.fromisoformat(value)
+        datetime.fromisoformat(str(value))
         return True
 
     except ValueError:
         return False
 
 
-def is_null(value: str) -> bool:
+def is_null(value: Any) -> bool:
     """
     Determines if a value is null.
     :param value: The value to check.
     :return: A boolean indicating if the value is null.
     """
-    if value in (None, 'None', 'null'):
+    if str(value) in (None, 'None', 'null'):
         return True
 
+    else:
+        return False
 
-def is_number(value: str) -> bool:
+
+def is_number(value: Any) -> bool:
     """
     Determines if a value is a number.
     :param value: The value to check.
     :return: A boolean indicating if the value is a number.
     """
     try:
-        int(value)
+        float(value)
         return True
 
     except ValueError:

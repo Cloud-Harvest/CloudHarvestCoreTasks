@@ -7,6 +7,7 @@
   - `BaseTaskChain().results_to_silo()` now maps the entire `results` object to Redis instead of individual keys
   - Changed how `BaseTaskChain` stores records to the harvest-tasks silo
   - Fixed a bug with the `template_task_configuration()` factory method which prevented `chain_type` from being set properly
+  - Fixed an issue where performance metrics did not return the correct position identifier for tasks
 
 ## 0.6.4
 - Part of the [Redis Task Standardization Effort](https://github.com/Cloud-Harvest/CloudHarvestAgent/issues/8)

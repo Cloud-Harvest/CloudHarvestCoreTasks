@@ -186,7 +186,7 @@ class BaseTaskChain(List[BaseTask]):
             # This part of the report returns results for each task in the task chain.
             task_metrics = [
                 {
-                    'Position': self.position,
+                    'Position': self.index(task),
                     'Name': task.name,
                     'Status': task.status.__str__(),
                     'Attempts': task.attempts,

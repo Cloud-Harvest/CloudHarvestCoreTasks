@@ -116,7 +116,7 @@ class MongoSilo(BaseSilo):
                 self.pool.server_info()
                 return True
 
-            except Exception as ex:
+            except BaseException as ex:
                 return False
 
         else:
@@ -215,7 +215,7 @@ class RedisSilo(BaseSilo):
                 StrictRedis(connection_pool=self.pool).ping()
                 return True
 
-            except Exception:
+            except BaseException:
                 return False
 
         else:

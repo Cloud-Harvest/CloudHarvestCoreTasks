@@ -116,8 +116,8 @@ class BaseHarvestTaskChain(BaseTaskChain):
                 self.task_templates = kwargs['tasks']['all']
 
             else:
-                from CloudHarvestCoreTasks.exceptions import TaskChainException
-                raise TaskChainException(f'Invalid mode: {self.mode} for {self.name}. Valid modes are {list(self.task_templates.keys())}.')
+                from CloudHarvestCoreTasks.exceptions import TaskChainError
+                raise TaskChainError(f'Invalid mode: {self.mode} for {self.name}. Valid modes are {list(self.task_templates.keys())}.')
 
         self.task_templates.append(record_update_template)
 

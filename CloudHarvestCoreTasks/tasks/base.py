@@ -1,8 +1,10 @@
-from datetime import datetime, timezone
-from types import GeneratorType
-from typing import Any, List, Literal
+from CloudHarvestCoreTasks.exceptions import TaskError
 
+from datetime import datetime, timezone
 from logging import getLogger
+from typing import Any, List
+
+
 logger = getLogger('harvest')
 
 
@@ -134,9 +136,8 @@ class BaseTask:
         self.status = TaskStatusCodes.initialized
         self.original_template = None
         self.result = None
-        self.meta = {
-            'Errors': []
-        }
+        self.meta = {}
+        self.errors = None
         self.start = None
         self.end = None
 
@@ -150,14 +151,6 @@ class BaseTask:
         """
 
         return ((self.end or datetime.now(tz=timezone.utc)) - self.start).total_seconds() if self.start else -1
-
-    @property
-    def errors(self) -> List[str]:
-        """
-        Returns a list of errors that occurred during the task.
-        """
-
-        return self.meta.get('Errors')
 
     @property
     def position(self) -> int:
@@ -210,7 +203,6 @@ class BaseTask:
         Returns:
         BaseTask: The instance of the task.
         """
-        from CloudHarvestCoreTasks.exceptions import TaskException
 
         try:
             max_attempts = self.retry.get('max_attempts') or 1
@@ -239,7 +231,7 @@ class BaseTask:
                     else:
                         self.on_skipped()
 
-                except (Exception, TaskException) as ex:
+                except BaseException as ex:
                     # If the `retry` directive is provided, check if the task should be retried. We include isinstance()
                     # to ensure that the retry directive is a dictionary.
                     if self.retry and isinstance(self.retry, dict):
@@ -299,16 +291,8 @@ class BaseTask:
                         break
 
 
-        except Exception as ex:
-            if hasattr(ex, 'args'):
-                if isinstance(ex.args, (tuple, list)):
-                    ex_args = '. '.join(ex.args)
-                else:
-                    ex_args = str(ex.args)
-            else:
-                ex_args = str(ex)
-
-            raise TaskException(self, ex_args)
+        except BaseException as ex:
+            raise TaskError(self, ex) from ex
 
         finally:
             # Update the metadata with the task's status, duration, and other information
@@ -420,7 +404,7 @@ class BaseTask:
 
         return self
 
-    def on_error(self, ex: Exception) -> 'BaseTask':
+    def on_error(self, ex: BaseException) -> 'BaseTask':
         """
         Method to run when a task errors.
         This method may be overridden in subclasses to provide specific error handling logic.
@@ -431,18 +415,7 @@ class BaseTask:
         Returns:
             BaseTask: The instance of the task.
         """
-
-        self.status = TaskStatusCodes.error
-
-        if hasattr(ex, 'args'):
-            self.meta['Errors'].append(str(ex.args))
-
-        if self.task_chain:
-            logger.error(f'{self.task_chain.id}[{self.position + 1}]: Error running task "{self.name}": {ex}')
-
-        else:
-            logger.error(f'Error running task "{self.name}": {ex}')
-
+        TaskError(self, ex)
         self._run_on_directive('error')
 
         return self
@@ -562,53 +535,6 @@ class BaseDataTask(BaseTask):
     def __exit__(self, exc_type, exc_val, exc_tb):
         return None
 
-    # @property
-    # def base_command_part(self):
-    #     """
-    #     Extracts the actual command from 'self.command' and returns it while preserving the path of the original command.
-    #     """
-    #
-    #     result = self.command
-    #
-    #     if '.' in self.command:
-    #         # Extract the command from the string
-    #         result = self.command.split('.')[0]
-    #
-    #     elif '[' and ']' in self.command:
-    #         # Extract the command from the string
-    #         result = self.command.split('[')[0]
-    #
-    #     return result
-    #
-    # def walk_result_command_path(self, result: Any) -> Any:
-    #     """
-    #     Walks the command path and returns the result, if applicable.
-    #
-    #     >>> # The Task Configuration supplies the command 'find.row_count'. row_count is a property of the find command.
-    #     >>> self.command = 'find.row_count'
-    #     >>> # The find command returns CursorType() which is stored in the variable 'result'.
-    #     >>> result = CursorType()
-    #     >>> # The walk_result_command_path() method will walk the command path and return CursorType().row_count.
-    #     >>> self.walk_result_command_path(result)
-    #     >>> # The final result is returned.
-    #     >>> 10
-    #     """
-    #
-    #     if '.' in self.command or ('[' and ']') in self.command:
-    #         # Walk the command path and return the result, if applicable
-    #         self.task_chain.variables[self.base_command_part] = result
-    #
-    #         # Walks the command path and returns the result. This allows commands such as MongoDb's 'find.row_count'.
-    #         from CloudHarvestCoreTasks.factories import replace_variable_path_with_value
-    #         result: Any = replace_variable_path_with_value(original_string=f'var.{self.command}',
-    #                                                        task_chain=self.task_chain,
-    #                                                        fail_on_unassigned=True)
-    #
-    #         # Removes the command from the variables
-    #         self.task_chain.variables.pop(self.base_command_part)
-    #
-    #     return result
-
 
 class BaseFilterableTask(BaseTask):
     """
@@ -674,8 +600,8 @@ class BaseFilterableTask(BaseTask):
         try:
             filters = compile(self.filters)
 
-        except Exception as ex:
-            raise ValueError(f'Invalid filter regex: `{self.filters}`') from ex
+        except BaseException as ex:
+            raise TaskError(self, f'Invalid filter regex: `{self.filters}`') from ex
 
         return filter_value or default_value if filters.match(filter_name) else default_value
 

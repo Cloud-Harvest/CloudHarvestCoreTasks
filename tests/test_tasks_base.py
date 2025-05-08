@@ -87,7 +87,7 @@ class TestBaseTask(BaseTestCase):
         # Test the on_error method
         try:
             raise Exception('Test exception')
-        except Exception as e:
+        except BaseException as e:
             self.base_task.on_error(e)
             
         self.assertEqual(str(self.base_task.status), TaskStatusCodes.error)
@@ -364,7 +364,7 @@ class TestBaseTaskChain(BaseTestCase):
         # Simulate an error
         try:
             raise Exception('Test exception')
-        except Exception as e:
+        except BaseException as e:
             # Call the on_error method of the task chain
             self.base_task_chain.on_error(e)
         # Assert that the status of the task chain is 'error'

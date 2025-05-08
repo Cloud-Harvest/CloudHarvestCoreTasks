@@ -1,6 +1,6 @@
 from CloudHarvestCorePluginManager import register_definition
 from CloudHarvestCoreTasks.tasks.base import BaseFilterableTask
-from CloudHarvestCoreTasks.exceptions import TaskException
+from CloudHarvestCoreTasks.exceptions import TaskError
 
 from typing import List, Any
 
@@ -63,10 +63,10 @@ class DataSetTask(BaseFilterableTask):
                         getattr(self.data, function)(**(arguments or {}))
 
                     else:
-                        raise TaskException(self, f"Command '{function}' does not exist for the DataSetTask.")
+                        raise TaskError(self, f"Command '{function}' does not exist for the DataSetTask.")
 
-            except Exception as ex:
-                raise TaskException(self, f"Error executing stage [{self.stages.index(stage) + 1}] {list(stage.keys())[0]}: {str(ex)}")
+            except BaseException as ex:
+                raise TaskError(self, f"Error executing stage [{self.stages.index(stage) + 1}] {list(stage.keys())[0]}", ex) from ex
 
             # Increment the stage_position
             self.stage_position += 1

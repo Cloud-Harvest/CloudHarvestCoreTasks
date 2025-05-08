@@ -31,6 +31,7 @@ def template_object(template: Any, variables: dict = None) -> dict:
     result = {}
 
     from jinja2 import Environment, DictLoader
+    from jinja2.exceptions import TemplateError, UndefinedError, TemplateSyntaxError, TemplateRuntimeError
 
     # If the template is not a string, convert it to a JSON string
     if not isinstance(template, str):
@@ -53,7 +54,7 @@ def template_object(template: Any, variables: dict = None) -> dict:
         rendered = environment.get_template('template').render(**variables or {})
         result = loads(rendered)
 
-    except Exception as e:
+    except (TemplateError, UndefinedError, TemplateSyntaxError, TemplateRuntimeError) as e:
         logger.warning(f'Error rendering template: {e}')
 
     return result

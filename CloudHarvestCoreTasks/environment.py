@@ -86,7 +86,7 @@ class Environment:
                 else:
                     raise ValueError("Unsupported file format. Only '.yaml', '.yml', and '.json' are supported.")
 
-        except Exception as e:
+        except BaseException as e:
             logger.warning(f'Failed to load environment variables from {path}: {e}')
 
         else:

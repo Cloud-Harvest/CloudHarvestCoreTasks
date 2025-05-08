@@ -1,6 +1,6 @@
 from CloudHarvestCorePluginManager import register_definition
 from CloudHarvestCoreTasks.tasks.base import BaseDataTask, BaseFilterableTask
-from CloudHarvestCoreTasks.exceptions import TaskException
+from CloudHarvestCoreTasks.exceptions import TaskError
 
 from pymongo import MongoClient
 
@@ -299,7 +299,7 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
         from the result, if applicable.
         """
         if self.filters and self.command != 'aggregate':
-            raise TaskException(self, 'Filters are only supported for the aggregate command.')
+            raise TaskError(self, 'Filters are only supported for the aggregate command.')
 
         else:
             self.apply_filters()
@@ -307,7 +307,7 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
         client: MongoClient = self.silo.connect()
 
         if not self.silo.is_connected:
-            raise TaskException(self, f'Unable to connect to the {self.silo.name} silo.')
+            raise TaskError(self, f'Unable to connect to the {self.silo.name} silo.')
 
         if self.collection:
             # Note that MongoDb does not return an error if a collection is not found. Instead, MongoDb will faithfully

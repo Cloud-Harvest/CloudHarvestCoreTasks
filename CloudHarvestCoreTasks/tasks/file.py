@@ -1,7 +1,7 @@
 from CloudHarvestCorePluginManager import register_definition
 from CloudHarvestCoreTasks.dataset import WalkableDict
 from CloudHarvestCoreTasks.tasks.base import BaseTask
-from CloudHarvestCoreTasks.exceptions import TaskException
+from CloudHarvestCoreTasks.exceptions import TaskError
 
 from typing import Literal, List
 
@@ -53,7 +53,7 @@ class FileTask(BaseTask):
         # Value Checks
         if self.mode == 'read':
             if self.result_as is None:
-                raise TaskException(self, f'The `result_as` attribute is required for read operations.')
+                raise TaskError(self, f'The `result_as` attribute is required for read operations.')
 
     def determine_format(self):
         """
@@ -184,7 +184,7 @@ class FileTask(BaseTask):
                             config.write(file)
 
                         else:
-                            raise TaskException(self, f'`FileTask` only supports dictionaries for writes to config files.')
+                            raise TaskError(self, f'`FileTask` only supports dictionaries for writes to config files.')
 
                     elif self.format == 'csv':
                         if isinstance(self.data, list):
@@ -199,7 +199,7 @@ class FileTask(BaseTask):
 
                                 return self
 
-                        raise TaskException(self, f'`FileTask` only supports lists of dictionaries for writes to CSV files.')
+                        raise TaskError(self, f'`FileTask` only supports lists of dictionaries for writes to CSV files.')
 
                     elif self.format == 'json':
                         json.dump(self.data, file, default=str, indent=4)
@@ -212,6 +212,6 @@ class FileTask(BaseTask):
                 finally:
                     from os.path import exists
                     if not exists(self.abs_path):
-                        raise TaskException(self, f'The file `{file}` was not written to disk.')
+                        raise TaskError(self, f'The file `{file}` was not written to disk.')
 
         return self

@@ -44,13 +44,13 @@ class TestErrorTask(BaseTestCase):
         self.error_task = ErrorTask(name='error_task', description='This is an error task')
 
     def test_run(self):
-        from exceptions import TaskException
+        from exceptions import TaskError
 
         try:
             self.error_task.run()
 
-        except TaskException as ex:
-            self.assertIsInstance(ex, TaskException)
+        except TaskError as ex:
+            self.assertIsInstance(ex, TaskError)
             self.assertEqual(self.error_task.status, TaskStatusCodes.error)
 
 class TestFileTask(BaseTestCase):

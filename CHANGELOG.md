@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.5
+- [#23](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/23) - Error Message Improvements
+  - Improves error messages in `BaseTaskChain` and `BaseTask`
+  - Improves error messages in other tasks by calling `TaskError` instead of `Exception`
+
 ## 0.6.4
 - Part of the [Redis Task Standardization Effort](https://github.com/Cloud-Harvest/CloudHarvestAgent/issues/8)
 - Updated `BaseTaskChain` 

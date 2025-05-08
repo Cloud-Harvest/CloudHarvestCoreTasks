@@ -188,6 +188,7 @@ class BaseTaskChain(List[BaseTask]):
                 {
                     'Position': self.index(task),
                     'Name': task.name,
+                    'Class': task.__name__,
                     'Status': task.status.__str__(),
                     'Attempts': task.attempts,
                     'DataBytes': getsizeof(task.result),

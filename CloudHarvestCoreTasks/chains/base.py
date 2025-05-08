@@ -196,6 +196,7 @@ class BaseTaskChain(List[BaseTask]):
                     'Duration': task.duration,
                     'Start': task.start,
                     'End': task.end,
+                    'Errors': task.errors,
                 }
                 for task in self
             ]

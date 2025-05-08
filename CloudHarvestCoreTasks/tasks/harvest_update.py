@@ -432,6 +432,7 @@ class HarvestUpdateTask(BaseTask):
         else:
             metrics['Records'] = self.result['RecordsProcessed']
 
+        # Although the convention in Redis is to use lower-case for fields, we use upper-case in MongoDB.
         result = self.pstar_identifier | metrics | {'Errors': self.task_chain.result['errors']}
 
         collection.replace_one(self.pstar_identifier, result, upsert=True)

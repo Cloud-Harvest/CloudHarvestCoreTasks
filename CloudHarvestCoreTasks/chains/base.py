@@ -511,8 +511,6 @@ class BaseTaskChain(List[BaseTask]):
             from CloudHarvestCoreTasks.tasks.redis import format_hset
 
             try:
-                self.update_status_client.connect()
-
                 self.update_status_client.hset(
                     name=self.redis_name,
                     mapping=format_hset(self.result or {})

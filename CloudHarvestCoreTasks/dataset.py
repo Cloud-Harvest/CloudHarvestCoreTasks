@@ -1379,6 +1379,16 @@ class Match:
         self.key, \
         self.value = self.syntax.split(self.operator)
 
+        # Configure null values
+        if self.value == 'null':
+            if self.operator == '=':
+                self.operator = '=='
+
+            elif self.operator == '!=':
+                self.operator = '!=='
+
+            self.value = None
+
     @property
     def final_operator(self):
         """
@@ -1405,16 +1415,19 @@ class Match:
         # before '='. This allows us to perform split() operations on the syntax without accidentally splitting on a substring
         # that is part of the operator.
 
+        from re import findall
+
         match_operations = {
-            '==': operator.eq,  # Checks if 'a' is equal to 'b'
-            '>=': operator.ge,  # Checks if 'a' is greater than or equal to 'b'
-            '=>': operator.ge,  # Checks if 'a' is greater than or equal to 'b'
-            '<=': operator.le,  # Checks if 'a' is less than or equal to 'b'
-            '=<': operator.le,  # Checks if 'a' is less than or equal to 'b'
-            '!=': operator.ne,  # Checks if 'a' is not equal to 'b'
-            '>': operator.gt,  # Checks if 'a' is greater than 'b'
-            '<': operator.lt,  # Checks if 'a' is less than 'b'
-            '=': findall  # Checks if 'a' contains 'b'
+            '!==': operator.ne,     # Checks if 'a' is not equal to 'b'
+            '==': operator.eq,      # Checks if 'a' is equal to 'b'
+            '>=': operator.ge,      # Checks if 'a' is greater than or equal to 'b'
+            '=>': operator.ge,      # Checks if 'a' is greater than or equal to 'b'
+            '<=': operator.le,      # Checks if 'a' is less than or equal to 'b'
+            '=<': operator.le,      # Checks if 'a' is less than or equal to 'b'
+            '!=': findall,          # Checks if 'a' does not match regex expression 'b'
+            '>': operator.gt,       # Checks if 'a' is greater than 'b'
+            '<': operator.lt,       # Checks if 'a' is less than 'b'
+            '=': findall            # Checks if 'a' matches regex expression 'b'
         }
 
         for op, method in match_operations.items():
@@ -1471,6 +1484,9 @@ class Match:
         from re import findall, IGNORECASE
         if self.operator == '=':
             result = findall(pattern=matching_value, string=record_key_value, flags=IGNORECASE)
+
+        elif self.operator == '!=':
+            result = not findall(pattern=matching_value, string=record_key_value, flags=IGNORECASE)
 
         else:
             result = self.operator_method(record_key_value, matching_value)

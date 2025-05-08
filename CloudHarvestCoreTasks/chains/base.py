@@ -511,11 +511,9 @@ class BaseTaskChain(List[BaseTask]):
         Sends the TaskChain results to a remote silo.
         """
 
-        results = self.result or {}
-
         if self.results_silo:
             from CloudHarvestCoreTasks.silos import get_silo
-            from json import dumps
+            from CloudHarvestCoreTasks.tasks.redis import format_hset
             silo = get_silo(self.results_silo)
             from redis import StrictRedis
             try:
@@ -523,10 +521,7 @@ class BaseTaskChain(List[BaseTask]):
 
                 client.hset(
                     name=self.redis_name,
-                    mapping={
-                        'errors': dumps(self.errors),
-                        'result': dumps(results, default=str),
-                    }
+                    mapping=format_hset(self.result or {})
                 )
 
                 # Sets an expiration to retrieve the results

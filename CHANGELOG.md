@@ -4,6 +4,7 @@
 - [#23](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/23) - Error Message Improvements
   - Improves error messages in `BaseTaskChain` and `BaseTask`
   - Improves error messages in other tasks by calling `TaskError` instead of `Exception`
+  - `BaseTaskChain().results_to_silo()` now maps the entire `results` object to Redis instead of individual keys
 
 ## 0.6.4
 - Part of the [Redis Task Standardization Effort](https://github.com/Cloud-Harvest/CloudHarvestAgent/issues/8)

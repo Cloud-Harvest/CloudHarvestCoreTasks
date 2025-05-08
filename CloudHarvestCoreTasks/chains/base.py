@@ -103,21 +103,17 @@ class BaseTaskChain(List[BaseTask]):
 
         self.meta = {}
 
-        # When set, the TaskChain will send results to this silo when it completes or errors. Can only be set after the
-        # TaskChain has been instantiated. This is to prevent users from setting the silo in the template, thus sending
-        # results to the wrong silo.
-        self.results_silo = None
         self.required_variables = template.get('required_variables') or []
-
         self.update_status_client = None
 
-        # Set up the client used to update the task chain status in Redis
-        from CloudHarvestCoreTasks.silos import get_silo
-        silo = get_silo('harvest-tasks')
-
         try:
+            # Set up the client used to update the task chain status in Redis
+            from CloudHarvestCoreTasks.silos import get_silo
+            from redis import StrictRedis
+            silo = get_silo('harvest-tasks')
+
             if silo:
-                self.update_status_client = silo.connect()
+                self.update_status_client: StrictRedis = silo.connect()
                 self.update_status()
 
         except BaseException as ex:
@@ -280,7 +276,6 @@ class BaseTaskChain(List[BaseTask]):
             'total': self.total,
             'start': self.start,
             'end': self.end,
-            'result': self.result
         }
 
     @property
@@ -511,27 +506,26 @@ class BaseTaskChain(List[BaseTask]):
         Sends the TaskChain results to a remote silo.
         """
 
-        if self.results_silo:
+        if self.update_status_client:
             from CloudHarvestCoreTasks.silos import get_silo
             from CloudHarvestCoreTasks.tasks.redis import format_hset
-            silo = get_silo(self.results_silo)
-            from redis import StrictRedis
-            try:
-                client: StrictRedis = silo.connect()
 
-                client.hset(
+            try:
+                self.update_status_client.connect()
+
+                self.update_status_client.hset(
                     name=self.redis_name,
                     mapping=format_hset(self.result or {})
                 )
 
                 # Sets an expiration to retrieve the results
-                client.expire(self.id, 3600)
+                self.update_status_client.expire(self.id, 3600)
 
             except BaseException as ex:
-                raise TaskChainError(self, f'Error storing task chain results in silo {self.results_silo}: {ex}') from ex
+                raise TaskChainError(self, f'Error storing task chain results in silo `harvest-tasks`: {ex}') from ex
 
             else:
-                logger.debug(f'{self.redis_name}: Stored task chain results in silo {self.results_silo}')
+                logger.debug(f'{self.redis_name}: Stored task chain results in silo `harvest-tasks`')
 
     def run(self) -> 'BaseTaskChain':
         """

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.6
+- [Platform configuration needs to allow different role names per account](https://github.com/Cloud-Harvest/CloudHarvestAgent/issues/10)
+- Improved how `WalkableDict` navigates through dictionaries and lists
+
 ## 0.6.5
 - Issue [#23](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/23) (Error Message Improvements)
 - Improves error messages in `BaseTaskChain` and `BaseTask`

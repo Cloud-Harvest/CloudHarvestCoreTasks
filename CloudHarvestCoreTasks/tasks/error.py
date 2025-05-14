@@ -1,6 +1,6 @@
 from CloudHarvestCorePluginManager import register_definition
 from CloudHarvestCoreTasks.tasks.base import BaseTask
-from CloudHarvestCoreTasks.exceptions import TaskException
+from CloudHarvestCoreTasks.exceptions import TaskError
 
 
 @register_definition(name='error', category='task')
@@ -14,4 +14,4 @@ class ErrorTask(BaseTask):
         super().__init__(*args, **kwargs)
 
     def method(self):
-        raise TaskException(self, 'This is an error task')
+        raise TaskError(self, 'This is an error task')

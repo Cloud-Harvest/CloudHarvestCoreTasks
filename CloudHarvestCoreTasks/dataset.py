@@ -276,33 +276,58 @@ class WalkableDict(dict):
 
         for part in path:
             try:
-                # If the part is a digit, convert it to an integer and use it as a list index or subscript
-                if str(part).isdigit() and '.' not in str(part):
-                    part = int(part)
+                # If the target is a dictionary, get the indicated key (part)
+                if isinstance(target, dict):
+                    if part in target.keys():
+                        # If the part is a key, get the value
+                        target = target[part]
 
-                target = target[part]
+                    elif hasattr(target, part):
+                        # If the part is an attribute, get the attribute value
+                        target = getattr(target, part)
 
-            except KeyError:
-                # Check if this is a callable attribute, such as __len__ or keys()
-                if hasattr(target, part):
-                    try:
-                        if callable(getattr(target, part)):
-                            # If the attribute is callable, call it and assign the result
-                            result = getattr(target, part)()
+                    else:
+                        # If the part is not found, return the default value
+                        return default
+
+                # If the target is a list and the part is an integer, treat it as an index
+                elif isinstance(target, (list, tuple, str)):
+                    if part.isdigit():
+                        # If the part is an integer, treat it as an index
+                        index = int(part)
+
+                        if 0 <= index < len(target):
+                            target = target[index]
 
                         else:
-                            # If the attribute is not callable, assign it directly
-                            result = getattr(target, part)
+                            # If the index is out of bounds, return the default value
+                            return default
 
-                    except Exception:
-                        result = default
+                    elif hasattr(target, part):
+                        # If the part is a string, treat it as an attribute
+                        target = getattr(target, part)
+
+                    else:
+                        # If the part is not found, return the default value
+                        return default
 
                 else:
-                    result = default
+                    # Check we're at the end of the path
+                    if path.index(part) == len(path) - 1:
+                        # If we've reached the end of the path, return the target value
+                        pass
 
-            except (IndexError, TypeError, ValueError):
-                result = default
-                break
+                    elif hasattr(target, part):
+                        # If the part is a string, treat it as an attribute
+                        target = getattr(target, part)
+
+                    else:
+                        # If the part is not found, return the default value
+                        return default
+
+            except BaseException as ex:
+                # If an exception occurs, return the default value
+                return default
 
             else:
                 result = target
@@ -1379,6 +1404,35 @@ class Match:
         self.key, \
         self.value = self.syntax.split(self.operator)
 
+        # Configure null values
+        if self.value == 'null':
+            if self.operator == '=':
+                self.operator = '=='
+
+            elif self.operator == '!=':
+                self.operator = '!=='
+
+            self.value = None
+
+        # Configure bools
+        if self.value == 'true':
+            if self.operator == '=':
+                self.operator = '=='
+
+            elif self.operator == '!=':
+                self.operator = '!=='
+
+            self.value = True
+
+        elif self.value == 'false':
+            if self.operator == '=':
+                self.operator = '=='
+
+            elif self.operator == '!=':
+                self.operator = '!=='
+
+            self.value = False
+
     @property
     def final_operator(self):
         """
@@ -1405,16 +1459,19 @@ class Match:
         # before '='. This allows us to perform split() operations on the syntax without accidentally splitting on a substring
         # that is part of the operator.
 
+        from re import findall
+
         match_operations = {
-            '==': operator.eq,  # Checks if 'a' is equal to 'b'
-            '>=': operator.ge,  # Checks if 'a' is greater than or equal to 'b'
-            '=>': operator.ge,  # Checks if 'a' is greater than or equal to 'b'
-            '<=': operator.le,  # Checks if 'a' is less than or equal to 'b'
-            '=<': operator.le,  # Checks if 'a' is less than or equal to 'b'
-            '!=': operator.ne,  # Checks if 'a' is not equal to 'b'
-            '>': operator.gt,  # Checks if 'a' is greater than 'b'
-            '<': operator.lt,  # Checks if 'a' is less than 'b'
-            '=': findall  # Checks if 'a' contains 'b'
+            '!==': operator.ne,     # Checks if 'a' is not equal to 'b'
+            '==': operator.eq,      # Checks if 'a' is equal to 'b'
+            '>=': operator.ge,      # Checks if 'a' is greater than or equal to 'b'
+            '=>': operator.ge,      # Checks if 'a' is greater than or equal to 'b'
+            '<=': operator.le,      # Checks if 'a' is less than or equal to 'b'
+            '=<': operator.le,      # Checks if 'a' is less than or equal to 'b'
+            '!=': findall,          # Checks if 'a' does not match regex expression 'b'
+            '>': operator.gt,       # Checks if 'a' is greater than 'b'
+            '<': operator.lt,       # Checks if 'a' is less than 'b'
+            '=': findall            # Checks if 'a' matches regex expression 'b'
         }
 
         for op, method in match_operations.items():
@@ -1471,6 +1528,9 @@ class Match:
         from re import findall, IGNORECASE
         if self.operator == '=':
             result = findall(pattern=matching_value, string=record_key_value, flags=IGNORECASE)
+
+        elif self.operator == '!=':
+            result = not findall(pattern=matching_value, string=record_key_value, flags=IGNORECASE)
 
         else:
             result = self.operator_method(record_key_value, matching_value)

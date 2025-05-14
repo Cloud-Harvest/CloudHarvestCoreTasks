@@ -1,7 +1,7 @@
 from CloudHarvestCorePluginManager import register_definition
 from CloudHarvestCoreTasks.dataset import WalkableDict
 from CloudHarvestCoreTasks.tasks.base import BaseTask
-from CloudHarvestCoreTasks.exceptions import TaskException
+from CloudHarvestCoreTasks.exceptions import TaskError
 
 from typing import List
 from pymongo import ReplaceOne
@@ -48,7 +48,7 @@ class HarvestUpdateTask(BaseTask):
         # Ensure that the task chain is a BaseHarvestTaskChain
         from CloudHarvestCoreTasks.chains.harvest import BaseHarvestTaskChain
         if not isinstance(self.task_chain, BaseHarvestTaskChain):
-            raise TaskException(self, 'HarvestTask must be used in a BaseHarvestTaskChain.')
+            raise TaskError(self, 'HarvestTask must be used in a BaseHarvestTaskChain.')
 
         # Type hint for the task_chain attribute
         from typing import cast
@@ -82,8 +82,8 @@ class HarvestUpdateTask(BaseTask):
             try:
                 get_silo(silo_name).connect().server_info()
 
-            except Exception as ex:
-                raise TaskException(self, f'Unable to connect to the {silo_name} silo. {str(ex)}')
+            except BaseException as ex:
+                raise TaskError(self, f'Unable to connect to the {silo_name} silo.', ex) from ex
 
         # Attach metadata to the records
         data = self.attach_metadata_to_records()
@@ -204,7 +204,7 @@ class HarvestUpdateTask(BaseTask):
         ]
 
         if missing_fields:
-            raise TaskException(self, f'Missing required metadata fields: {missing_fields}')
+            raise TaskError(self, f'Missing required metadata fields: {missing_fields}')
 
         else:
             return result
@@ -384,10 +384,9 @@ class HarvestUpdateTask(BaseTask):
                 'EndTime': datetime.now(tz=timezone.utc)
             }})
 
-        except Exception as ex:
+        except BaseException as ex:
             from traceback import format_exc
-            ex_details = format_exc()
-            raise TaskException(self, f'Error deactivating records. {str(ex)}')
+            raise TaskError(self, f'Error deactivating records.', ex) from ex
 
         else:
             return {
@@ -433,6 +432,7 @@ class HarvestUpdateTask(BaseTask):
         else:
             metrics['Records'] = self.result['RecordsProcessed']
 
+        # Although the convention in Redis is to use lower-case for fields, we use upper-case in MongoDB.
         result = self.pstar_identifier | metrics | {'Errors': self.task_chain.result['errors']}
 
         collection.replace_one(self.pstar_identifier, result, upsert=True)

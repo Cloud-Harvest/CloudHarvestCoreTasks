@@ -28,7 +28,7 @@ class JsonTask(BaseTask):
         self.default_type = default_type
         self.parse_datetimes = parse_datetimes
 
-    def method(self):
+    def method(self) -> 'JsonTask':
         """
         Executes the task.
 
@@ -55,7 +55,7 @@ class JsonTask(BaseTask):
                         try:
                             return datetime.strptime(v, '%Y-%m-%d %H:%M:%S.%f')
 
-                        except Exception as ex:
+                        except BaseException as ex:
                             return v
 
                     if isinstance(deserialized, dict):
@@ -78,7 +78,7 @@ class JsonTask(BaseTask):
                 # This can lead to inconsistencies in the output, but it is necessary
 
                 return json.dumps(data, default=str)
-
+            return None
 
         # Check if self.data is an iterable
         if isinstance(self.data, (list, tuple)):

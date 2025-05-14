@@ -1,12 +1,12 @@
 from CloudHarvestCorePluginManager import register_definition
 from CloudHarvestCoreTasks.tasks.base import BaseTask, TaskStatusCodes
-from CloudHarvestCoreTasks.exceptions import TaskTerminationException
+from CloudHarvestCoreTasks.exceptions import TaskTerminationError
 
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Generator
 from logging import getLogger
 
-from CloudHarvestCoreTasks.exceptions import TaskChainException
+from CloudHarvestCoreTasks.exceptions import TaskChainError
 
 logger = getLogger('harvest')
 
@@ -97,32 +97,27 @@ class BaseTaskChain(List[BaseTask]):
         self.position = 0
 
         self.agent = None       # populated by agent
+        self.errors = None
         self.start = None
         self.end = None
 
-        self.meta = {
-            'Errors': []
-        }
+        self.meta = {}
 
-        # When set, the TaskChain will send results to this silo when it completes or errors. Can only be set after the
-        # TaskChain has been instantiated. This is to prevent users from setting the silo in the template, thus sending
-        # results to the wrong silo.
-        self.results_silo = None
         self.required_variables = template.get('required_variables') or []
-
         self.update_status_client = None
 
-        # Set up the client used to update the task chain status in Redis
-        from CloudHarvestCoreTasks.silos import get_silo
-        silo = get_silo('harvest-tasks')
-
         try:
+            # Set up the client used to update the task chain status in Redis
+            from CloudHarvestCoreTasks.silos import get_silo
+            from redis import StrictRedis
+            silo = get_silo('harvest-tasks')
+
             if silo:
-                self.update_status_client = silo.connect()
+                self.update_status_client: StrictRedis = silo.connect()
                 self.update_status()
 
-        except Exception as ex:
-            logger.error(f'{self.redis_name} failed to connect to `harvest-tasks` silo: %s', ex)
+        except BaseException as ex:
+            raise TaskChainError(f'{self.redis_name} failed to connect to `harvest-tasks` silo', ex) from ex
 
     def __enter__(self) -> 'BaseTaskChain':
         """
@@ -147,22 +142,6 @@ class BaseTaskChain(List[BaseTask]):
         """
 
         return None
-
-    @property
-    def errors(self) -> List[dict]:
-        """
-        Returns a list of errors that occurred during the task chain.
-        """
-
-        errors = []
-        for task in self:
-            if task.meta.get('Errors'):
-                errors.append({f'{self.index(task)}-{task.name}': task.meta['Errors']})
-
-        if self.meta.get('Errors'):
-            errors.append({'TaskChain': self.meta['Errors']})
-
-        return errors
 
     @property
     def percent(self) -> float:
@@ -207,8 +186,9 @@ class BaseTaskChain(List[BaseTask]):
             # This part of the report returns results for each task in the task chain.
             task_metrics = [
                 {
-                    'Position': self.position,
+                    'Position': self.index(task),
                     'Name': task.name,
+                    'Class': task.__class__.__name__,
                     'Status': task.status.__str__(),
                     'Attempts': task.attempts,
                     'DataBytes': getsizeof(task.result),
@@ -216,6 +196,7 @@ class BaseTaskChain(List[BaseTask]):
                     'Duration': task.duration,
                     'Start': task.start,
                     'End': task.end,
+                    'Errors': task.errors,
                 }
                 for task in self
             ]
@@ -297,7 +278,6 @@ class BaseTaskChain(List[BaseTask]):
             'total': self.total,
             'start': self.start,
             'end': self.end,
-            'result': self.result
         }
 
     @property
@@ -446,7 +426,7 @@ class BaseTaskChain(List[BaseTask]):
         position = self.find_task_position_by_name(task_name)
 
         if position < self.position:
-            raise TaskChainException(self, 'Cannot insert a task before the current task.')
+            raise TaskChainError(self, 'Cannot insert a task before the current task.')
 
         else:
             self.task_templates.insert(position - 1, new_task_configuration)
@@ -490,7 +470,7 @@ class BaseTaskChain(List[BaseTask]):
 
         return self
 
-    def on_error(self, ex: Exception) -> 'BaseTaskChain':
+    def on_error(self, ex: BaseException) -> 'BaseTaskChain':
         """
         Method to run when the task chain errors.
         This method may be overridden in subclasses to provide specific error handling logic.
@@ -500,7 +480,6 @@ class BaseTaskChain(List[BaseTask]):
         """
 
         self.status = TaskStatusCodes.error
-        self.meta['Errors'].append(str(ex.args))
 
         if self.pool.queue_size:
             self.pool.terminate()
@@ -529,29 +508,24 @@ class BaseTaskChain(List[BaseTask]):
         Sends the TaskChain results to a remote silo.
         """
 
-        results = self.result or {}
-
-        if self.results_silo:
+        if self.update_status_client:
             from CloudHarvestCoreTasks.silos import get_silo
-            from json import dumps
-            silo = get_silo(self.results_silo)
+            from CloudHarvestCoreTasks.tasks.redis import format_hset
 
             try:
-                client = silo.connect()
-                client.hset(
+                self.update_status_client.hset(
                     name=self.redis_name,
-                    key='result',
-                    value=dumps(results, default=str)
+                    mapping=format_hset(self.result or {})
                 )
 
                 # Sets an expiration to retrieve the results
-                client.expire(self.id, 3600)
+                self.update_status_client.expire(self.id, 3600)
 
-            except Exception as ex:
-                logger.error(f'{self.redis_name}: Error storing task chain results in silo {self.results_silo}: {ex}')
+            except BaseException as ex:
+                raise TaskChainError(self, f'Error storing task chain results in silo `harvest-tasks`: {ex}') from ex
 
             else:
-                logger.debug(f'{self.redis_name}: Stored task chain results in silo {self.results_silo}')
+                logger.debug(f'{self.redis_name}: Stored task chain results in silo `harvest-tasks`')
 
     def run(self) -> 'BaseTaskChain':
         """
@@ -640,7 +614,7 @@ class BaseTaskChain(List[BaseTask]):
 
                 # Check for termination
                 if self.status == TaskStatusCodes.terminating:
-                    raise TaskTerminationException('Task chain was instructed to terminate.')
+                    raise TaskTerminationError('Task chain was instructed to terminate.')
 
                 # Hold within the loop if there are outstanding pool tasks because the async task might have an
                 # on_* directive which needs to be added and processed. By waiting here, we ensure that the task chain
@@ -654,7 +628,7 @@ class BaseTaskChain(List[BaseTask]):
             if self.pool.queue_size > 0:
                 self.pool.wait_until_complete()
 
-        except Exception as ex:
+        except BaseException as ex:
             self.on_error(ex)
 
         finally:
@@ -729,9 +703,8 @@ class BaseTaskChain(List[BaseTask]):
                 self.update_status_client.hset(name=self.redis_name, mapping=format_hset(self.redis_struct()))
                 self.update_status_client.expire(name=self.redis_name, time=3600)
 
-            except Exception as ex:
-                logger.error(f'{self.redis_name} failed to update task chain status: %s', ex)
-                self.meta['Errors'].append(f'Error updating task chain status: {ex}')
+            except BaseException as ex:
+                raise TaskChainError(self, f'Error updating task chain status: {ex}') from ex
 
 class BaseTaskPool:
     """

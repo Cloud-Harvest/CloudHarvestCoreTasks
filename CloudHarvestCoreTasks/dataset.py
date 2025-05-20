@@ -282,9 +282,9 @@ class WalkableDict(dict):
                         # If the part is a key, get the value
                         target = target[part]
 
-                    elif hasattr(target, part):
+                    elif hasattr(str(target), part):
                         # If the part is an attribute, get the attribute value
-                        target = getattr(target, part)
+                        target = getattr(str(target), part)
 
                     else:
                         # If the part is not found, return the default value
@@ -303,9 +303,9 @@ class WalkableDict(dict):
                             # If the index is out of bounds, return the default value
                             return default
 
-                    elif hasattr(target, part):
+                    elif hasattr(str(target), part):
                         # If the part is a string, treat it as an attribute
-                        target = getattr(target, part)
+                        target = getattr(str(target), part)
 
                     else:
                         # If the part is not found, return the default value
@@ -317,9 +317,9 @@ class WalkableDict(dict):
                         # If we've reached the end of the path, return the target value
                         pass
 
-                    elif hasattr(target, part):
+                    elif hasattr(str(target), part):
                         # If the part is a string, treat it as an attribute
-                        target = getattr(target, part)
+                        target = getattr(str(target), part)
 
                     else:
                         # If the part is not found, return the default value

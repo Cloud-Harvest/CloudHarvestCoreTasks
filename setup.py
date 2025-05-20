@@ -11,7 +11,7 @@ with open('requirements.txt') as f:
 
 config = dict(packages=find_packages(include=['CloudHarvestCoreTasks*']),
               package_data={
-                  'CloudHarvestPluginAws': [
+                  'CloudHarvestCoreTasks': [
                       'meta.json'
                   ]
               },

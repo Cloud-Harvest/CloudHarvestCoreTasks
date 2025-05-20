@@ -10,6 +10,11 @@ with open('requirements.txt') as f:
     required = f.read().splitlines()
 
 config = dict(packages=find_packages(include=['CloudHarvestCoreTasks*']),
+              package_data={
+                  'CloudHarvestPluginAws': [
+                      'meta.json'
+                  ]
+              },
               install_requires=required)
 
 config = config | meta

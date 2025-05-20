@@ -36,7 +36,7 @@ class TaskError(BaseHarvestException):
 
         # Configure the log prefix
         if task.task_chain:
-            prefix = f'{task.task_chain.id}[{task.task_chain.position + 1}]'
+            prefix = f'{task.task_chain.redis_name}[{task.task_chain.position + 1}]'
 
         else:
             prefix = task.name

@@ -176,7 +176,7 @@ class HarvestUpdateTask(BaseTask):
         build_components = {
             'Module': {
                 str(k).title(): v
-                for k, v in getattr(self, '_harvest_plugin_metadata', {}).items()}
+                for k, v in (getattr(self, '_harvest_plugin_metadata') or {}).items()}
         }
 
         dates = {

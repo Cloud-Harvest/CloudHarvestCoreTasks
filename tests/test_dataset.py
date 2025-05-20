@@ -507,6 +507,10 @@ class TestWalkableDict(unittest.TestCase):
         for record in self.dataset:
             self.assertEqual(record.walk('address.city'), record['address']['city'])
 
+        self.dataset[0]['test_nested_int_as_key'] = {'123456789012': {'nested_value': 'test'}}
+
+        self.assertEqual(self.dataset[0].walk('test_nested_int_as_key.123456789012.nested_value'), 'test')
+
     def test_assign(self):
         # Test basic nested assignment of an existing value
         for record in self.dataset:

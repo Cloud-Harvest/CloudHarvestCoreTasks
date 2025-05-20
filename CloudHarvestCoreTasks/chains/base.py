@@ -296,8 +296,8 @@ class BaseTaskChain(List[BaseTask]):
             'data': data,
             'errors': self.errors,
             'meta': self.meta,
-            'metrics': self.performance_metrics,
-            'template': self.original_template
+            'metrics': self.performance_metrics
+            # 'template': self.original_template        # do not include the template as it can contain the incoming data from other jobs
         }
 
         return result

@@ -222,6 +222,17 @@ class TestDataSet(unittest.TestCase):
         self.assertEqual(len(dataset1), 5)
         self.assertEqual(dataset1, expected_result)
 
+    def test_merge_keys(self):
+        self.dataset.merge_keys(source_keys='address', preserve_original_keys=False)
+
+        for record in self.dataset:
+            self.assertNotIn('address', record)
+            self.assertIn('street', record)
+            self.assertIn('city', record)
+            self.assertIn('state', record)
+            self.assertIn('zip', record)
+
+
     def test_nest_keys(self):
         self.dataset.nest_keys(source_keys=['name', 'dob'], target_key='person')
 

@@ -937,6 +937,39 @@ class DataSet(List[WalkableDict]):
 
         return self
 
+    def merge_keys(self, source_keys: List[str] or str, target_key: str = None, preserve_original_keys: bool = False) -> 'DataSet':
+        """
+        Merges source keys into a target key. If the target_key is not provided, the source keys are merged into the
+        top of the record, effectively unnesting those keys.
+
+        :param source_keys: the keys to merge
+        :param target_key: the key to merge the source keys into. When not provided, the source keys are placed at the top level of the record
+        :param preserve_original_keys: when true, the original keys are preserved in the record
+        """
+
+        if isinstance(source_keys, str):
+            source_keys = [source_keys]
+
+        for record in self:
+            merged_result = {}
+            for key in source_keys:
+                value = record.walk(key)
+
+                if isinstance(value, dict):
+                    merged_result.update(value)
+
+            if target_key:
+                record.assign(target_key, merged_result)
+
+            else:
+                record.update(merged_result)
+
+            if not preserve_original_keys:
+                for key in source_keys:
+                    record.drop(key)
+
+        return self
+
     def nest_keys(self, source_keys: List[str], target_key: str = None, preserve_original_keys: bool = False) -> 'DataSet':
         """
         Nest keys in the record set under a new key.

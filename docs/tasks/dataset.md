@@ -29,6 +29,7 @@ In a Task Chain, you called this task by using the key `dataset`.
       * [maths_keys](#maths_keys)
       * [maths_records](#maths_records)
       * [maths_reset](#maths_reset)
+      * [merge_keys](#merge_keys)
       * [nest_keys](#nest_keys)
       * [refresh_index](#refresh_index)
       * [remove_duplicate_records](#remove_duplicate_records)
@@ -493,6 +494,27 @@ stages:
   - maths_reset:
 ```
 
+#### `merge_keys`
+Merges the values of multiple `source_keys` into a `target_key`. When `target_key` is not provided, the `source_keys` are merged into the top level of the dictionary.
+> Note: all objects in `source_keys` must be a dictionary type.
+
+| Directive                | Required | Default | Description                                                                                                                                  |
+|--------------------------|----------|---------|----------------------------------------------------------------------------------------------------------------------------------------------|
+| `source_keys`            | Yes      |         | A list of keys to merge into a new key.                                                                                                      |
+| `target_key`             | No       |         | The key to store the merged keys under. If not provided, the values of `source_keys` will be merged into the top level of the record.        |
+| `preserve_original_keys` | No       | `False` | If `True`, the original keys will be preserved in the record. Otherwise, the keys defined in `source_keys` will be removed from the dataset. |
+
+
+```yaml
+stages:
+  - merge_keys:
+      source_keys:
+          - key1
+          - key2
+      target_key: new_key
+      preserve_original_keys: True
+```
+
 #### `nest_keys`
 Places values from a record under a new key in the record. If no `target_key` is provided, the source keys are placed at the top level of the record, essentially un-nesting them.
 
@@ -504,7 +526,7 @@ Places values from a record under a new key in the record. If no `target_key` is
 
 ```yaml
 stages:
-  - nest_records:
+  - nest_keys:
       source_keys:
           - key1
           - key2

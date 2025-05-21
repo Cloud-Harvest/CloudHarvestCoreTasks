@@ -946,6 +946,9 @@ class DataSet(List[WalkableDict]):
         :param preserve_original_keys: when true, the original keys are preserved in the record
         """
 
+        if isinstance(source_keys, str):
+            source_keys = [source_keys]
+
         for record in self:
             nested_result = {
                 key: record.walk(key) if preserve_original_keys else record.drop(key, None)

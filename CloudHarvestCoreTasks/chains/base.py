@@ -519,7 +519,7 @@ class BaseTaskChain(List[BaseTask]):
                 )
 
                 # Sets an expiration to retrieve the results
-                self.update_status_client.expire(self.id, 3600)
+                self.update_status_client.expire(self.id, 300)
 
             except BaseException as ex:
                 raise TaskChainError(self, f'Error storing task chain results in silo `harvest-tasks`: {ex}') from ex

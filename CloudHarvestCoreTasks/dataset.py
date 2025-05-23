@@ -276,9 +276,26 @@ class WalkableDict(dict):
 
         for part in path:
             try:
-                # If the target is a dictionary, get the indicated key (part)
+                # If the target is a dictionary, get the indicated key (part).
                 if isinstance(target, dict):
-                    if part in target.keys():
+                    # Perform a string comparison of the part and the keys in the target dictionary. This replaces
+                    # the 'part in target.keys()' check in the original code which was insufficient for comparisons when
+                    # the part or key was an integer
+                    found_part = [
+                        key for key in target.keys()
+                        if str(key) == str(part)
+                    ]
+
+                    if found_part:
+                        if len(found_part) == 1:
+                            part = found_part[0]
+
+                        else:
+                            # This can only happen if 'part' is represented as an integer and a string representation
+                            # within the dictionary keys. When this happens, we will continue to use the original part
+                            # as defiled in the path.
+                            pass
+
                         # If the part is a key, get the value
                         target = target[part]
 

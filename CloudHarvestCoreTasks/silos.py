@@ -141,24 +141,23 @@ class MongoSilo(BaseSilo):
 
             # Identify indexes
             for index in indexes[collection]:
+                position = indexes[collection].index(index)
+                try:
+                    # Check if the keys are provided
+                    if not index.get('keys'):
+                        raise ValueError(f'Index keys cannot be empty for collection {collection}.')
 
-                # Add single-field indexes defined as a list of strings
-                if isinstance(index, (str, list)):
-                    client['harvest'][collection].create_index(keys=index)
-                    logger.debug(f'{client.log_prefix}: added index: {self.database}.{collection}.{str(index)}')
+                    # Ensure the index is created in the background unless specified
+                    index |= {'background': True}  if not index.get('background') else {}
 
-                # Add complex indexes defined as a dictionary
-                elif isinstance(index, dict):
+                    # Create the index
+                    client[self.database][collection].create_index(**index)
 
-                    # pymongo is very picky and demands a list[tuple())
-                    keys = [(i['field'], i.get('sort', 1)) for i in index.get('keys', [])]
-
-                    client['harvest'][collection].create_index(keys=keys, **index['options'])
-
-                    logger.debug(f'{client.log_prefix}: added index: {self.database}.{collection}.{str(index)}')
+                except BaseException as ex:
+                    logger.error(f'Failed to create index {position} in collection {self.database}[{collection}] : {ex}')
 
                 else:
-                    logger.error(f'unexpected type for index `{index}`: {str(type(index))}')
+                    logger.debug(f'Created index {position} in collection {self.database}[{collection}].')
 
     def connect(self) -> MongoClient:
         """

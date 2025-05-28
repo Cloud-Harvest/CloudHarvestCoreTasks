@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.0
+- [28](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/28#issue-3049896152) Index creation is now performed at the end of `harvest_update`
+
 ## 0.6.6
 - [Platform configuration needs to allow different role names per account](https://github.com/Cloud-Harvest/CloudHarvestAgent/issues/10)
 - Improved how `WalkableDict` navigates through dictionaries and lists

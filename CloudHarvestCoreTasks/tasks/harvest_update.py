@@ -53,6 +53,7 @@ class HarvestUpdateTask(BaseTask):
         # Type hint for the task_chain attribute
         from typing import cast
         self.task_chain = cast(BaseHarvestTaskChain, self.task_chain)
+        self.indexes = self.task_chain.task_templates.get('indexes') or {}
 
     @property
     def pstar_identifier(self) -> dict:
@@ -94,13 +95,20 @@ class HarvestUpdateTask(BaseTask):
         # Deactivate records that were not found in this data collection operation on the destination silo and the metadata silo
         deactivation_results = self.deactivate_records(unique_identifiers)
 
+        # The results of this task are the number of records processed, replaced, and deactivated
         self.result = {
             'RecordsProcessed': len(data),
             'RecordsReplaced': len(unique_identifiers),
             'DeactivationResults': deactivation_results
         }
 
+        # Record the results in the task chain collection metadata
         self.record_pstar()
+
+        # If indexes were specified in the task chain, add them to the silo
+        if self.indexes:
+            silo = get_silo(self.task_chain.destination_silo)
+            silo.add_indexes(self.indexes)
 
         return self
 
@@ -311,7 +319,7 @@ class HarvestUpdateTask(BaseTask):
                         'Harvest.Account': self.task_chain.account,
                         'Harvest.Region': self.task_chain.region,
                     }, {'UniqueIdentifier': '$Harvest.UniqueIdentifier'})
-                    if record not in unique_identifiers
+                    if record.get('UniqueIdentifier') not in unique_identifiers
                 ]
 
             else:

@@ -2,6 +2,11 @@
 
 ## 0.7.0
 - [28](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/28#issue-3049896152) Index creation is now performed at the end of `harvest_update`
+- Added default indexes to the `harvest_update` task
+  - Harvest.Active
+  - Harvest.Account
+  - Harvest.Region
+  - Harvest.UniqueIdentifier 
 
 ## 0.6.6
 - [Platform configuration needs to allow different role names per account](https://github.com/Cloud-Harvest/CloudHarvestAgent/issues/10)

@@ -53,7 +53,24 @@ class HarvestUpdateTask(BaseTask):
         # Type hint for the task_chain attribute
         from typing import cast
         self.task_chain = cast(BaseHarvestTaskChain, self.task_chain)
-        self.indexes = self.task_chain.task_templates.get('indexes') or {}
+
+        # Collection-specific indexes to be created in the destination silo
+        default_indexes = [
+            {'keys': ['Harvest.Active']},
+            {'keys': ['Harvest.Account']},
+            {'keys': ['Harvest.Region']},
+            {'keys': ['Harvest.UniqueIdentifier'], 'unique': True}
+        ]
+
+        [
+            index.update({'background': True, 'comment': 'default index'})
+            for index in default_indexes
+        ]
+
+       # Combine the default indexes with the provided indexes in the format accepted by the Silo.add_indexes() method
+        self.indexes = {
+            self.task_chain.replacement_collection_name: default_indexes + self.task_chain.task_templates.get('indexes') or []
+        }
 
     @property
     def pstar_identifier(self) -> dict:

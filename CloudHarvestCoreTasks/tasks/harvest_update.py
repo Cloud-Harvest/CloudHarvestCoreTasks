@@ -69,7 +69,7 @@ class HarvestUpdateTask(BaseTask):
 
        # Combine the default indexes with the provided indexes in the format accepted by the Silo.add_indexes() method
         self.indexes = {
-            self.task_chain.replacement_collection_name: default_indexes + self.task_chain.task_templates.get('indexes') or []
+            self.task_chain.replacement_collection_name: default_indexes + self.task_chain.original_template.get('indexes') or []
         }
 
     @property

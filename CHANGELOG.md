@@ -7,6 +7,7 @@
   - Harvest.Account
   - Harvest.Region
   - Harvest.UniqueIdentifier 
+- fixed a bug in the templating method which prevented subitems from being properly walked
 
 ## 0.6.6
 - [Platform configuration needs to allow different role names per account](https://github.com/Cloud-Harvest/CloudHarvestAgent/issues/10)

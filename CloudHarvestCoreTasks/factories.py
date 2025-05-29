@@ -147,11 +147,12 @@ def template_task_configuration(task_configuration: dict or BaseTask,
     from CloudHarvestCoreTasks.environment import Environment
     templated_task_configuration = WalkableDict(task_configuration).replace(
         variables={
-            'chain': task_chain,                                                # The task chain itself
-            'env': Environment.get(),                                           # All Environment variables
-            'item': {'value': item} if isinstance(item, str) else item,         # The current item in the iteration
-            'var': task_chain.variables if task_chain is not None else {},      # The task chain variables
+            'chain': task_chain,                                                                            # The task chain itself
+            'env': Environment.get(),                                                                       # All Environment variables
+            'item': WalkableDict({'value': item} if isinstance(item, str) else item) if item else None,     # The current item in the iteration
+            'var': task_chain.variables if task_chain is not None else {},                                  # The task chain variables
         }
+
     )
 
     if instantiate:

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.1
+- Ensure results are loaded in redis before the task chain is marked complete
+
 ## 0.7.0
 - [28](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/28#issue-3049896152) Index creation is now performed at the end of `harvest_update`
 - Added default indexes to the `harvest_update` task

@@ -462,10 +462,15 @@ class BaseTaskChain(List[BaseTask]):
             BaseTaskChain: The instance of the task chain.
         """
 
+        # Load the results to the silo before marking the task as complete
+        # This is necessary to prevent processes monitoring the status of this chain from considering the task chain
+        # complete before the results are available. Particularly, this is important for the API which will may
+        # return empty results if the task chain is marked as complete before the results are stored.
+        self.results_to_silo()
+
         self.status = TaskStatusCodes.complete
         self.end = datetime.now(tz=timezone.utc)
 
-        self.results_to_silo()
         self.update_status()
 
         return self

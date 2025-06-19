@@ -13,4 +13,5 @@ redis
 requests
 rich-argparse
 setuptools
+urllib3
 wheel

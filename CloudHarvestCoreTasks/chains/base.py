@@ -51,6 +51,7 @@ class BaseTaskChain(List[BaseTask]):
                  template: dict,
                  chain_type: str = None,
                  parent: str = None,
+                 priority: int = 0,
                  variables: dict = None,
                  filters: dict = None,
                  *args, **kwargs):
@@ -65,6 +66,7 @@ class BaseTaskChain(List[BaseTask]):
                 description(str, optional): A brief description of what the task chain does. Defaults to None.
                 max_workers(int, optional): The maximum number of concurrent workers that are permitted.
             parent (str, optional): A parent request uuid to associate with the task chain. Defaults to None.
+            priority (int, optional): The priority of the task chain. Defaults to 0, which is the highest priority.
             variables(dict, optional): Variables that can be used by the tasks in the chain. The dictionary is merged
                                         with into the BaseTaskChain.variables attribute. Defaults to None.
             filters(dict, optional): A dictionary of user filters to apply to the data. Defaults to an empty dictionary.
@@ -78,6 +80,7 @@ class BaseTaskChain(List[BaseTask]):
 
         self.name = template['name']
         self.parent = parent
+        self.priority = priority
         self.chain_type = chain_type
         self.description = template.get('description')
         self.filters = filters or {}

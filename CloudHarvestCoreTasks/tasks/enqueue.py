@@ -3,7 +3,7 @@ from CloudHarvestCoreTasks.environment import Environment
 from CloudHarvestCoreTasks.tasks.base import BaseTask
 
 from logging import getLogger
-from requests import JSONDecodeError, Response
+from requests import Response
 from requests.exceptions import (
     ChunkedEncodingError,
     ConnectionError,
@@ -49,6 +49,10 @@ class EnqueueTask(BaseTask):
         self.api_token = api.get('token') or Environment.get('api.token')
         self.api_attempts = api.get('attempts') or 10
 
+        # Template configuration
+        if isinstance(template, str):
+            template = {'name': template, 'type': 'reports'}
+
         self.template_name = template.get('name')
         self.template_type = template.get('type')
 
@@ -57,8 +61,6 @@ class EnqueueTask(BaseTask):
         super().__init__(*args, **kwargs)
 
     def method(self) -> 'BaseTask':
-        response = None
-
         # First we submit the new task to tasks/queue_task
         data = {
                 'variables': self.variables

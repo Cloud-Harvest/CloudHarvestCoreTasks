@@ -41,7 +41,18 @@ logger = getLogger('harvest')
 
 @register_definition(name='enqueue', category='task')
 class EnqueueTask(BaseTask):
-    def __init__(self, template: dict, api: dict = None, variables: dict = None, *args, **kwargs):
+    def __init__(self, template: dict or str, api: dict = None, variables: dict = None, *args, **kwargs):
+        """
+        The EnqueueTask class is used to submit, await, and retrieve the results of a task using the Cloud Harvest API.
+        These kinds of subtasks are necessary when the calling task's agent may not have the necessary resources to
+        execute the task directly, such as when it requires a specific platform, account, or region to execute.
+
+        Arguments
+        template: (dict or str) The template for the task to be executed. If a string is provided, it will be treated as the name of the template.
+        api: (dict) Configuration for the API connection, including host, port, SSL settings, and token.
+        variables: (dict) Variables to be passed to the task when it is executed.
+        """
+
         # API Configuration
         self.api_host = api.get('host') or Environment.get('api.host')
         self.api_port = api.get('port') or Environment.get('api.port')
@@ -114,7 +125,7 @@ class EnqueueTask(BaseTask):
 
         return self
 
-    def _api_request(self, method: str, endpoint: str, data: dict = None):
+    def _api_request(self, method: str, endpoint: str, data: dict = None) -> Response or Exception:
         response = None
 
         for attempt in range(self.api_attempts):

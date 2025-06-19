@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.0
+- [#30](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/30)
+  - Added the `EnqueueTask` which allows for the queuing of subtasks via the Api
+- Updated some docs
+
 ## 0.7.1
 - Ensure results are loaded in redis before the task chain is marked complete
 

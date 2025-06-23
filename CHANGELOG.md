@@ -3,7 +3,10 @@
 ## 0.8.0
 - [#30](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/30)
   - Added the `EnqueueTask` which allows for the queuing of subtasks via the Api
-- Fixed an issue in `HarvestUpdateTask` where templates without the `index` directive raised errors
+- Fixed an issue in `HarvestUpdateTask` 
+  - where templates without the `index` directive raised errors
+  - where records were not being properly deactivated
+
 - Updated some docs
 
 ## 0.7.1

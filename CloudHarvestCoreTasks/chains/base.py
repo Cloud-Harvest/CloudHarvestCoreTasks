@@ -295,6 +295,15 @@ class BaseTaskChain(List[BaseTask]):
         except IndexError:
             data = []
 
+        errors = {
+            str(f'{task.position}: {task.name}'): task.errors
+            for task in self
+            if task.errors
+        }
+
+        if self.errors:
+            errors[f'chain: {self.name}'] = self.errors
+
         result = {
             'data': data,
             'errors': self.errors,

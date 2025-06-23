@@ -648,10 +648,9 @@ class BaseTaskChain(List[BaseTask]):
         except BaseException as ex:
             self.on_error(ex)
 
-        finally:
-            self.on_complete()
+        self.on_complete()
 
-            return self
+        return self
 
     def iterate_task(self, original_task_configuration: dict) -> Generator[dict, None, None]:
         """

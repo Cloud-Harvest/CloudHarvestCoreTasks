@@ -58,6 +58,8 @@ class HarvestUpdateTask(BaseTask):
         default_indexes = [
             {'keys': ['Harvest.Active']},
             {'keys': ['Harvest.Account']},
+            {'keys': ['Harvest.AccountId']},
+            {'keys': ['Harvest.AccountName']},
             {'keys': ['Harvest.Region']},
             {'keys': ['Harvest.UniqueIdentifier'], 'unique': True}
         ]
@@ -336,12 +338,21 @@ class HarvestUpdateTask(BaseTask):
             if self.task_chain.mode == 'all':
                 # Records to be deactivated
                 deactivate_records = [
-                    record['UniqueIdentifier']
-                    for record in collection.find({
-                        'Harvest.Account': self.task_chain.account,
-                        'Harvest.Region': self.task_chain.region,
-                    }, {'UniqueIdentifier': '$Harvest.UniqueIdentifier'})
-                    if record.get('UniqueIdentifier') not in unique_identifiers
+                    record['UniqueIdentifier'] for record in
+                    collection.aggregate([
+                        {
+                            '$match': {
+                                'Harvest.AccountId': self.task_chain.account,       # Must use AccountId here because self.task_chain.account is always the id number
+                                'Harvest.Region': self.task_chain.region,
+                                'Harvest.UniqueIdentifier': {'$nin': unique_identifiers}
+                            },
+                        },
+                        {
+                            '$project': {
+                                'UniqueIdentifier': '$Harvest.UniqueIdentifier'
+                            }
+                        }
+                    ])
                 ]
 
             else:
@@ -355,14 +366,13 @@ class HarvestUpdateTask(BaseTask):
             # Deactivate Records that were not found in this data collection operation (assumed to be inactive)
             deactivated_replacements = silo.connect()[silo.database][self.task_chain.replacement_collection_name].update_many(
                 filter={
+                    'Harvest.Active': True,  # Only deactivate active records
                     'Harvest.UniqueIdentifier': {'$in': deactivate_records},
-                    'Harvest.Account': self.task_chain.account,
-                    'Harvest.Region': self.task_chain.region
                 },
                 update={
                     '$set': {
                         'Harvest.Active': False,
-                        'Harvest.DeactivatedOn': deactivation_timestamp
+                        'Harvest.Dates.DeactivatedOn': deactivation_timestamp
                     }
                 }
             )
@@ -393,7 +403,7 @@ class HarvestUpdateTask(BaseTask):
                     'UniqueIdentifier': {'$nin': unique_identifiers},
                     'Silo': self.task_chain.destination_silo,
                     'Collection': self.task_chain.replacement_collection_name,
-                    'Harvest.Account': self.task_chain.account,
+                    'Harvest.AccountId': self.task_chain.account,
                     'Harvest.Region': self.task_chain.region
                 },
                 update={

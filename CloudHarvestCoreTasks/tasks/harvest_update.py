@@ -103,21 +103,26 @@ class HarvestUpdateTask(BaseTask):
             except BaseException as ex:
                 raise TaskError(self, f'Unable to connect to the {silo_name} silo.', ex) from ex
 
-        # Attach metadata to the records
-        data = self.attach_metadata_to_records()
+        try:
+            # Attach metadata to the records
+            data = self.attach_metadata_to_records()
 
-        # Bulk Replace the records in the destination silo and the metadata in the metadata silo
-        unique_identifiers = self.replace_bulk_records(data)
+            # Bulk Replace the records in the destination silo and the metadata in the metadata silo
+            unique_identifiers = self.replace_bulk_records(data)
 
-        # Deactivate records that were not found in this data collection operation on the destination silo and the metadata silo
-        deactivation_results = self.deactivate_records(unique_identifiers)
+            # Deactivate records that were not found in this data collection operation on the destination silo and the metadata silo
+            deactivation_results = self.deactivate_records(unique_identifiers)
 
-        # The results of this task are the number of records processed, replaced, and deactivated
-        self.result = {
-            'RecordsProcessed': len(data),
-            'RecordsReplaced': len(unique_identifiers),
-            'DeactivationResults': deactivation_results
-        }
+            # The results of this task are the number of records processed, replaced, and deactivated
+            self.result = {
+                'RecordsProcessed': len(data),
+                'RecordsReplaced': len(unique_identifiers),
+                'DeactivationResults': deactivation_results
+            }
+
+        except BaseException as ex:
+            # If an error occurs, we call TaskError without raising to record the error but not stop the HarvestUpdateTask
+            TaskError(self, 'Error during HarvestUpdateTask execution.', ex)
 
         # Record the results in the task chain collection metadata
         self.record_pstar()

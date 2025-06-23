@@ -77,7 +77,7 @@ class BaseHarvestTaskChain(BaseTaskChain):
         self.platform = platform
         self.service = service
         self.type = type
-        self.account = account
+        self.account = str(account)
         self.region = region
         self.identifiers = identifiers
         self.mode = mode

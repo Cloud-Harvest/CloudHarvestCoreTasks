@@ -54,6 +54,9 @@ class EnqueueTask(BaseTask):
         """
 
         # API Configuration
+        if not api:
+            api = {}
+
         self.api_host = api.get('host') or Environment.get('api.host')
         self.api_port = api.get('port') or Environment.get('api.port')
         self.api_ssl = api.get('ssl') or Environment.get('api.ssl')
@@ -86,7 +89,7 @@ class EnqueueTask(BaseTask):
 
         response = self._api_request(
             method='post',
-            endpoint=f'tasks/queue_task/{priority}/{self.template_type}/{self.template_name}',
+            endpoint=f'tasks/queue/{priority}/{self.template_type}/{self.template_name}',
             data={
                 'variables': self.variables
             }
@@ -100,7 +103,7 @@ class EnqueueTask(BaseTask):
         # Then we await the response via tasks/await_task
         response = self._api_request(
             method='get',
-            endpoint=f'tasks/await_task/{new_task_id}'
+            endpoint=f'tasks/await/{new_task_id}'
         )
 
         if not isinstance(response, Response):
@@ -112,7 +115,7 @@ class EnqueueTask(BaseTask):
         # And finally we return the results using tasks/get_task_results
         response = self._api_request(
             method='get',
-            endpoint=f'tasks/get_task_results/{new_task_id}'
+            endpoint=f'tasks/get_task_result/{new_task_id}'
         )
 
         if not isinstance(response, Response):

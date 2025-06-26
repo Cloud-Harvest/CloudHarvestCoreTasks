@@ -109,6 +109,9 @@ class BaseTaskChain(List[BaseTask]):
         self.required_variables = template.get('required_variables') or []
         self.update_status_client = None
 
+        # optional kwargs
+        self.describe = kwargs.get('describe', False)
+
         try:
             # Set up the client used to update the task chain status in Redis
             from CloudHarvestCoreTasks.silos import get_silo
@@ -290,7 +293,11 @@ class BaseTaskChain(List[BaseTask]):
         """
 
         try:
-            data = self.variables.get('result') or self[-1].result
+            if self.describe:
+                data = self.original_template
+
+            else:
+                data = self.variables.get('result') or self[-1].result
 
         except IndexError:
             data = []
@@ -564,6 +571,11 @@ class BaseTaskChain(List[BaseTask]):
                         raise Exception(self, f'Missing required variable: {var}')
 
             while True:
+                # When the describe directive is set, we will not run the tasks in the chain. Instead, we will return
+                # the task chain template as a dictionary.
+                if self.describe:
+                    break
+
                 # Instantiate the task from the task configuration
                 try:
                     from CloudHarvestCoreTasks.factories import template_task_configuration

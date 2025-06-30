@@ -155,6 +155,10 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
                         match.key: None
                     }
 
+            if self.filterable_fields and match.key not in self.filterable_fields:
+                # Skip if filterable_fields are defined and the match key is not in the filterable fields
+                return {}
+
             match match.operator:
                 case '=':
                     result = {

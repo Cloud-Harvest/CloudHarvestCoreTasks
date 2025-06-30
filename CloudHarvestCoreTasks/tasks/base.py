@@ -55,6 +55,7 @@ class BaseTask:
                  result_as: (dict or str) = None,
                  retry: dict = None,
                  filters:dict = None,
+                 filterable_fields: List[str] = None,
                  when: str = None,
                  result_to_dict_key: str = None,
                  result_to_list_with_key: str = None,
@@ -106,6 +107,7 @@ class BaseTask:
                 >>>     'matches': [['keyA=valueA', 'keyB=valueB'], 'keyA=valueC'],     # A list of matches to apply to the data.
                 >>>     'sort': ['keyA', 'keyB:desc']           # The keys to sort the data by.
                 >>> }
+            filterable_fields (List[str]): A list of fields that can be filtered by task. If not provided, all fields are considered filterable.
             when (str): A string representing a conditional argument using Jinja2 templating. If provided, the task
                 will only run if the condition evaluates to True.
             result_to_dict_key (str, optional): the results are converted to a dictionary under the specified key
@@ -143,6 +145,7 @@ class BaseTask:
 
         # Defaults < user
         self.filters = filters
+        self.filterable_fields = filterable_fields or []
 
     @property
     def duration(self) -> float:

@@ -6,6 +6,7 @@
 - Fixed an issue in `HarvestUpdateTask` 
   - where templates without the `index` directive raised errors
   - where records were not being properly deactivated
+- Added the `filterable_fields` directive to `BaseTask`
 
 - Updated some docs
 

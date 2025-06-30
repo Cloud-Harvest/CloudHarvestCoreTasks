@@ -73,6 +73,7 @@ class TestDataSetTaskFilters(unittest.TestCase):
                             'name': 'test_dataset',
                             'description': 'Filter the results from the dataset.',
                             'filters': '.*',
+                            'filterable_fields': ['name', 'address.state', 'dob'],
                             'data': 'var.my_dataset',
                             'stages': [
                                 {
@@ -93,7 +94,7 @@ class TestDataSetTaskFilters(unittest.TestCase):
             'add_keys': ['test_add_key'],
             'exclude_keys': ['tags'],
             'headers': ['name', 'address.state', 'dob'],
-            'matches': [['address.state=CA|TX']],
+            'matches': [['address.state=CA|TX', 'email=no_op@not_in_filter_list']],
             'sort': ['name']
         }
 
@@ -221,6 +222,7 @@ class TestMongoTaskFilters(unittest.TestCase):
                             'description': 'Retrieve data from the Mongo database',
                             'collection': 'test_collection',
                             'filters': '.*',
+                            'filterable_fields': ['name', 'address.state', 'dob'],
                             'silo': 'test',
                             'command': 'aggregate',
                             'arguments': {
@@ -240,7 +242,7 @@ class TestMongoTaskFilters(unittest.TestCase):
             'add_keys': ['notes'],
             'exclude_keys': ['tags'],
             'headers': ['name', 'address.state', 'dob'],
-            'matches': [['address.state=CA|TX']],
+            'matches': [['address.state=CA|TX', 'email=no_op@not_in_filter_list']],
             'sort': ['name']
         }
 

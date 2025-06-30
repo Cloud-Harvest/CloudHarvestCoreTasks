@@ -7,7 +7,7 @@
   - where templates without the `index` directive raised errors
   - where records were not being properly deactivated
 - Added the `filterable_fields` directive to `BaseTask`
-
+- `WaitTask` now considered the `skipped` status as a valid completed state
 - Updated some docs
 
 ## 0.7.1

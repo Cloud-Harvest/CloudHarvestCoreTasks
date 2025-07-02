@@ -10,6 +10,7 @@
 - Added the `filterable_fields` directive to `BaseTask`
 - `WaitTask` now considered the `skipped` status as a valid completed state
 - Updated some docs
+- Fixed an issue where `BaseTaskChain.result` did not return task-level errors
 
 ## 0.7.1
 - Ensure results are loaded in redis before the task chain is marked complete

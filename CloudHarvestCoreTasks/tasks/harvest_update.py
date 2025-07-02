@@ -26,7 +26,9 @@ class HarvestUpdateTask(BaseTask):
         'Module.Url',                   # The repository where the Harvest module is stored
         'Module.Version',               # The version of the Harvest module
         'Dates.LastSeen',               # The date indicating when the record was last collected by Harvest
-        'Active'                        # A boolean indicating if the record is active
+        'Active',                       # A boolean indicating if the record is active
+        'TaskChainId',                  # The ID of the task chain that collected the data
+        'ParentTaskId',                 # The ID of the request which initiated the task chain
     )
 
     def __init__(self, *args, **kwargs):
@@ -105,26 +107,39 @@ class HarvestUpdateTask(BaseTask):
             except BaseException as ex:
                 raise TaskError(self, f'Unable to connect to the {silo_name} silo.', ex) from ex
 
-        try:
-            # Attach metadata to the records
-            data = self.attach_metadata_to_records()
-
-            # Bulk Replace the records in the destination silo and the metadata in the metadata silo
-            unique_identifiers = self.replace_bulk_records(data)
-
-            # Deactivate records that were not found in this data collection operation on the destination silo and the metadata silo
-            deactivation_results = self.deactivate_records(unique_identifiers)
-
-            # The results of this task are the number of records processed, replaced, and deactivated
+        # #33 - If the task chain has errors, we do not execute the HarvestUpdateTask. We do this to prevent record
+        # deactivation caused by a failed data collection or post-collection operation. We will still record the
+        # PSTAR and perform indexing checks.
+        if self.task_chain.errors or self.task_chain.result.get('errors'):
             self.result = {
-                'RecordsProcessed': len(data),
-                'RecordsReplaced': len(unique_identifiers),
-                'DeactivationResults': deactivation_results
+                'RecordsProcessed': 0,
+                'RecordsReplaced': 0,
+                'DeactivationResults': {}
             }
 
-        except BaseException as ex:
-            # If an error occurs, we call TaskError without raising to record the error but not stop the HarvestUpdateTask
-            TaskError(self, 'Error during HarvestUpdateTask execution.', ex)
+            self.errors.append('HarvestUpdateTask skipped due to errors in the task chain.')
+
+        else:
+            try:
+                # Attach metadata to the records
+                data = self.attach_metadata_to_records()
+
+                # Bulk Replace the records in the destination silo and the metadata in the metadata silo
+                unique_identifiers = self.replace_bulk_records(data)
+
+                # Deactivate records that were not found in this data collection operation on the destination silo and the metadata silo
+                deactivation_results = self.deactivate_records(unique_identifiers)
+
+                # The results of this task are the number of records processed, replaced, and deactivated
+                self.result = {
+                    'RecordsProcessed': len(data),
+                    'RecordsReplaced': len(unique_identifiers),
+                    'DeactivationResults': deactivation_results
+                }
+
+            except BaseException as ex:
+                # If an error occurs, we call TaskError without raising to record the error but not stop the HarvestUpdateTask
+                TaskError(self, 'Error during HarvestUpdateTask execution.', ex)
 
         # Record the results in the task chain collection metadata
         self.record_pstar()
@@ -199,7 +214,9 @@ class HarvestUpdateTask(BaseTask):
             'Account': self.task_chain.account,
             'Region': self.task_chain.region,
             'UniqueIdentifierKeys': self.task_chain.unique_identifier_keys,
-            'Active': True  # Active by default because records found in this collection process are known to exist
+            'Active': True,  # Active by default because records found in this collection process are known to exist
+            'TaskChainId': self.task_chain.id if self.task_chain else None,
+            'ParentTaskId': self.task_chain.parent if self.task_chain else None
         }
 
         # Convert the class / module metadata into a dictionary with Titled keys

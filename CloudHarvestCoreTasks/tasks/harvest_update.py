@@ -476,7 +476,7 @@ class HarvestUpdateTask(BaseTask):
         # Get the old PSTAR record
         old_pstar = collection.find_one(self.pstar_identifier) or {}
 
-        original_count = old_pstar.get('Count') or 0
+        original_count = 0 if old_pstar.get('Count') is None else old_pstar['Count']
 
         from copy import deepcopy
         metrics = deepcopy(self.task_chain.result['metrics'][-1])     # Provides totals for all metric stages

@@ -1,8 +1,9 @@
 # Changelog
 
 ## 0.8.0
-- [#30](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/30)
-  - Added the `EnqueueTask` which allows for the queuing of subtasks via the Api
+- [#30](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/30) - Added the `EnqueueTask` which allows for the queuing of subtasks via the Api
+- [#31](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/31) - Fixed an issue where records were not marked as `deactivated` when the `HarvestUpdateTask` was run
+- [#33](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/33) - `HarvestUpdateTask` will no longer deactivate records if errors were recorded in the task chain
 - Fixed an issue in `HarvestUpdateTask` 
   - where templates without the `index` directive raised errors
   - where records were not being properly deactivated

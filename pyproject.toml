@@ -15,8 +15,8 @@ CloudHarvestPluginAws = [
 [project]
 authors = [ "Cloud Harvest", "Fiona June Leathers" ]
 classifiers = [ "Programming Language :: Python :: 3.13" ]
-description = "This is the AWS Plugin for CloudHarvest."
-homepage = "https://github.com/Cloud-Harvest/CloudHarvestPluginAws"
+description = "This module is a core component of CloudHarvest, providing essential tasks generation and execution."
+homepage = "https://github.com/Cloud-Harvest/CloudHarvestCoreTasks"
 license = "CC Attribution-NonCommercial-ShareAlike 4.0 International"
 name = "CloudHarvestCoreTasks"
 version = "0.8.1"

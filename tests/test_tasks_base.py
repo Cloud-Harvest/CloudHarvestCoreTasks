@@ -227,6 +227,7 @@ class TestBaseHarvestTaskChain(BaseTestCase):
                 'description': 'Test dataset collection task chain',
                 'destination_silo': 'harvest-core',
                 'unique_identifier_keys': ['name.family', 'name.given'],
+                'parent': 'test_chain',
                 'tasks': [
                     {
                         # This task will retrieve dataset from a MongoDB database
@@ -276,6 +277,7 @@ class TestBaseHarvestTaskChain(BaseTestCase):
         # Test the run method of the BaseHarvestTaskChain class
         self.base_task_chain.run()
         self.assertFalse(self.base_task_chain.errors)
+        self.assertFalse(self.base_task_chain.result.get('errors'))
         self.assertEqual(len(self.base_task_chain), 3)  # 2 defined Tasks and an upload task added by the Chain
         self.assertEqual(str(str(self.base_task_chain.status)), TaskStatusCodes.complete)
         self.assertIsNotNone(self.base_task_chain[1].result[0]['Tags'])

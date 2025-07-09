@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["CloudHarvestCoreTasks"]
+
+[tool.setuptools.package-data]
+CloudHarvestCoreTasks = [
+    "templates/**/*.yaml",
+    "pyproject.toml",
+]
+
+[project]
+authors = [ { name = "Cloud Harvest" } ]
+classifiers = [
+    "Programming Language :: Python :: 3.13",
+    "Intended Audience :: Site Reliability Engineers",
+]
+description = "This module is a core component of CloudHarvest, providing essential tasks generation and execution."
+license = { file = "LICENSE" }
+name = "CloudHarvestCoreTasks"
+readme = "README.md"
+urls = { homepage = "https://github.com/Cloud-Harvest/CloudHarvestCoreTasks" }
+version = "0.8.1"

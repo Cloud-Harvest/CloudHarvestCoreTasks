@@ -20,6 +20,26 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Intended Audience :: Site Reliability Engineers",
 ]
+dependencies = [
+    "CloudHarvestCorePluginManager @ git+https://github.com/Cloud-Harvest/CloudHarvestCorePluginManager.git@0.5.1",
+    "Flask",
+    "Jinja2",
+    "deprecated",
+    "flatten-json",
+    "natsort",
+    "pandas",
+    "pymongo",
+    "pytest",
+    "python-dateutil",
+    "PyYAML",
+    "redis",
+    "requests",
+    "rich-argparse",
+    "setuptools",
+    "urllib3",
+    "wheel"
+]
+
 description = "This module is a core component of CloudHarvest, providing essential tasks generation and execution."
 name = "CloudHarvestCoreTasks"
 readme = "README.md"

@@ -13,10 +13,14 @@ CloudHarvestPluginAws = [
 ]
 
 [project]
-authors = [ { title = "Author", properties = { name = "Cloud Harvest" } } ]
-classifiers = [ "Programming Language :: Python :: 3.13" ]
+authors = [ { name = "Cloud Harvest" } ]
+classifiers = [
+    "Programming Language :: Python :: 3.13",
+    "Intended Audience :: Site Reliability Engineers",
+]
 description = "This module is a core component of CloudHarvest, providing essential tasks generation and execution."
 homepage = "https://github.com/Cloud-Harvest/CloudHarvestCoreTasks"
 license = { file = "LICENSE" }
 name = "CloudHarvestCoreTasks"
+readme = "README.md"
 version = "0.8.1"

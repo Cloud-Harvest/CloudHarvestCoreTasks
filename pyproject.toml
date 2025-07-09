@@ -19,8 +19,8 @@ classifiers = [
     "Intended Audience :: Site Reliability Engineers",
 ]
 description = "This module is a core component of CloudHarvest, providing essential tasks generation and execution."
-homepage = "https://github.com/Cloud-Harvest/CloudHarvestCoreTasks"
 license = { file = "LICENSE" }
 name = "CloudHarvestCoreTasks"
 readme = "README.md"
+urls = { homepage = "https://github.com/Cloud-Harvest/CloudHarvestCoreTasks" }
 version = "0.8.1"

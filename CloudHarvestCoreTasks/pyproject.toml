@@ -40,7 +40,6 @@ requires-python = ">=3.13"
 version = "0.8.1"
 
 [project.license]
-license = "CC-BY-NC-SA-4.0"
 file = "LICENSE"
 
 [project.urls]

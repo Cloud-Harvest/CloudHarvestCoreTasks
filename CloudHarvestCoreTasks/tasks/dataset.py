@@ -147,7 +147,7 @@ class DataSetTask(BaseFilterableTask):
         """
 
         if self.matches:
-            self.data.match_and_remove(matching_expressions=self.matches)
+            self.data.match_and_remove(matching_expressions=self.matches, filterable_fields=self.filterable_fields)
 
         return self
 

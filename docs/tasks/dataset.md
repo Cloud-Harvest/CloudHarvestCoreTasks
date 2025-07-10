@@ -55,6 +55,7 @@ The `DataSetTask` class has the following arguments beyond those defined in [Bas
 
 | Directive | Required | Default | Description                                                                                                  |
 |-----------|----------|---------|--------------------------------------------------------------------------------------------------------------|
+| data      | No       | None    | Data to use when starting the task.                                                                          |
 | stages    | Yes      | None    | A list of dictionaries containing the function name and arguments to be applied to the dataset sequentially. |
 
 ### Stages

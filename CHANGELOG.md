@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.8.1
+- Removed `meta.json` in favor of using `pyproject.toml`
+
+## 0.8.0
+- [#30](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/30) - Added the `EnqueueTask` which allows for the queuing of subtasks via the Api
+- [#31](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/31) - Fixed an issue where records were not marked as `deactivated` when the `HarvestUpdateTask` was run
+- [#33](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/33) - `HarvestUpdateTask` will no longer deactivate records if errors were recorded in the task chain
+- Fixed an issue in `HarvestUpdateTask` 
+  - where templates without the `index` directive raised errors
+  - where records were not being properly deactivated
+- Added the `filterable_fields` directive to `BaseTask`
+- `WaitTask` now considered the `skipped` status as a valid completed state
+- Updated some docs
+- Fixed an issue where `BaseTaskChain.result` did not return task-level errors
+
 ## 0.7.1
 - Ensure results are loaded in redis before the task chain is marked complete
 

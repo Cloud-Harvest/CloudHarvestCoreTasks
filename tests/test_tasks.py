@@ -39,6 +39,66 @@ class TestDummyTask(BaseTestCase):
         self.assertEqual(self.dummy_task.meta['info'], self.dummy_task.meta['info'])
 
 
+class TestEnqueueTask(BaseTestCase):
+    """
+    This test requires an API and Agent to be running.
+    """
+
+    def setUp(self):
+        task_chain_template = {
+            'report': {
+                'name': 'test_enumeration',
+                'tasks': [
+                    {
+                        'enqueue': {
+                            'name': 'enqueue_task',
+                            'api': {
+                                'host': '127.0.0.1',
+                                'port': 8000,
+                            },
+                            'template': 'harvest.api-nodes',
+                            'result_as': 'result',
+                        }
+                    },
+                    {
+                        'enqueue': {
+                            'name': 'enqueue_task',
+                            'api': {
+                                'host': '127.0.0.1',
+                                'port': 8000,
+                            },
+                            'template': 'harvest.agent-nodes',
+                            'result_as': {
+                                'name': 'result',
+                                'mode': 'extend'
+                            }
+                        }
+                    },
+                    {
+                        'dataset': {
+                            'name': 'allow_filtering',
+                            'data': 'var.result',
+                            'filters': '.*',
+                            'result_as': 'result',
+                            'stages': []
+                        }
+                    }
+                ]
+            }
+        }
+
+        from CloudHarvestCoreTasks.factories import task_chain_from_dict
+        self.chain = task_chain_from_dict(template=task_chain_template)
+
+    def test_run(self):
+        self.chain.run()
+
+        # No errors
+        self.assertFalse(self.chain.errors)
+
+        # Check there are records
+        self.assertEqual(len(self.chain.result['data']), 2)
+
 class TestErrorTask(BaseTestCase):
     def setUp(self):
         self.error_task = ErrorTask(name='error_task', description='This is an error task')

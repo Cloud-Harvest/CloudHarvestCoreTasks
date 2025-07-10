@@ -26,7 +26,9 @@ class HarvestUpdateTask(BaseTask):
         'Module.Url',                   # The repository where the Harvest module is stored
         'Module.Version',               # The version of the Harvest module
         'Dates.LastSeen',               # The date indicating when the record was last collected by Harvest
-        'Active'                        # A boolean indicating if the record is active
+        'Active',                       # A boolean indicating if the record is active
+        'TaskChainId',                  # The ID of the task chain that collected the data
+        'ParentTaskId',                 # The ID of the request which initiated the task chain
     )
 
     def __init__(self, *args, **kwargs):
@@ -58,6 +60,8 @@ class HarvestUpdateTask(BaseTask):
         default_indexes = [
             {'keys': ['Harvest.Active']},
             {'keys': ['Harvest.Account']},
+            {'keys': ['Harvest.AccountId']},
+            {'keys': ['Harvest.AccountName']},
             {'keys': ['Harvest.Region']},
             {'keys': ['Harvest.UniqueIdentifier'], 'unique': True}
         ]
@@ -69,7 +73,7 @@ class HarvestUpdateTask(BaseTask):
 
        # Combine the default indexes with the provided indexes in the format accepted by the Silo.add_indexes() method
         self.indexes = {
-            self.task_chain.replacement_collection_name: default_indexes + self.task_chain.original_template.get('indexes') or []
+            self.task_chain.replacement_collection_name: default_indexes + (self.task_chain.original_template.get('indexes') or [])
         }
 
     @property
@@ -103,21 +107,39 @@ class HarvestUpdateTask(BaseTask):
             except BaseException as ex:
                 raise TaskError(self, f'Unable to connect to the {silo_name} silo.', ex) from ex
 
-        # Attach metadata to the records
-        data = self.attach_metadata_to_records()
+        # #33 - If the task chain has errors, we do not execute the HarvestUpdateTask. We do this to prevent record
+        # deactivation caused by a failed data collection or post-collection operation. We will still record the
+        # PSTAR and perform indexing checks.
+        if self.task_chain.errors or self.task_chain.result.get('errors'):
+            self.result = {
+                'RecordsProcessed': 0,
+                'RecordsReplaced': 0,
+                'DeactivationResults': {}
+            }
 
-        # Bulk Replace the records in the destination silo and the metadata in the metadata silo
-        unique_identifiers = self.replace_bulk_records(data)
+            self.errors.append('HarvestUpdateTask skipped due to errors in the task chain.')
 
-        # Deactivate records that were not found in this data collection operation on the destination silo and the metadata silo
-        deactivation_results = self.deactivate_records(unique_identifiers)
+        else:
+            try:
+                # Attach metadata to the records
+                data = self.attach_metadata_to_records()
 
-        # The results of this task are the number of records processed, replaced, and deactivated
-        self.result = {
-            'RecordsProcessed': len(data),
-            'RecordsReplaced': len(unique_identifiers),
-            'DeactivationResults': deactivation_results
-        }
+                # Bulk Replace the records in the destination silo and the metadata in the metadata silo
+                unique_identifiers = self.replace_bulk_records(data)
+
+                # Deactivate records that were not found in this data collection operation on the destination silo and the metadata silo
+                deactivation_results = self.deactivate_records(unique_identifiers)
+
+                # The results of this task are the number of records processed, replaced, and deactivated
+                self.result = {
+                    'RecordsProcessed': len(data),
+                    'RecordsReplaced': len(unique_identifiers),
+                    'DeactivationResults': deactivation_results
+                }
+
+            except BaseException as ex:
+                # If an error occurs, we call TaskError without raising to record the error but not stop the HarvestUpdateTask
+                TaskError(self, 'Error during HarvestUpdateTask execution.', ex)
 
         # Record the results in the task chain collection metadata
         self.record_pstar()
@@ -192,7 +214,9 @@ class HarvestUpdateTask(BaseTask):
             'Account': self.task_chain.account,
             'Region': self.task_chain.region,
             'UniqueIdentifierKeys': self.task_chain.unique_identifier_keys,
-            'Active': True  # Active by default because records found in this collection process are known to exist
+            'Active': True,  # Active by default because records found in this collection process are known to exist
+            'TaskChainId': self.task_chain.id if self.task_chain else None,
+            'ParentTaskId': self.task_chain.parent if self.task_chain else None
         }
 
         # Convert the class / module metadata into a dictionary with Titled keys
@@ -331,12 +355,21 @@ class HarvestUpdateTask(BaseTask):
             if self.task_chain.mode == 'all':
                 # Records to be deactivated
                 deactivate_records = [
-                    record['UniqueIdentifier']
-                    for record in collection.find({
-                        'Harvest.Account': self.task_chain.account,
-                        'Harvest.Region': self.task_chain.region,
-                    }, {'UniqueIdentifier': '$Harvest.UniqueIdentifier'})
-                    if record.get('UniqueIdentifier') not in unique_identifiers
+                    record['UniqueIdentifier'] for record in
+                    collection.aggregate([
+                        {
+                            '$match': {
+                                'Harvest.AccountId': self.task_chain.account,       # Must use AccountId here because self.task_chain.account is always the id number
+                                'Harvest.Region': self.task_chain.region,
+                                'Harvest.UniqueIdentifier': {'$nin': unique_identifiers}
+                            },
+                        },
+                        {
+                            '$project': {
+                                'UniqueIdentifier': '$Harvest.UniqueIdentifier'
+                            }
+                        }
+                    ])
                 ]
 
             else:
@@ -350,14 +383,13 @@ class HarvestUpdateTask(BaseTask):
             # Deactivate Records that were not found in this data collection operation (assumed to be inactive)
             deactivated_replacements = silo.connect()[silo.database][self.task_chain.replacement_collection_name].update_many(
                 filter={
+                    'Harvest.Active': True,  # Only deactivate active records
                     'Harvest.UniqueIdentifier': {'$in': deactivate_records},
-                    'Harvest.Account': self.task_chain.account,
-                    'Harvest.Region': self.task_chain.region
                 },
                 update={
                     '$set': {
                         'Harvest.Active': False,
-                        'Harvest.DeactivatedOn': deactivation_timestamp
+                        'Harvest.Dates.DeactivatedOn': deactivation_timestamp
                     }
                 }
             )
@@ -388,7 +420,7 @@ class HarvestUpdateTask(BaseTask):
                     'UniqueIdentifier': {'$nin': unique_identifiers},
                     'Silo': self.task_chain.destination_silo,
                     'Collection': self.task_chain.replacement_collection_name,
-                    'Harvest.Account': self.task_chain.account,
+                    'Harvest.AccountId': self.task_chain.account,
                     'Harvest.Region': self.task_chain.region
                 },
                 update={
@@ -444,7 +476,7 @@ class HarvestUpdateTask(BaseTask):
         # Get the old PSTAR record
         old_pstar = collection.find_one(self.pstar_identifier) or {}
 
-        original_count = old_pstar.get('Count') or 0
+        original_count = 0 if old_pstar.get('Count') is None else old_pstar['Count']
 
         from copy import deepcopy
         metrics = deepcopy(self.task_chain.result['metrics'][-1])     # Provides totals for all metric stages
@@ -458,7 +490,7 @@ class HarvestUpdateTask(BaseTask):
             metrics['Records'] = self.result['RecordsProcessed']
 
         # Although the convention in Redis is to use lower-case for fields, we use upper-case in MongoDB.
-        result = self.pstar_identifier | metrics | {'Errors': self.task_chain.result['errors']}
+        result = self.pstar_identifier | metrics | {'Errors': self.task_chain.result['errors']} | {'TaskChainId': self.task_chain.id if self.task_chain else None, 'ParentTaskId': self.task_chain.parent if self.task_chain else None}
 
         collection.replace_one(self.pstar_identifier, result, upsert=True)
 

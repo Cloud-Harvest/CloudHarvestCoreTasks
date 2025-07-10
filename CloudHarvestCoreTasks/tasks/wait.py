@@ -5,6 +5,11 @@ from typing import List
 
 @register_definition(name='wait', category='task')
 class WaitTask(BaseTask):
+    COMPLETED_TASK_CODES = (
+        TaskStatusCodes.complete,
+        TaskStatusCodes.error,
+        TaskStatusCodes.skipped
+    )
     def __init__(self,
                  check_time_seconds: float = 1,
                  when_after_seconds: float = 0,
@@ -81,9 +86,7 @@ class WaitTask(BaseTask):
 
         if self._when_all_previous_async_tasks_complete:
             return all([
-                task.status in [
-                    TaskStatusCodes.complete, TaskStatusCodes.error
-                ]
+                task.status in self.COMPLETED_TASK_CODES
                 for task in self.task_chain[0:self.position]
                 if task.blocking is False
             ])
@@ -99,9 +102,7 @@ class WaitTask(BaseTask):
 
         if self._when_all_previous_tasks_complete:
             return all([
-                task.status in [
-                    TaskStatusCodes.complete, TaskStatusCodes.error
-                ]
+                task.status in self.COMPLETED_TASK_CODES
                 for task in self.task_chain[0:self.position]
             ])
 
@@ -116,9 +117,7 @@ class WaitTask(BaseTask):
 
         if self._when_all_tasks_by_name_complete:
             return all([
-                task.status in [
-                    TaskStatusCodes.complete, TaskStatusCodes.error
-                ]
+                task.status in self.COMPLETED_TASK_CODES
                 for task in self.task_chain[0:self.position]
                 if task.name in self._when_all_tasks_by_name_complete
             ])
@@ -134,9 +133,7 @@ class WaitTask(BaseTask):
 
         if self._when_any_tasks_by_name_complete:
             return any([
-                task.status in [
-                    TaskStatusCodes.complete, TaskStatusCodes.error
-                ]
+                task.status in self.COMPLETED_TASK_CODES
                 for task in self.task_chain[0:self.position]
                 if task.name in self._when_all_tasks_by_name_complete
             ])

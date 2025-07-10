@@ -10,10 +10,11 @@ database and performs some action.
 
 ### Directives
 
-| Directive          | Required | Default | Description                                                                          |
-|--------------------|----------|---------|--------------------------------------------------------------------------------------|
-| `collection`       | Yes      | None    | The name of the collection to perform the command on.                                |
-| `result_attribute` | No       | None    | Allows the user to return content such as `row_count` from an aggregation pipeline.  |
+| Directive    | Required | Default     | Description                                                                                                                         |
+|--------------|----------|-------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| `collection` | Yes      | None        | The name of the collection to perform the command on.                                                                               |
+| `command`    | No       | `aggregate` | The MongoDb command to execute.                                                                                                     |
+| `arguments`  | No       | None        | A dictionary representing arguments to pass to `pymongo`. For instance, when using the `aggregate` command, `pipeline` is required. |
 
 ## Example
 
@@ -25,14 +26,11 @@ mongo:
   collection: my_collection
   command: find
   arguments:
-    filter: {
-      "name": "John"
-    }            
-    projection: {
+    filter:
+      "name": "John"     
+    projection:
       "name": 1, 
       "age": 1
-    }   
-    sort: {
+    sort:
       "age": 1
-    }
 ```

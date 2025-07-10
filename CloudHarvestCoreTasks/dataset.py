@@ -869,16 +869,17 @@ class DataSet(List[WalkableDict]):
 
         return combined_result
 
-    def match_and_remove(self, matching_expressions: List[List[str]], invert_results: bool = False) -> 'DataSet':
+    def match_and_remove(self, matching_expressions: List[List[str]], filterable_fields: List[str] = None, invert_results: bool = False) -> 'DataSet':
         """
         Evaluates expressions against the data set and removes records that do not match the expressions.
 
         Arguments
+        filterable_fields (List[str], optional): The fields to filter by. If not provided, all fields can be filtered.
         matching_expressions (list or str or MatchSetGroup): The expressions to match the records by.
         invert_results (bool, optional): When true, the results are inverted. Defaults to False.
         """
         if not isinstance(matching_expressions, MatchSetGroup):
-            matching_expressions = MatchSetGroup(matching_expressions)
+            matching_expressions = MatchSetGroup(matching_expressions, filterable_fields=filterable_fields)
 
         self[:] = [
             record
@@ -1650,7 +1651,8 @@ class MatchSetGroup(List[MatchSet]):
     evaluated and the results are combined using a logical OR. If any MatchSet object evaluates to True, the MatchGroup
     evaluates to True. Conversely, if all MatchSet objects evaluate to False, the MatchGroup evaluates to False.
     """
-    def __init__(self, *args):
+    def __init__(self, *args, filterable_fields: List[str] = None):
+        self.filterable_fields = filterable_fields or []
         super().__init__()
 
         for arg in args:
@@ -1662,6 +1664,14 @@ class MatchSetGroup(List[MatchSet]):
 
             elif isinstance(arg, str):
                 self.append(MatchSet(arg))
+
+        if self.filterable_fields:
+            # When filterable_fields is provided, remove any Match objects that do not have
+            # a key in the filterable fields
+            for match_set in self:
+                for match in list(match_set):
+                    if match.key not in self.filterable_fields:
+                        match_set.remove(match)
 
     def as_dict(self) -> dict:
         """

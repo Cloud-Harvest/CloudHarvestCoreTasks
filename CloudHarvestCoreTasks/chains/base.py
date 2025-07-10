@@ -51,6 +51,7 @@ class BaseTaskChain(List[BaseTask]):
                  template: dict,
                  chain_type: str = None,
                  parent: str = None,
+                 priority: int = 0,
                  variables: dict = None,
                  filters: dict = None,
                  *args, **kwargs):
@@ -65,6 +66,7 @@ class BaseTaskChain(List[BaseTask]):
                 description(str, optional): A brief description of what the task chain does. Defaults to None.
                 max_workers(int, optional): The maximum number of concurrent workers that are permitted.
             parent (str, optional): A parent request uuid to associate with the task chain. Defaults to None.
+            priority (int, optional): The priority of the task chain. Defaults to 0, which is the highest priority.
             variables(dict, optional): Variables that can be used by the tasks in the chain. The dictionary is merged
                                         with into the BaseTaskChain.variables attribute. Defaults to None.
             filters(dict, optional): A dictionary of user filters to apply to the data. Defaults to an empty dictionary.
@@ -78,6 +80,7 @@ class BaseTaskChain(List[BaseTask]):
 
         self.name = template['name']
         self.parent = parent
+        self.priority = priority
         self.chain_type = chain_type
         self.description = template.get('description')
         self.filters = filters or {}
@@ -105,6 +108,9 @@ class BaseTaskChain(List[BaseTask]):
 
         self.required_variables = template.get('required_variables') or []
         self.update_status_client = None
+
+        # optional kwargs
+        self.describe = kwargs.get('describe', False)
 
         try:
             # Set up the client used to update the task chain status in Redis
@@ -287,14 +293,27 @@ class BaseTaskChain(List[BaseTask]):
         """
 
         try:
-            data = self.variables.get('result') or self[-1].result
+            if self.describe:
+                data = self.original_template
+
+            else:
+                data = self.variables.get('result') or self[-1].result
 
         except IndexError:
             data = []
 
+        errors = {
+            str(f'{task.position}: {task.name}'): task.errors
+            for task in self
+            if task.errors
+        }
+
+        if self.errors:
+            errors[f'chain: {self.name}'] = self.errors
+
         result = {
             'data': data,
-            'errors': self.errors,
+            'errors': errors or None,
             'meta': self.meta,
             'metrics': self.performance_metrics
             # 'template': self.original_template        # do not include the template as it can contain the incoming data from other jobs
@@ -552,6 +571,11 @@ class BaseTaskChain(List[BaseTask]):
                         raise Exception(self, f'Missing required variable: {var}')
 
             while True:
+                # When the describe directive is set, we will not run the tasks in the chain. Instead, we will return
+                # the task chain template as a dictionary.
+                if self.describe:
+                    break
+
                 # Instantiate the task from the task configuration
                 try:
                     from CloudHarvestCoreTasks.factories import template_task_configuration
@@ -636,10 +660,9 @@ class BaseTaskChain(List[BaseTask]):
         except BaseException as ex:
             self.on_error(ex)
 
-        finally:
-            self.on_complete()
+        self.on_complete()
 
-            return self
+        return self
 
     def iterate_task(self, original_task_configuration: dict) -> Generator[dict, None, None]:
         """

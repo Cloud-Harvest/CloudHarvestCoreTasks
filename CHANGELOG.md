@@ -2,6 +2,7 @@
 
 ## 0.8.1
 - Removed `meta.json` in favor of using `pyproject.toml`
+- Removed `Module` metadata requirements
 
 ## 0.8.0
 - [#30](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/30) - Added the `EnqueueTask` which allows for the queuing of subtasks via the Api

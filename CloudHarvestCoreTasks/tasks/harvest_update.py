@@ -21,10 +21,6 @@ class HarvestUpdateTask(BaseTask):
         'Account',                      # The Platform account name or identifier
         'Region',                       # The geographic region name for the Platform
         'UniqueIdentifierKeys',         # UniqueIdentifierKeys requires at least one value, so .0 is expected
-        'Module.Author',                # The author of the Harvest module
-        'Module.Name',                  # The name of the Harvest module that collected the data
-        'Module.Url',                   # The repository where the Harvest module is stored
-        'Module.Version',               # The version of the Harvest module
         'Dates.LastSeen',               # The date indicating when the record was last collected by Harvest
         'Active',                       # A boolean indicating if the record is active
         'TaskChainId',                  # The ID of the task chain that collected the data
@@ -219,15 +215,6 @@ class HarvestUpdateTask(BaseTask):
             'ParentTaskId': self.task_chain.parent if self.task_chain else None
         }
 
-        # Convert the class / module metadata into a dictionary with Titled keys
-        # As of CloudHarvestCorePluginManager 0.1.5, class metadata is recorded when the @register_definition
-        # decorator is called, allowing the dynamic recording of metadata for each registered Harvest module and class.
-        build_components = {
-            'Module': {
-                str(k).title(): v
-                for k, v in (getattr(self, '_harvest_plugin_metadata') or {}).items()}
-        }
-
         dates = {
             'Dates': {
                 'DeactivatedOn': None,
@@ -244,7 +231,7 @@ class HarvestUpdateTask(BaseTask):
         }
 
         # Merge the components into a single metadata dictionary
-        result = WalkableDict(pstar | build_components | dates | silo)
+        result = WalkableDict(pstar | dates | silo)
 
         # Validate that all required metadata fields are present
         missing_fields = [

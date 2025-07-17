@@ -661,7 +661,7 @@ class DataSet(List[WalkableDict]):
 
         target_key = target_key or source_key
 
-        from json import loads, JSONDecodeError
+        from json import loads
 
         for record in self:
             # Get the value from the source key
@@ -670,7 +670,7 @@ class DataSet(List[WalkableDict]):
             try:
                 source_value = loads(source_value)
 
-            except JSONDecodeError:
+            except Exception:
                 # Don't take any action if the value is not a valid JSON string
                 pass
 

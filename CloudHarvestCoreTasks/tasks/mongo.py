@@ -279,7 +279,9 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
         }
 
     def _filter_sort(self) -> dict or None:
-        if self.sort:
+        sort_keys = self.sort or self.filter_keys()
+
+        if sort_keys:
             result = {}
 
             for sort in self.sort:

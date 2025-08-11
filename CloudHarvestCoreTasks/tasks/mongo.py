@@ -284,7 +284,7 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
         if sort_keys:
             result = {}
 
-            for sort in self.sort:
+            for sort in sort_keys:
                 if ':' in sort:
                     field, direction = sort.split(':')
 
@@ -300,7 +300,7 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
                     result[sort] = 1
 
             return {
-                '$sort': result
+                '$sort': result | { '_id': 1 }  # Tie-breaker to ensure consistent ordering
             }
 
         return None

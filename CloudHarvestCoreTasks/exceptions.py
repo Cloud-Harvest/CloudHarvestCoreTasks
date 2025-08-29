@@ -12,8 +12,17 @@ class BaseHarvestException(BaseException):
     """
 
     def __init__(self, prefix: str, *args, log_level: _log_levels = 'error', **kwargs):
+        import traceback
+        stack = traceback.extract_stack()
+        if len(stack) >= 3:
+            filename, lineno, _, _ = stack[-3]
+        else:
+            filename, lineno = '<unknown>', 0
+
         message = format_args(*args)
-        getattr(logger, log_level.lower())(f'{prefix}: {message}')
+        log_message = f'{prefix}({filename}:{lineno}) {message}'
+
+        getattr(logger, log_level.lower())(log_message)
 
         super().__init__(message)
 

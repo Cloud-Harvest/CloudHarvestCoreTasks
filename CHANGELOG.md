@@ -3,6 +3,7 @@
 ## 0.8.2
 - [#36](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/36): `MongoTask` and `RedisTask` will now retry database operations using a new method provided in `BaseDataTask`.
 - `BaseTask` now offers the `prefix` property used for log entries.
+- Log messages now include the calling filename and line number.
 
 ## 0.8.1
 - Removed `meta.json` in favor of using `pyproject.toml`

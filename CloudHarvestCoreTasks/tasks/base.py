@@ -139,7 +139,7 @@ class BaseTask:
         self.original_template = None
         self.result = None
         self.meta = {}
-        self.errors = None
+        self.errors = []
         self.start = None
         self.end = None
 

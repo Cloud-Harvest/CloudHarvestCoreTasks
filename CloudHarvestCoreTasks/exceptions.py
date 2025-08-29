@@ -16,11 +16,16 @@ class BaseHarvestException(BaseException):
         stack = traceback.extract_stack()
         if len(stack) >= 3:
             filename, lineno, _, _ = stack[-3]
+
+            # Only keep the filename and the last directory
+            from os import sep
+            filename = filename.split(sep)[-2:]
+
         else:
             filename, lineno = '<unknown>', 0
 
         message = format_args(*args)
-        log_message = f'{prefix}({filename}:{lineno}) {message}'
+        log_message = f'{prefix}: ({filename}:{lineno}) {message}'
 
         getattr(logger, log_level.lower())(log_message)
 

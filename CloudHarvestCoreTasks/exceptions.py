@@ -19,7 +19,7 @@ class BaseHarvestException(BaseException):
 
             # Only keep the filename and the last directory
             from os import sep
-            filename = filename.split(sep)[-2:]
+            filename = sep.join(filename.split(sep)[-2:])
 
         else:
             filename, lineno = '<unknown>', 0

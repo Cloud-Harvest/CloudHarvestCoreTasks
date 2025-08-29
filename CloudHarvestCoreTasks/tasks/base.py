@@ -172,6 +172,27 @@ class BaseTask:
         except ValueError:
             return -1
 
+    @property
+    def prefix(self) -> str:
+        """
+        Returns a string for log prefixing.
+        """
+
+        redis_name, task_index, task_name = (
+            self.task_chain.redis_name if self.task_chain is not None else None,
+            self.task_chain.index(self) + 1 if self.task_chain is not None else None,
+            self.name
+        )
+
+        # If the 'redis_name' property exists, then the 'task_index' should be determinable.
+        if redis_name and task_index:
+            return f'{redis_name}[{task_index}].{task_name}'
+
+        # This would occur if the task is not part of a task chain which is possible, though typically only
+        # in testing scenarios.
+        else:
+            return task_name
+
     def apply_filters(self) -> 'BaseTask':
         """
         Applies user filters to the Task. The default user filter class is HarvestRecordSetUserFilter which is executed
@@ -503,6 +524,8 @@ class BaseDataTask(BaseTask):
                  silo: str,
                  command: str = None,
                  arguments: dict = None,
+                 query_retry_max_attempts: int = 3,
+                 query_retry_delay_seconds: float = 1.0,
                  *args, **kwargs):
         """
         Initializes a new instance of the BaseDataTask class. In order to instantiate a BaseDataTask, a configuration
@@ -517,6 +540,8 @@ class BaseDataTask(BaseTask):
             silo (str, optional): The name of the silo to use for the task. Defaults to None.
             command (str, optional): The command to run on the data provider. Defaults to None. Subclasses should implement a default command.
             arguments (dict, optional): Arguments to pass to the command.
+            query_retry_max_attempts (int, optional): The maximum number of attempts to retry a query. Defaults to 3.
+            query_retry_delay_seconds (float, optional): The number of seconds to wait before retrying a query. Defaults to 1.0.
         """
 
         # Initialize the BaseTask class
@@ -528,6 +553,8 @@ class BaseDataTask(BaseTask):
         self.silo = get_silo(silo)
         self.arguments = arguments or {}
         self.command = command
+        self.query_retry_max_attempts = query_retry_max_attempts or 3
+        self.query_retry_delay_seconds = query_retry_delay_seconds or 1.0
 
         # Programmatic attributes
         self.calls = 0
@@ -537,6 +564,56 @@ class BaseDataTask(BaseTask):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         return None
+
+    def retryable_execution(self, retryable_exceptions: tuple, client_object: object, *args, **kwargs) -> Any:
+        """
+        This method executes the function of a client object and retries it if it raises a retryable exception. The
+        number of attempts and delay between attempts are determined by the query_retry_max_attempts and
+        query_retry_delay_seconds attributes.
+
+        This retry logic is distinct from the larger Task retry logic because it is specific to the execution of
+        commands against a data provider. An assumption is made that data provider commands may fail due to transient
+        issues such as network issues, timeouts, or rate limiting. To that end, the retryable_exceptions argument
+        must be provided by the caller to specify which exceptions are considered retryable.
+
+        Args:
+            retryable_exceptions (tuple): A list of exceptions that are considered retryable.
+            client_object (object): The client object to execute the command on.
+            *args: The arguments to pass to the command.
+            **kwargs: The keyword arguments to pass to the command.
+        """
+
+        attempts = 0
+        while True:
+            attempts += 1
+
+            try:
+                # Some methods support args and kwargs, some only args, some only kwargs, and some neither. Therefore,
+                # we provide for all four scenarios. This kind of flexibility is required because the BaseDataTask is
+                # designed to be generic and work with any subclassed data provider.
+                if args and kwargs:
+                    return getattr(client_object, self.command)(*args, **kwargs)
+
+                elif args:
+                    return getattr(client_object, self.command)(*args)
+
+                elif kwargs:
+                    return getattr(client_object, self.command)(**kwargs)
+
+                else:
+                    return getattr(client_object, self.command)()
+
+            except retryable_exceptions as e:
+                if attempts >= self.query_retry_max_attempts:
+                    raise TaskError(self, f'MaxAttempts reached for command `{self.command}`. {e}') from e
+
+                else:
+                    from time import sleep
+                    logger.debug(f'{self.prefix}: Retrying command `{self.command}`({attempts}/{self.query_retry_max_attempts})')
+                    sleep(self.query_retry_delay_seconds)
+
+            except Exception as e:
+                raise TaskError(self, f'Error executing command `{self.command}`. {e}') from e
 
 
 class BaseFilterableTask(BaseTask):

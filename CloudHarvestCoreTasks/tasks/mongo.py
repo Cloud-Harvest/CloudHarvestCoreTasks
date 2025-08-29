@@ -3,6 +3,10 @@ from CloudHarvestCoreTasks.tasks.base import BaseDataTask, BaseFilterableTask
 from CloudHarvestCoreTasks.exceptions import TaskError
 
 from pymongo import MongoClient
+from pymongo.errors import *
+
+from logging import getLogger
+logger = getLogger('harvest')
 
 
 @register_definition(name='mongo', category='task')
@@ -331,10 +335,22 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
             # Expose database-level commands
             database_object = client[self.silo.database]
 
-        # Execute the command on the database or collection
-        self.calls += 1
+        # Define the exceptions that should trigger a retry
+        retryable_exceptions = (
+            AutoReconnect,
+            ExecutionTimeout,
+            NetworkTimeout,
+            ServerSelectionTimeoutError,
+            WTimeoutError,
+            WaitQueueTimeoutError
+        )
 
-        result = getattr(database_object, self.command)(**self.arguments)
+        # Execute the command with retry logic
+        result = self.retryable_execution(
+            retryable_exceptions=retryable_exceptions,
+            client_object=database_object,
+            **self.arguments
+        )
 
         # Convert the result to a list if it is a generator or cursor
         from types import GeneratorType

@@ -34,13 +34,6 @@ class TaskError(BaseHarvestException):
         # Format the arguments into something human-readable by recursively joining them into a string.
         formatted_args = format_args(*args)
 
-        # Configure the log prefix
-        if task.task_chain:
-            prefix = f'{task.task_chain.redis_name}[{task.task_chain.position + 1}]'
-
-        else:
-            prefix = task.name
-
         # Make sure the BaseTask.errors is a list (instantiated as None)
         if not isinstance(task.errors, list):
             task.errors = []
@@ -51,7 +44,7 @@ class TaskError(BaseHarvestException):
         from CloudHarvestCoreTasks.tasks import TaskStatusCodes
         task.status = TaskStatusCodes.error
 
-        super().__init__(prefix, formatted_args, **kwargs)
+        super().__init__(task.prefix, formatted_args, **kwargs)
 
 
 class TaskTerminationError(TaskError):

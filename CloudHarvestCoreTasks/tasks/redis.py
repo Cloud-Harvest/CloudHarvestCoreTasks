@@ -1,7 +1,10 @@
 from CloudHarvestCorePluginManager import register_definition
+from urllib3.exceptions import MaxRetryError
+
 from CloudHarvestCoreTasks.tasks.base import BaseDataTask
 
 from logging import getLogger
+from redis.exceptions import *
 from typing import Any, Literal
 
 logger = getLogger('harvest')
@@ -77,8 +80,28 @@ class RedisTask(BaseDataTask):
             # Serialize the data before writing to Redis
             self.arguments[self.serializer_key] = dumps(self.arguments.get(self.serializer_key) or {}, default=str)
 
+        # Define retryable exceptions
+        retryable_exceptions = (
+            BusyLoadingError,
+            ChildDeadlockedError,
+            ClusterCrossSlotError,
+            ClusterDownError,
+            ConnectionError,
+            ExecAbortError,
+            LockError,
+            MasterDownError,
+            MaxRetryError,
+            OutOfMemoryError,
+            TimeoutError,
+            TryAgainError
+        )
+
         # Execute the command using the RedisClient
-        result = getattr(client, self.command)(**self.arguments)
+        result = self.retryable_execution(
+            retryable_exceptions=retryable_exceptions,
+            client_object=client,
+            **self.arguments
+        )
 
         if self.command == 'scan':
             # The scan command returns a tuple of (cursor, data), so we need to extract the data

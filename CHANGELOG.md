@@ -2,8 +2,8 @@
 
 ## 0.8.2
 - [#36](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/36): `MongoTask` and `RedisTask` will now retry database operations using a new method provided in `BaseDataTask`.
+- [#37](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/37): Log messages now include the calling filename, line number, and task name. 
 - [#38](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/38): Address `'NoneType' object has no attriute 'append'` in the `TaskError` exception class.
-- Log messages now include the calling filename and line number.
  - `BaseTask` now offers the `prefix` property used for log entries.
 
 ## 0.8.1

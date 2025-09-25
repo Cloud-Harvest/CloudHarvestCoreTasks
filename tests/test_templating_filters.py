@@ -18,6 +18,11 @@ class TestFilters(unittest.TestCase):
         self.assertEqual(templating.parse_datetime(date_obj), date_obj)
         self.assertIsNone(templating.parse_datetime('invalid date'))
 
+    def test_filter_datetime_ago(self):
+        from datetime import timedelta
+        expected_date = datetime.now(tz=timezone.utc) - timedelta(days=1)
+        self.assertEqual(templating.filter_datetime_ago(days=1, result_as_datatime=True).day, expected_date.day)
+
     def test_filter_datetime_since(self):
         reference_date = datetime(2022, 1, 1, tzinfo=timezone.utc)
         expected_date = datetime(2021, 12, 31, tzinfo=timezone.utc)

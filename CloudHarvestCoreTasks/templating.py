@@ -2,7 +2,7 @@
 This module contains functions for rendering templates using the Jinja2 templating engine.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from logging import getLogger
@@ -110,7 +110,6 @@ def parse_datetime(reference_date: (str or datetime) = None, result_tz_aware: bo
     """
 
     from dateutil.parser import parse
-    from datetime import timezone
 
     try:
         # If reference_date is a string, parse it into a datetime object
@@ -142,37 +141,24 @@ def parse_datetime(reference_date: (str or datetime) = None, result_tz_aware: bo
         return None
 
 # FILTERS
-def filter_datetime_ago(days: int = 0, hours: int = 0, minutes: int = 0, seconds: int = 0, result_as_datatime: bool = False) -> datetime or str:
+# ======================================================================================================================
+
+def filter_datetime_ago(**timedelta_kwargs) -> datetime:
     """
     This function calculates a datetime in the past from the current datetime.
-    Args:
-    days (int, optional): The number of days to subtract. Defaults to 0.
-    hours (int, optional): The number of hours to subtract. Defaults to 0.
-    minutes (int, optional): The number of minutes to subtract. Defaults to 0.
-    seconds (int, optional): The number of seconds to subtract. Defaults to 0.
-    result_as_datatime (bool, optional): Whether to return the result as a datetime object. When False, the result is returned as a string. Defaults to False.
+    Args
+        **timedelta_kwargs: Arguments to pass to the timedelta function: days, hours, minutes, seconds, etc.
 
     Returns
     datetime or str: The calculated datetime.
     """
 
-    from datetime import datetime, timedelta, timezone
-    
     now = datetime.now(tz=timezone.utc)
-    result = now - timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
+    result = now - timedelta(**timedelta_kwargs)
     
-    if result_as_datatime:
-        return result
-    else:
-        return result.isoformat()
+    return result
     
-
-def filter_datetime_since(
-        reference_date: (str or datetime) = None,
-        result_as_string: bool = False,
-        **timedelta_kwargs
-
-) -> (str or datetime):
+def filter_datetime_since(reference_date: (str or datetime) = None, result_as_string: bool = False, **timedelta_kwargs) -> datetime:
     """
     This function calculates a datetime in the past from a reference date.
 
@@ -185,8 +171,6 @@ def filter_datetime_since(
         str or datetime: The calculated datetime.
     """
 
-    from datetime import timedelta
-
     start_date = parse_datetime(reference_date)
 
     result = start_date - timedelta(**timedelta_kwargs)
@@ -198,58 +182,34 @@ def filter_datetime_since(
         return result
 
 
-def filter_datetime_until(
-        reference_date: (str or datetime) = None,
-        result_as_string: bool = False,
-        **timedelta_kwargs
-
-) -> (str or datetime):
+def filter_datetime_until(reference_date: str or datetime = None, **timedelta_kwargs) -> datetime:
     """
     This function calculates a datetime in the future from a reference date.
 
     Args:
         reference_date (str or datetime, optional): The reference date. Defaults to None.
-        result_as_string (bool, optional): Whether to return the result as a string. Defaults to False.
         **timedelta_kwargs: Arguments to pass to the timedelta function.
 
     Returns:
         str or datetime: The calculated datetime.
     """
 
-    from datetime import timedelta
-
     start_date = parse_datetime(reference_date)
 
     result = start_date + timedelta(**timedelta_kwargs)
 
-    if result_as_string:
-        return result.isoformat()
-
-    else:
-        return result
+    return result
 
 
-def filter_datetime_now(as_epoc: bool = False, result_tz_aware: bool = True) -> datetime or float:
+def filter_datetime_now() -> datetime:
     """
-    Returns the current datetime.
+    Returns the current UTC datetime.
 
-    This function returns the current datetime. If `as_epoc` is set to True, it returns the current datetime as a Unix timestamp.
-    If `result_tz_aware` is set to True, the returned datetime object is timezone aware (set to UTC). If False, the datetime object is naive.
-
-    Args:
-        as_epoc (bool, optional): If True, returns the current datetime as a Unix timestamp. Defaults to False.
-        result_tz_aware (bool, optional): If True, the returned datetime object is timezone aware (set to UTC). If False, the datetime object is naive. Defaults to True.
+    This function returns the current datetime.
 
     Returns:
-        datetime or float: The current datetime. If `as_epoc` is True, this will be a Unix timestamp. Otherwise, it will be a datetime object.
+        datetime: The current datetime.
     """
-    from datetime import datetime, timezone
 
     # Get the current datetime
-    now = datetime.now(tz=timezone.utc) if result_tz_aware else datetime.now()
-
-    # If as_epoc is True, return the current datetime as a Unix timestamp
-    if as_epoc:
-        return now.timestamp()
-    else:
-        return now
+    return datetime.now(tz=timezone.utc)

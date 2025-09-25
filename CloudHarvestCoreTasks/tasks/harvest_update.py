@@ -532,7 +532,7 @@ class HarvestUpdateTask(BaseTask):
             write_result = client[silo.database][collection].bulk_write(requests=prepared_replacements[bulk_start:bulk_end])
 
             # Consolidate the write output results
-            for key, value in write_result.bulk_api_result.items():
+            for key, value in write_result.items():
                 bulk_replace_results[key] = bulk_replace_results.get(key) or 0 + value
 
             # Increment the iterator

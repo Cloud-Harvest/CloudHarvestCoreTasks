@@ -142,6 +142,23 @@ def parse_datetime(reference_date: (str or datetime) = None, result_tz_aware: bo
         return None
 
 # FILTERS
+def filter_datetime_ago(year: int = None, month: int = None, day: int = None, hour: int = None, minute: int = None, second: int = None, result_as_datatime: bool = False) -> datetime:
+    """
+    This function calculates a datetime in the past from the current datetime.
+    Args:
+    year (int, optional): The number of years to subtract. Defaults to None.
+    month (int, optional): The number of months to subtract. Defaults to None.
+    day (int, optional): The number of days to subtract. Defaults to None.
+    hour (int, optional): The number of hours to subtract. Defaults to None.
+    minute (int, optional): The number of minutes to subtract. Defaults to None.
+    second (int, optional): The number of seconds to subtract. Defaults to None.
+    result_as_datatime (bool, optional): Whether to return the result as a datetime object. When False, the result is returned as a string. Defaults to False.
+
+    Returns
+    datetime or str: The calculated datetime.
+
+    """
+
 def filter_datetime_since(
         reference_date: (str or datetime) = None,
         result_as_string: bool = False,

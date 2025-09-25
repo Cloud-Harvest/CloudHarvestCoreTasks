@@ -504,14 +504,44 @@ class HarvestUpdateTask(BaseTask):
         silo = get_silo(silo_name)
         client = silo.connect()
 
-        bulk_replace_results = client[silo.database][collection].bulk_write(requests=prepared_replacements)
+        def least(a: int, b: int) -> int:
+            """
+            A simple function to return the least of two values.
+            a (int): The first value.
+            b (int): The second value.
 
-        end_time = datetime.now(tz=timezone.utc)
+            Returns
+            int: The least of the two values.
+
+            """
+            return a if a < b else b
+
+        i = 0                       # Iterator for identifying chunks
+        chunk_size = 1000           # Maximum number of operations per bulk write
+        bulk_replace_results = {}
+
+        while True:
+            bulk_start = i * chunk_size                                                  #   0, 1000, 2000, 3000, ...
+            bulk_end = least(bulk_start + (chunk_size - 1), len(prepared_replacements))  # 999, 1999, 2999, 3999, ... or the end of the list
+
+            # Escape if we have reached the end of the list
+            if bulk_end >= len(prepared_replacements) - 1:
+                break
+
+            # Perform the bulk write operation
+            write_result = client[silo.database][collection].bulk_write(requests=prepared_replacements[bulk_start:bulk_end])
+
+            # Consolidate the write output results
+            for key, value in write_result.bulk_api_result.items():
+                bulk_replace_results[key] = bulk_replace_results.get(key) or 0 + value
+
+            # Increment the iterator
+            i += 1
 
         return {
             'StartTime': start_time,
             'BulkReplaceResults': bulk_replace_results,
-            'EndTime': end_time,
+            'EndTime': datetime.now(tz=timezone.utc),
         }
 
     def ensure_unique_identifier_index(self) -> 'HarvestUpdateTask':

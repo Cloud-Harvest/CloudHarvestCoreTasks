@@ -5,6 +5,7 @@
 - [#37](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/37): Log messages now include the calling filename, line number, and task name. 
 - [#38](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/38): Address `'NoneType' object has no attriute 'append'` in the `TaskError` exception class.
  - `BaseTask` now offers the `prefix` property used for log entries.
+- `HarvestUpdateTask.bulk_replace()` now chunks large replacements to prevent overwhelming the database.
 
 ## 0.8.1
 - Removed `meta.json` in favor of using `pyproject.toml`

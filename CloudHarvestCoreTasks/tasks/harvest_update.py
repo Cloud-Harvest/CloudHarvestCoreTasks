@@ -504,39 +504,30 @@ class HarvestUpdateTask(BaseTask):
         silo = get_silo(silo_name)
         client = silo.connect()
 
-        def least(a: int, b: int) -> int:
-            """
-            A simple function to return the least of two values.
-            a (int): The first value.
-            b (int): The second value.
-
-            Returns
-            int: The least of the two values.
-
-            """
-            return a if a < b else b
-
-        i = 0                       # Iterator for identifying chunks
-        chunk_size = 1000           # Maximum number of operations per bulk write
+        chunk_size = 1000  # Maximum number of operations per bulk write
         bulk_replace_results = {}
 
         while True:
-            bulk_start = i * chunk_size                                                  #   0, 1000, 2000, 3000, ...
-            bulk_end = least(bulk_start + (chunk_size - 1), len(prepared_replacements))  # 999, 1999, 2999, 3999, ... or the end of the list
-
-            # Escape if we have reached the end of the list
-            if bulk_end > len(prepared_replacements):
+            # If there are no more prepared replacements, exit the loop
+            if not prepared_replacements:
                 break
 
+            # The end of the chunk is either the chunk size or the end of the list
+            bulk_end = chunk_size if chunk_size <= len(prepared_replacements) else None
+
             # Perform the bulk write operation
-            write_result = client[silo.database][collection].bulk_write(requests=prepared_replacements[bulk_start:bulk_end])
+            write_result = client[silo.database][collection].bulk_write(requests=prepared_replacements[0:bulk_end])
 
             # Consolidate the write output results
-            for key, value in write_result.items():
-                bulk_replace_results[key] = bulk_replace_results.get(key) or 0 + value
+            for key, value in write_result.bulk_api_result.items():
+                if isinstance(value, int):
+                    bulk_replace_results[key] = (bulk_replace_results.get(key) or 0) + value
 
-            # Increment the iterator
-            i += 1
+                elif isinstance(value, list):
+                    bulk_replace_results[key] = (bulk_replace_results.get(key) or []) + value
+
+            # Remove the processed replacements from the list
+            del prepared_replacements[0:bulk_end]
 
         return {
             'StartTime': start_time,

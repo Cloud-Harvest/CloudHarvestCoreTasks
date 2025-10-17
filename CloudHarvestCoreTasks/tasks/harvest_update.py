@@ -525,7 +525,7 @@ class HarvestUpdateTask(BaseTask):
             bulk_end = least(bulk_start + (chunk_size - 1), len(prepared_replacements))  # 999, 1999, 2999, 3999, ... or the end of the list
 
             # Escape if we have reached the end of the list
-            if bulk_end >= len(prepared_replacements) - 1:
+            if bulk_end > len(prepared_replacements):
                 break
 
             # Perform the bulk write operation

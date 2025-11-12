@@ -663,6 +663,15 @@ class BaseFilterableTask(BaseTask):
             'count'         # Return a count of the data
         )
 
+        # By default, FilterableTasks will always try to include the following keys in its records. These keys are not
+        # added to report headers; however, they should be present in the underlying JSON if they exist or can be
+        # resolved in the query chain.
+        self.add_hidden_keys = [
+            'Harvest.Active',
+            'Harvest.Dates.LastSeen',
+            'Harvest.UniqueIdentifier'
+        ]
+
         # Sets the values
         self.add_keys = self.set_accepted_filters('add_keys', add_keys, [])
         self.count = self.set_accepted_filters('count', count, False)
@@ -711,7 +720,7 @@ class BaseFilterableTask(BaseTask):
             headers = self.headers
 
         return [
-            header for header in (headers + self.add_keys)
+            header for header in (headers + self.add_keys + self.add_hidden_keys)
             if header not in self.exclude_keys
         ]
 

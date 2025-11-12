@@ -79,21 +79,30 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
     def _filter_add_keys(self, *args, **kwargs) -> None:
         """
         This method identifies the first $projection in the pipeline and adds the desired keys to the projection.
-        Where the key contains the period character, the period is removed from the key.
+        Where the key contains the period character, the period is removed from the key. If no projection is present
+        a new one will be added.
 
         Returns
             None: This method does not return anything. It modifies the pipeline in place.
         """
 
-        if self.add_keys:
+        if self.add_keys or self.add_hidden_keys:
             # Find the first projection of the pipeline
             for stage in self.arguments.get('pipeline') or []:
                 if list(stage.keys())[0] == '$project':
                     # Add the keys to the projection
-                    for key in self.add_keys:
+                    for key in self.add_keys + self.add_hidden_keys:
                         stage['$project'][key] = 1
 
                     break
+
+            # else:
+            #     new_project_stage = {'$project': {}}
+            #
+            #     for key in self.add_keys + self.add_hidden_keys:
+            #         new_project_stage['$project'][key] = 1
+            #
+            #     self.arguments['pipeline'].append(new_project_stage)
 
         return None
 

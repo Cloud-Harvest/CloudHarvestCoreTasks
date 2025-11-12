@@ -9,6 +9,7 @@
   - now chunks large replacements to prevent overwhelming the database.
   - now retries writes as sometimes the backend database is too busy to complete the request at that time.
 - Added `filter_datetime_ago()` jinja2 filter.
+- `BaseFilterableTask` now includes `add_hidden_fields` which returns certain key fields back to the client.
 
 ## 0.8.1
 - Removed `meta.json` in favor of using `pyproject.toml`

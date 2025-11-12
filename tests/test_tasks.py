@@ -291,12 +291,21 @@ class TestDataSetTask(BaseTestCase):
         harvest_dataset_task_template = {
             "name": "test_chain",
             "description": "This is a test chain.",
+            "headers": [
+                "name",
+                "age",
+                "date",
+                "tags",
+                "tags_dict",
+                "age_copy"
+            ],
             "tasks": [
                 {
                     "dataset": {
                         "name": "test dataset task",
                         "description": "This is a test record set",
                         "data": "var.test_dataset",
+                        "filters": ".*",
                         "stages": [
                             {
                                 "convert_list_of_dict_to_dict": {
@@ -336,9 +345,9 @@ class TestDataSetTask(BaseTestCase):
             }
         ]
 
-        from chains.base import BaseTaskChain
+        from chains.report import ReportTaskChain
         self.test_data = test_data
-        self.chain = BaseTaskChain(template=harvest_dataset_task_template)
+        self.chain = ReportTaskChain(template=harvest_dataset_task_template)
         self.chain.variables["test_dataset"] = self.test_data
 
     def test_init(self):
@@ -444,10 +453,15 @@ class TestMongoTask(BaseTestCase):
 
         assert len(list(self.collection.find())) == 0
 
-    def test_method_find(self):
+    def test_method_aggregate(self):
         task_chain_configuration = {
             'report': {
                 'name': 'test_chain',
+                'headers': [
+                    'name.family',
+                    'name.given',
+                    'address.city'
+                ],
                 'tasks': [
                     {
                         'mongo': {
@@ -455,9 +469,11 @@ class TestMongoTask(BaseTestCase):
                             'silo': 'test_silo',
                             'collection': 'users',
                             'result_as': 'mongo_result',
-                            'command': 'find',
+                            'command': 'aggregate',
+                            'filters': '.*',
                             'arguments': {
-                                'filter': {}
+                                'pipeline': [
+                                ]
                             },
 
                         }
@@ -469,7 +485,7 @@ class TestMongoTask(BaseTestCase):
         task_chain = task_chain_from_dict(template=task_chain_configuration)
         task_chain.run()
 
-        self.assertFalse(task_chain.errors)
+        self.assertFalse(task_chain.errors and task_chain[0].errors)
         self.assertEqual(len(task_chain.result['data']), 10)
 
     # def test_method_subcommand(self):

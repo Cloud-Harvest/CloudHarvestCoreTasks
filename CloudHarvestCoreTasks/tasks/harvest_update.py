@@ -3,8 +3,11 @@ from CloudHarvestCoreTasks.dataset import WalkableDict
 from CloudHarvestCoreTasks.tasks.base import BaseTask
 from CloudHarvestCoreTasks.exceptions import TaskError
 
+from logging import getLogger
 from typing import List
 from pymongo import ReplaceOne
+
+logger = getLogger('harvest')
 
 
 @register_definition(name='harvest_update', category='task')
@@ -483,8 +486,7 @@ class HarvestUpdateTask(BaseTask):
 
         return self
 
-    @staticmethod
-    def bulk_replace(silo_name: str, collection: str, prepared_replacements: List[ReplaceOne]) -> dict:
+    def bulk_replace(self, silo_name: str, collection: str, prepared_replacements: List[ReplaceOne]) -> dict:
         """
         This method performs a bulk Replace operation on the specified silo.
 
@@ -516,7 +518,25 @@ class HarvestUpdateTask(BaseTask):
             bulk_end = chunk_size if chunk_size <= len(prepared_replacements) else None
 
             # Perform the bulk write operation
-            write_result = client[silo.database][collection].bulk_write(requests=prepared_replacements[0:bulk_end])
+            write_attempts = 0
+
+            while True:
+                try:
+                    # Write records to the backend database
+                    write_result = client[silo.database][collection].bulk_write(requests=prepared_replacements[0:bulk_end])
+                    break
+
+                except Exception as e:
+                    # If we exceed the maximum attempts, raise the error
+                    if write_attempts > 10:
+                        raise e
+
+                    # Allow retry when writing data to the backend database
+                    write_attempts += 1
+                    logger.debug(f'{self.prefix}: error recording records to backend: {e}')
+
+                    from time import sleep
+                    sleep(.25 * write_attempts)
 
             # Consolidate the write output results
             for key, value in write_result.bulk_api_result.items():

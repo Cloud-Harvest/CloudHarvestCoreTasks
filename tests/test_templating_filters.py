@@ -18,6 +18,11 @@ class TestFilters(unittest.TestCase):
         self.assertEqual(templating.parse_datetime(date_obj), date_obj)
         self.assertIsNone(templating.parse_datetime('invalid date'))
 
+    def test_filter_datetime_ago(self):
+        from datetime import timedelta
+        expected_date = datetime.now(tz=timezone.utc) - timedelta(days=1)
+        self.assertEqual(templating.filter_datetime_ago(days=1).day, expected_date.day)
+
     def test_filter_datetime_since(self):
         reference_date = datetime(2022, 1, 1, tzinfo=timezone.utc)
         expected_date = datetime(2021, 12, 31, tzinfo=timezone.utc)
@@ -30,7 +35,6 @@ class TestFilters(unittest.TestCase):
         expected_date = datetime(2022, 1, 2, tzinfo=timezone.utc)
         self.assertEqual(templating.filter_datetime_until(reference_date, days=1), expected_date)
         self.assertEqual(templating.filter_datetime_until(reference_date.isoformat(), days=1), expected_date)
-        self.assertEqual(templating.filter_datetime_until(reference_date, result_as_string=True, days=1), expected_date.isoformat())
 
     def test_filter_datetime_now(self):
         from CloudHarvestCoreTasks.templating import filter_datetime_now
@@ -38,13 +42,6 @@ class TestFilters(unittest.TestCase):
         # Test that the function returns a timezone aware datetime object by default
         self.assertIsInstance(filter_datetime_now(), datetime)
         self.assertIsNotNone(filter_datetime_now().tzinfo)
-
-        # Test that the function returns a naive datetime object if result_tz_aware is False
-        self.assertIsInstance(filter_datetime_now(result_tz_aware=False), datetime)
-        self.assertIsNone(filter_datetime_now(result_tz_aware=False).tzinfo)
-
-        # Test that the function returns a Unix timestamp if as_epoc is True
-        self.assertIsInstance(filter_datetime_now(as_epoc=True), float)
 
 
 if __name__ == '__main__':

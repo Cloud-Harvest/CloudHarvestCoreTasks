@@ -12,8 +12,22 @@ class BaseHarvestException(BaseException):
     """
 
     def __init__(self, prefix: str, *args, log_level: _log_levels = 'error', **kwargs):
+        import traceback
+        stack = traceback.extract_stack()
+        if len(stack) >= 3:
+            filename, lineno, _, _ = stack[-3]
+
+            # Only keep the filename and the last directory
+            from os import sep
+            filename = sep.join(filename.split(sep)[-2:])
+
+        else:
+            filename, lineno = '<unknown>', 0
+
         message = format_args(*args)
-        getattr(logger, log_level.lower())(f'{prefix}: {message}')
+        log_message = f'{prefix}: ({filename}:{lineno}) {message}'
+
+        getattr(logger, log_level.lower())(log_message)
 
         super().__init__(message)
 
@@ -34,13 +48,6 @@ class TaskError(BaseHarvestException):
         # Format the arguments into something human-readable by recursively joining them into a string.
         formatted_args = format_args(*args)
 
-        # Configure the log prefix
-        if task.task_chain:
-            prefix = f'{task.task_chain.redis_name}[{task.task_chain.position + 1}]'
-
-        else:
-            prefix = task.name
-
         # Make sure the BaseTask.errors is a list (instantiated as None)
         if not isinstance(task.errors, list):
             task.errors = []
@@ -51,7 +58,7 @@ class TaskError(BaseHarvestException):
         from CloudHarvestCoreTasks.tasks import TaskStatusCodes
         task.status = TaskStatusCodes.error
 
-        super().__init__(prefix, formatted_args, **kwargs)
+        super().__init__(task.prefix, formatted_args, **kwargs)
 
 
 class TaskTerminationError(TaskError):

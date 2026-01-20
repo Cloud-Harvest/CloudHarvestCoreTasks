@@ -101,8 +101,8 @@ class DataSetTask(BaseFilterableTask):
         """
         This method returns the keys to be added to the data. If the keys already exist, their existing values are preserved.
         """
-        if self.add_keys:
-            self.data.add_keys(keys=self.add_keys, clobber=False)
+        if self.add_keys or self.add_hidden_keys:
+            self.data.add_keys(keys=self.add_keys + self.add_hidden_keys, clobber=False)
 
         return self
 

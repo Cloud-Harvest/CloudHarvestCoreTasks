@@ -3,8 +3,11 @@ from CloudHarvestCoreTasks.dataset import WalkableDict
 from CloudHarvestCoreTasks.tasks.base import BaseTask
 from CloudHarvestCoreTasks.exceptions import TaskError
 
+from logging import getLogger
 from typing import List
 from pymongo import ReplaceOne
+
+logger = getLogger('harvest')
 
 
 @register_definition(name='harvest_update', category='task')
@@ -21,10 +24,6 @@ class HarvestUpdateTask(BaseTask):
         'Account',                      # The Platform account name or identifier
         'Region',                       # The geographic region name for the Platform
         'UniqueIdentifierKeys',         # UniqueIdentifierKeys requires at least one value, so .0 is expected
-        'Module.Author',                # The author of the Harvest module
-        'Module.Name',                  # The name of the Harvest module that collected the data
-        'Module.Url',                   # The repository where the Harvest module is stored
-        'Module.Version',               # The version of the Harvest module
         'Dates.LastSeen',               # The date indicating when the record was last collected by Harvest
         'Active',                       # A boolean indicating if the record is active
         'TaskChainId',                  # The ID of the task chain that collected the data
@@ -219,15 +218,6 @@ class HarvestUpdateTask(BaseTask):
             'ParentTaskId': self.task_chain.parent if self.task_chain else None
         }
 
-        # Convert the class / module metadata into a dictionary with Titled keys
-        # As of CloudHarvestCorePluginManager 0.1.5, class metadata is recorded when the @register_definition
-        # decorator is called, allowing the dynamic recording of metadata for each registered Harvest module and class.
-        build_components = {
-            'Module': {
-                str(k).title(): v
-                for k, v in (getattr(self, '_harvest_plugin_metadata') or {}).items()}
-        }
-
         dates = {
             'Dates': {
                 'DeactivatedOn': None,
@@ -244,7 +234,7 @@ class HarvestUpdateTask(BaseTask):
         }
 
         # Merge the components into a single metadata dictionary
-        result = WalkableDict(pstar | build_components | dates | silo)
+        result = WalkableDict(pstar | dates | silo)
 
         # Validate that all required metadata fields are present
         missing_fields = [
@@ -496,8 +486,7 @@ class HarvestUpdateTask(BaseTask):
 
         return self
 
-    @staticmethod
-    def bulk_replace(silo_name: str, collection: str, prepared_replacements: List[ReplaceOne]) -> dict:
+    def bulk_replace(self, silo_name: str, collection: str, prepared_replacements: List[ReplaceOne]) -> dict:
         """
         This method performs a bulk Replace operation on the specified silo.
 
@@ -517,14 +506,53 @@ class HarvestUpdateTask(BaseTask):
         silo = get_silo(silo_name)
         client = silo.connect()
 
-        bulk_replace_results = client[silo.database][collection].bulk_write(requests=prepared_replacements)
+        chunk_size = 1000  # Maximum number of operations per bulk write
+        bulk_replace_results = {}
 
-        end_time = datetime.now(tz=timezone.utc)
+        while True:
+            # If there are no more prepared replacements, exit the loop
+            if not prepared_replacements:
+                break
+
+            # The end of the chunk is either the chunk size or the end of the list
+            bulk_end = chunk_size if chunk_size <= len(prepared_replacements) else None
+
+            # Perform the bulk write operation
+            write_attempts = 0
+
+            while True:
+                try:
+                    # Write records to the backend database
+                    write_result = client[silo.database][collection].bulk_write(requests=prepared_replacements[0:bulk_end])
+                    break
+
+                except Exception as e:
+                    # If we exceed the maximum attempts, raise the error
+                    if write_attempts > 10:
+                        raise e
+
+                    # Allow retry when writing data to the backend database
+                    write_attempts += 1
+                    logger.debug(f'{self.prefix}: error recording records to backend: {e}')
+
+                    from time import sleep
+                    sleep(.25 * write_attempts)
+
+            # Consolidate the write output results
+            for key, value in write_result.bulk_api_result.items():
+                if isinstance(value, int):
+                    bulk_replace_results[key] = (bulk_replace_results.get(key) or 0) + value
+
+                elif isinstance(value, list):
+                    bulk_replace_results[key] = (bulk_replace_results.get(key) or []) + value
+
+            # Remove the processed replacements from the list
+            del prepared_replacements[0:bulk_end]
 
         return {
             'StartTime': start_time,
             'BulkReplaceResults': bulk_replace_results,
-            'EndTime': end_time,
+            'EndTime': datetime.now(tz=timezone.utc),
         }
 
     def ensure_unique_identifier_index(self) -> 'HarvestUpdateTask':

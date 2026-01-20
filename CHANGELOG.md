@@ -1,7 +1,20 @@
 # Changelog
 
+## 0.8.2
+- [#36](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/36): `MongoTask` and `RedisTask` will now retry database operations using a new method provided in `BaseDataTask`.
+- [#37](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/37): Log messages now include the calling filename, line number, and task name. 
+- [#38](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/38): Address `'NoneType' object has no attriute 'append'` in the `TaskError` exception class.
+ - `BaseTask` now offers the `prefix` property used for log entries.
+- `HarvestUpdateTask.bulk_replace()`
+  - now chunks large replacements to prevent overwhelming the database.
+  - now retries writes as sometimes the backend database is too busy to complete the request at that time.
+- Added `filter_datetime_ago()` jinja2 filter.
+- `BaseFilterableTask` now includes `add_hidden_fields` which returns certain key fields back to the client.
+
 ## 0.8.1
 - Removed `meta.json` in favor of using `pyproject.toml`
+- Removed `Module` metadata requirements
+- Fixed an issue where MongoTask would not sort consistently
 
 ## 0.8.0
 - [#30](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/30) - Added the `EnqueueTask` which allows for the queuing of subtasks via the Api

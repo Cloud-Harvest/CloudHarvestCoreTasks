@@ -3,6 +3,10 @@ from CloudHarvestCoreTasks.tasks.base import BaseDataTask, BaseFilterableTask
 from CloudHarvestCoreTasks.exceptions import TaskError
 
 from pymongo import MongoClient
+from pymongo.errors import *
+
+from logging import getLogger
+logger = getLogger('harvest')
 
 
 @register_definition(name='mongo', category='task')
@@ -75,21 +79,30 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
     def _filter_add_keys(self, *args, **kwargs) -> None:
         """
         This method identifies the first $projection in the pipeline and adds the desired keys to the projection.
-        Where the key contains the period character, the period is removed from the key.
+        Where the key contains the period character, the period is removed from the key. If no projection is present
+        a new one will be added.
 
         Returns
             None: This method does not return anything. It modifies the pipeline in place.
         """
 
-        if self.add_keys:
+        if self.add_keys or self.add_hidden_keys:
             # Find the first projection of the pipeline
             for stage in self.arguments.get('pipeline') or []:
                 if list(stage.keys())[0] == '$project':
                     # Add the keys to the projection
-                    for key in self.add_keys:
+                    for key in self.add_keys + self.add_hidden_keys:
                         stage['$project'][key] = 1
 
                     break
+
+            # else:
+            #     new_project_stage = {'$project': {}}
+            #
+            #     for key in self.add_keys + self.add_hidden_keys:
+            #         new_project_stage['$project'][key] = 1
+            #
+            #     self.arguments['pipeline'].append(new_project_stage)
 
         return None
 
@@ -279,10 +292,12 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
         }
 
     def _filter_sort(self) -> dict or None:
-        if self.sort:
+        sort_keys = self.sort or self.filter_keys()
+
+        if sort_keys:
             result = {}
 
-            for sort in self.sort:
+            for sort in sort_keys:
                 if ':' in sort:
                     field, direction = sort.split(':')
 
@@ -298,7 +313,7 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
                     result[sort] = 1
 
             return {
-                '$sort': result
+                '$sort': result | { '_id': 1 }  # Tie-breaker to ensure consistent ordering
             }
 
         return None
@@ -329,10 +344,22 @@ class MongoTask(BaseDataTask, BaseFilterableTask):
             # Expose database-level commands
             database_object = client[self.silo.database]
 
-        # Execute the command on the database or collection
-        self.calls += 1
+        # Define the exceptions that should trigger a retry
+        retryable_exceptions = (
+            AutoReconnect,
+            ExecutionTimeout,
+            NetworkTimeout,
+            ServerSelectionTimeoutError,
+            WTimeoutError,
+            WaitQueueTimeoutError
+        )
 
-        result = getattr(database_object, self.command)(**self.arguments)
+        # Execute the command with retry logic
+        result = self.retryable_execution(
+            retryable_exceptions=retryable_exceptions,
+            client_object=database_object,
+            **self.arguments
+        )
 
         # Convert the result to a list if it is a generator or cursor
         from types import GeneratorType

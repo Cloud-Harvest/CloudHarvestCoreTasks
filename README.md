@@ -96,6 +96,7 @@ These tasks are designed to be modular and reusable, and are used to build more 
 | [`mongo`](docs/tasks/mongo.md)          | `MongoTask`            | This Task connects to a Mongo database and performs some action.                                                                        |
 | [`prune`](docs/tasks/prune.md)          | `PruneTask`            | A Task which cleans up memory by deleting the results from previous Tasks.                                                              |
 | [`redis`](docs/tasks/redis.md)          | `RedisTask`            | This task connects to a Redis database and performs some operation.                                                                     |
+| [`set`](docs/tasks/set.md)              | `SetTask`              | A task for setting Task Chain variables and casting them into different types.                                                          |
 | [`wait`](docs/tasks/wait.md)            | `WaitTask`             | A Task which waits for specific conditions to be met before continuing. Useful when running asynchronous Tasks using `blocking: False`. |
 
 # License

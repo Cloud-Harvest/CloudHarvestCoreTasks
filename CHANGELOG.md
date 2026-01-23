@@ -1,4 +1,7 @@
 # Changelog
+## 0.9.0
+- [#43](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/43): created the `SetTask` which allows setting / casting variables in the task chain context.
+
 
 ## 0.8.2
 - [#36](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/36): `MongoTask` and `RedisTask` will now retry database operations using a new method provided in `BaseDataTask`.

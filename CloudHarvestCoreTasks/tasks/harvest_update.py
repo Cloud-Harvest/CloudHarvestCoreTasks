@@ -215,7 +215,8 @@ class HarvestUpdateTask(BaseTask):
             'UniqueIdentifierKeys': self.task_chain.unique_identifier_keys,
             'Active': True,  # Active by default because records found in this collection process are known to exist
             'TaskChainId': self.task_chain.id if self.task_chain else None,
-            'ParentTaskId': self.task_chain.parent if self.task_chain else None
+            'ParentTaskId': self.task_chain.parent if self.task_chain else None,
+            'TemplateIdentifier': self.task_chain.template_identifier
         }
 
         dates = {

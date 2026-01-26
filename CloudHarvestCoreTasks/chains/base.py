@@ -54,11 +54,13 @@ class BaseTaskChain(List[BaseTask]):
                  priority: int = 0,
                  variables: dict = None,
                  filters: dict = None,
+                 template_identifier: str = None,
                  *args, **kwargs):
         """
         Initializes a new instance of the BaseTaskChain class.
 
         Args:
+            template_identifier (str): The source name of the task chain template.
             template(dict): The configuration for the task chain.
                 name(str): The name of the task chain.
                 tasks(List[dict]): A list of task configurations for the tasks in the chain.
@@ -78,6 +80,7 @@ class BaseTaskChain(List[BaseTask]):
         from uuid import uuid4
         self.id = kwargs.get('id') or str(uuid4())
 
+        self.template_identifier = template_identifier or 'unknown-template'
         self.name = template['name']
         self.parent = parent
         self.priority = priority

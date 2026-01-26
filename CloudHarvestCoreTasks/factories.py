@@ -50,7 +50,7 @@ def task_chain_from_file(file_path: str) -> BaseTaskChain:
     return task_chain
 
 
-def task_chain_from_dict(template: dict, **kwargs) -> BaseTaskChain:
+def task_chain_from_dict(template: dict, template_identifier: str = None, **kwargs) -> BaseTaskChain:
     """
     Creates a task chain from a dictionary.
 
@@ -59,6 +59,7 @@ def task_chain_from_dict(template: dict, **kwargs) -> BaseTaskChain:
 
     Arguments
     template (dict): A dictionary representation of the task chain.
+    template_identifier (str, optional): An identifier for the task chain template. Defaults to None.
     **kwargs: Additional keyword arguments to pass to the task
 
     Returns:
@@ -98,7 +99,11 @@ def task_chain_from_dict(template: dict, **kwargs) -> BaseTaskChain:
     task_chain_configuration['chain_type'] = chain_class.__name__
 
     # Instantiate the task chain class.
-    result = chain_class(template=task_chain_configuration, **task_chain_configuration | kwargs)
+    result = chain_class(
+        template=task_chain_configuration,
+        template_identifier=template_identifier,
+        **task_chain_configuration | kwargs
+    )
 
     return result
 

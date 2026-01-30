@@ -147,9 +147,14 @@ def template_task_configuration(task_configuration: dict or BaseTask,
         # Normal task lookup
         task_class = Registry.find(result_key='cls', category='task', name=class_name)[0]
 
+    # Replace templated values in the task configuration
+    from CloudHarvestCoreTasks.templating import template_object
+    task_configuration = template_object(template=task_configuration)
+
     # Replace string object references with the objects themselves
     from CloudHarvestCoreTasks.dataset import WalkableDict
     from CloudHarvestCoreTasks.environment import Environment
+
     templated_task_configuration = WalkableDict(task_configuration).replace(
         variables={
             'chain': task_chain,                                                                            # The task chain itself

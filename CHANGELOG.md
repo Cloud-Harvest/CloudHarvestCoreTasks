@@ -3,6 +3,7 @@
 - [#43](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/43): created the `SetTask` which allows setting / casting variables in the task chain context.
 - `task_chain_from_dict` now accepts the `template_identifier` argument to set the `template_identifier` property on the `BaseTaskChain`. This allows us to track which template was used to create the task chain.
 - `HarvestUpdateTask` now includes the `TemplateIdentifier` field in each record's metadata.
+- Additional Jinja2 templating at Task instantiation.
 
 ## 0.8.2
 - [#36](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/36): `MongoTask` and `RedisTask` will now retry database operations using a new method provided in `BaseDataTask`.

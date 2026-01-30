@@ -16,4 +16,5 @@ from CloudHarvestCoreTasks.tasks.json import JsonTask
 from CloudHarvestCoreTasks.tasks.mongo import MongoTask
 from CloudHarvestCoreTasks.tasks.prune import PruneTask
 from CloudHarvestCoreTasks.tasks.redis import RedisTask
+from CloudHarvestCoreTasks.tasks.set_task import SetTask
 from CloudHarvestCoreTasks.tasks.wait import WaitTask

@@ -45,8 +45,10 @@ def template_object(template: Any, variables: dict = None) -> dict:
         loader=DictLoader({'template': template_to_render}),
     )
 
-    # Add all filters from the `filters` module to the environment
-    environment.filters.update(list_filters())
+    # Add all filters from the `filters` module to the environment as filters and globals
+    filters = list_filters()
+    environment.filters.update(filters)
+    environment.globals.update(filters)
 
     try:
         # Render the template with the provided variables (or an empty dictionary if no variables were provided)

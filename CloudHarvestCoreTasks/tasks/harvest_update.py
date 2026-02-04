@@ -24,6 +24,8 @@ class HarvestUpdateTask(BaseTask):
         'Account',                      # The Platform account name or identifier
         'Region',                       # The geographic region name for the Platform
         'UniqueIdentifierKeys',         # UniqueIdentifierKeys requires at least one value, so .0 is expected
+        'SingletonKeys',                # SingletonKeys defaults to UniqueIdentifierKeys if not specified
+        'Singleton',                    # A dictionary of singleton key/value pairs used to recollect single records
         'Dates.LastSeen',               # The date indicating when the record was last collected by Harvest
         'Active',                       # A boolean indicating if the record is active
         'TaskChainId',                  # The ID of the task chain that collected the data
@@ -197,6 +199,24 @@ class HarvestUpdateTask(BaseTask):
             # The 'Account' field is a special case. It can be either the AccountName or the AccountId, depending on the data source.
             record['Harvest']['Account'] = record.walk('Harvest.AccountName') or record.walk('Harvest.AccountId') or record.walk('Harvest.Account')
 
+            # Create the singleton dictionary based on the singleton keys
+            singleton = {
+                key.replace('.', '_'): record.walk(key)
+                for key in metadata['SingletonKeys']
+            }
+
+            # Set the singleton dictionary on the record's Harvest metadata.
+            record['Harvest']['Singleton'] = singleton
+
+            # Validate that all required metadata fields are present
+            missing_fields = [
+                field for field in self.REQUIRED_METADATA_FIELDS
+                if record.walk(f'Harvest.{field}') is None
+            ]
+
+            if missing_fields:
+                raise TaskError(self, f'Missing required metadata fields: {missing_fields}')
+
         return data
 
     def build_metadata(self) -> dict:
@@ -213,6 +233,7 @@ class HarvestUpdateTask(BaseTask):
             'Account': self.task_chain.account,
             'Region': self.task_chain.region,
             'UniqueIdentifierKeys': self.task_chain.unique_identifier_keys,
+            'SingletonKeys': self.task_chain.singleton_keys,
             'Active': True,  # Active by default because records found in this collection process are known to exist
             'TaskChainId': self.task_chain.id if self.task_chain else None,
             'ParentTaskId': self.task_chain.parent if self.task_chain else None,
@@ -236,18 +257,7 @@ class HarvestUpdateTask(BaseTask):
 
         # Merge the components into a single metadata dictionary
         result = WalkableDict(pstar | dates | silo)
-
-        # Validate that all required metadata fields are present
-        missing_fields = [
-            field for field in self.REQUIRED_METADATA_FIELDS
-            if result.walk(field) is None
-        ]
-
-        if missing_fields:
-            raise TaskError(self, f'Missing required metadata fields: {missing_fields}')
-
-        else:
-            return result
+        return result
 
     def replace_bulk_records(self, data: List[dict]) -> list:
         """

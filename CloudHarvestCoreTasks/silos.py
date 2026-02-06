@@ -150,8 +150,24 @@ class MongoSilo(BaseSilo):
                     # Ensure the index is created in the background unless specified
                     index |= {'background': True}  if not index.get('background') else {}
 
-                    # Create the index
-                    client[self.database][collection].create_index(**index)
+                    while True:
+                        try:
+                            # Create the index
+                            client[self.database][collection].create_index(**index)
+                            break
+
+                        except Exception as ex:
+                            # Capture specific exception for existing index with different name
+                            if 'Index already exists with a different name' in str(ex):
+                                # Drop the existing index and recreate it
+                                index_name = ex.args[0].split('name: ')[1].strip()
+                                client[self.database][collection].drop_index(index_name)
+                                logger.debug(f'Dropped existing index {index_name} in collection {self.database}[{collection}]. Retrying creation of index {position}.')
+                                continue
+
+                            else:
+                                raise ex
+
 
                 except BaseException as ex:
                     logger.error(f'Failed to create index {position} in collection {self.database}[{collection}] : {ex}')

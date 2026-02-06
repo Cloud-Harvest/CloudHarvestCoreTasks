@@ -352,6 +352,7 @@ class HarvestUpdateTask(BaseTask):
             client: MongoClient = silo.connect()
 
             collection = client[silo.database][self.task_chain.replacement_collection_name]
+            deactivate_records = []
 
             if self.task_chain.mode == 'all':
                 # Records to be deactivated
@@ -360,6 +361,7 @@ class HarvestUpdateTask(BaseTask):
                     collection.aggregate([
                         {
                             '$match': {
+                                'Harvest.Active': True,                             # Only consider active records
                                 'Harvest.AccountId': self.task_chain.account,       # Must use AccountId here because self.task_chain.account is always the id number
                                 'Harvest.Region': self.task_chain.region,
                                 'Harvest.UniqueIdentifier': {'$nin': unique_identifiers}
@@ -374,33 +376,45 @@ class HarvestUpdateTask(BaseTask):
                 ]
 
             else:
-                # More selective subset of entries
-                deactivate_records = [
-                    record
-                    for record in self.task_chain.identifiers
-                    if record not in unique_identifiers
-                ]
+                # Singleton mode only deactivates the single record specified in InputUniqueIdentifier if it was not
+                # updated in this collection operation. This is to prevent deactivation of other records in the same
+                # account/region which should go untouched.
+                if self.task_chain.variables.get('InputUniqueIdentifier') not in unique_identifiers:
+                    deactivate_records = [
+                        self.task_chain.variables.get('InputUniqueIdentifier')
+                    ]
 
-            # Deactivate Records that were not found in this data collection operation (assumed to be inactive)
-            deactivated_replacements = silo.connect()[silo.database][self.task_chain.replacement_collection_name].update_many(
-                filter={
-                    'Harvest.Active': True,  # Only deactivate active records
-                    'Harvest.UniqueIdentifier': {'$in': deactivate_records},
-                },
-                update={
-                    '$set': {
-                        'Harvest.Active': False,
-                        'Harvest.Dates.DeactivatedOn': deactivation_timestamp
+            if deactivate_records:
+                # Deactivate Records that were not found in this data collection operation (assumed to be inactive)
+                deactivated_replacements = silo.connect()[silo.database][self.task_chain.replacement_collection_name].update_many(
+                    filter={
+                        'Harvest.Active': True,  # Only deactivate active records
+                        'Harvest.UniqueIdentifier': {'$in': deactivate_records},
+                    },
+                    update={
+                        '$set': {
+                            'Harvest.Active': False,
+                            'Harvest.Dates.DeactivatedOn': deactivation_timestamp
+                        }
                     }
-                }
-            )
+                )
+
+                deactivated_match_count = deactivated_replacements.matched_count
+                deactivated_modified_count = deactivated_replacements.modified_count
+                is_no_op = False
+
+            else:
+                deactivated_match_count = 0
+                deactivated_modified_count = 0
+                is_no_op = True
 
             # Record the deactivation operation in the Task metadata
             self.meta['Stages'].append({'DeactivateDocuments': {
                 'StartTime': deactivate_records_start,
                 'DeactivatedDocuments': {
-                    'matched': deactivated_replacements.matched_count,
-                    'modified': deactivated_replacements.modified_count
+                    'matched': deactivated_match_count,
+                    'modified': deactivated_modified_count,
+                    'no_op': is_no_op
                 },
                 'EndTime': deactivate_records_start
             }})
@@ -414,30 +428,39 @@ class HarvestUpdateTask(BaseTask):
             # - Account
             # - Region
             deactivate_metadata_start = datetime.now(tz=timezone.utc)
-            silo = get_silo('harvest-core')
-            deactivated_metadata = silo.connect()[silo.database]['metadata'].update_many(
 
-                filter={
-                    'UniqueIdentifier': {'$nin': unique_identifiers},
-                    'Silo': self.task_chain.destination_silo,
-                    'Collection': self.task_chain.replacement_collection_name,
-                    'Harvest.AccountId': self.task_chain.account,
-                    'Harvest.Region': self.task_chain.region
-                },
-                update={
-                    '$set': {
-                        'Active': False,
-                        'DeactivatedOn': deactivation_timestamp
+            if deactivate_records:
+                silo = get_silo('harvest-core')
+                deactivated_metadata = silo.connect()[silo.database]['metadata'].update_many(
+                    filter={
+                        'UniqueIdentifier': {'$nin': unique_identifiers},
+                        'AccountId': self.task_chain.account,
+                        'Region': self.task_chain.region,
+                        'Silo': self.task_chain.destination_silo,
+                        'Collection': self.task_chain.replacement_collection_name,
+
+                    },
+                    update={
+                        '$set': {
+                            'Active': False,
+                            'DeactivatedOn': deactivation_timestamp
+                        }
                     }
-                }
-            )
+                )
+
+                deactivate_meta_matched_count = deactivated_metadata.matched_count
+                deactivate_meta_modified_count = deactivated_metadata.modified_count
+
+            else:
+                deactivate_meta_matched_count = 0
+                deactivate_meta_modified_count = 0
 
             # Record the deactivation operation in the Task metadata
             self.meta['Stages'].append({'DeactivateMetadata': {
                 'StartTime': deactivate_metadata_start,
                 'DeactivatedMetadata': {
-                    'matched': deactivated_metadata.matched_count,
-                    'modified': deactivated_metadata.modified_count
+                    'matched': deactivate_meta_matched_count,
+                    'modified': deactivate_meta_modified_count
                 },
                 'EndTime': datetime.now(tz=timezone.utc)
             }})

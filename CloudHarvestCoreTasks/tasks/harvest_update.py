@@ -472,12 +472,12 @@ class HarvestUpdateTask(BaseTask):
         else:
             return {
                 'Replacements': {
-                    'matched': deactivated_replacements.matched_count,
-                    'modified': deactivated_replacements.modified_count
+                    'matched': deactivated_match_count,
+                    'modified': deactivated_modified_count
                 },
                 'Metadata': {
-                    'matched': deactivated_metadata.matched_count,
-                    'modified': deactivated_metadata.modified_count
+                    'matched': deactivate_meta_matched_count,
+                    'modified': deactivate_meta_modified_count
                 }
             }
 

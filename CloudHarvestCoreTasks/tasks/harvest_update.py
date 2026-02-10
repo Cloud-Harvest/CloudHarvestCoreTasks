@@ -438,7 +438,7 @@ class HarvestUpdateTask(BaseTask):
                         'Region': self.task_chain.region,
                         'Silo': self.task_chain.destination_silo,
                         'Collection': self.task_chain.replacement_collection_name,
-
+                        'Active': True
                     },
                     update={
                         '$set': {

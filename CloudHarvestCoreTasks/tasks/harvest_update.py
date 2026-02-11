@@ -433,17 +433,17 @@ class HarvestUpdateTask(BaseTask):
                 silo = get_silo('harvest-core')
                 deactivated_metadata = silo.connect()[silo.database]['metadata'].update_many(
                     filter={
-                        'UniqueIdentifier': {'$nin': unique_identifiers},
+                        'Silo.Name': self.task_chain.destination_silo,
+                        'Silo.Collection': self.task_chain.replacement_collection_name,
                         'AccountId': self.task_chain.account,
                         'Region': self.task_chain.region,
-                        'Silo': self.task_chain.destination_silo,
-                        'Collection': self.task_chain.replacement_collection_name,
+                        'UniqueIdentifier': {'$nin': unique_identifiers},
                         'Active': True
                     },
                     update={
                         '$set': {
                             'Active': False,
-                            'DeactivatedOn': deactivation_timestamp
+                            'Dates.DeactivatedOn': deactivation_timestamp
                         }
                     }
                 )

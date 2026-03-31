@@ -34,7 +34,7 @@ class BaseHarvestTaskChain(BaseTaskChain):
         account (str): The Platform account name or identifier
         region (str): The geographic region name for the Platform
         unique_identifier_keys (str or List[str]): The unique filter keys for the harvested data
-        singleton_keys (str or List[str], optional): Keys used when performing a single record refesh, when single collection is supported
+        singleton_keys (str or List[str], optional): Keys used when performing a single record refresh, when single collection is supported
         destination_silo (str, optional): The name of the destination silo where the harvested data will be stored
         extra_matadata_fields (str or List[str], optional): Additional metadata fields to include in the harvested data's metadata record
         mode (str, optional): The mode of the harvest task chain. 'all' will harvest all data, 'single' will harvest a single record

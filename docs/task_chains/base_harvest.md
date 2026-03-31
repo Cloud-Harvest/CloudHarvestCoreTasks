@@ -15,7 +15,7 @@ The base class for all Harvest Task Chains. This class is responsible for managi
 | `account`                | Yes      | None                     | The Platform account name or identifier                                                                |
 | `region`                 | Yes      | None                     | The geographic region name for the Platform                                                            |
 | `unique_identifier_keys` | Yes      | None                     | The unique filter keys for the harvested data                                                          |
-| `singleton_keys`         | No       | `unique_identifier_keys` | Keys used when performing a single record refesh, when single collection is supported.                 |
+| `singleton_keys`         | No       | `unique_identifier_keys` | Keys used when performing a single record refresh, when single collection is supported.                |
 | `destination_silo`       | No       | `harvest-core`           | The name of the destination silo where the harvested data will be stored                               |
 | `extra_metadata_fields`  | No       | None                     | Additional metadata fields to include in the harvested data's metadata record                          |
 | `mode`                   | No       | 'all'                    | The mode of the harvest task chain. 'all' will harvest all data, 'single' will harvest a single record |

@@ -166,7 +166,7 @@ class MongoSilo(BaseSilo):
                                 continue
 
                             else:
-                                raise ex
+                                raise
 
 
                 except BaseException as ex:

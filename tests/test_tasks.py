@@ -816,6 +816,35 @@ class TestSetTask(BaseTestCase):
         self.assertIsInstance(task.value, str)
         self.assertEqual(task.value, '123.45')
 
+    def test_invalid_cast_type(self):
+        from CloudHarvestCoreTasks.tasks.set_task import SetTask
+
+        task = SetTask(name='set_task_invalid_cast',
+                       description='This is a set task with invalid cast',
+                       identifier='test_var_invalid_cast',
+                       value='123.45',
+                       cast='invalid_cast',
+                       clobber=True)
+
+        task.run()
+
+        self.assertGreater(len(task.errors), 0)
+
+    def test_invalid_cast_value(self):
+        from CloudHarvestCoreTasks.tasks.set_task import SetTask
+
+        task = SetTask(name='set_task_invalid_cast',
+                       description='This is a set task with invalid cast',
+                       identifier='test_var_invalid_cast',
+                       value='some-text-here',
+                       cast='datetime',
+                       clobber=True)
+
+        task.run()
+
+        self.assertGreater(len(task.errors), 0)
+
+
 class TestWaitTask(BaseTestCase):
     def setUp(self):
         self.task = WaitTask(name='wait_task', description='This is a wait task', when_after_seconds=5)

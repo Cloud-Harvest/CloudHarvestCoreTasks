@@ -416,7 +416,7 @@ class HarvestUpdateTask(BaseTask):
                     'modified': deactivated_modified_count,
                     'no_op': is_no_op
                 },
-                'EndTime': deactivate_records_start
+                'EndTime': datetime.now(tz=timezone.utc)
             }})
 
             # Deactivate Metadata records that were not found in this data collection operation (assumed to be inactive)

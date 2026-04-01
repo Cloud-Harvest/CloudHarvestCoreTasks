@@ -10,7 +10,7 @@ from CloudHarvestCoreTasks.chains.base import BaseTaskChain
 logger = getLogger('harvest')
 
 
-def task_chain_from_file(file_path: str) -> BaseTaskChain:
+def task_chain_from_file(file_path: str, template_identifier: str = None) -> BaseTaskChain:
     """
     Create a TaskChain from a json or yaml file. The preferred and recommended file type is yaml. The decision
     to prefer YAML over JSON is based on the fact that YAML is (typically) more Human-readable than JSON. Additionally,
@@ -20,10 +20,11 @@ def task_chain_from_file(file_path: str) -> BaseTaskChain:
     CloudHarvest uses a MongoDb backend, JSON may be more familiar to some users or even preferred when authoring
     task chains which will leverage MongoDb-orientated Tasks and TaskChains.
 
-    Args:
+    Arguments
         file_path: json or yaml file to load
+        template_identifier (str, optional): An identifier for the task chain template. Defaults to None.
 
-    Returns:
+    Returns
         BaseTaskChain
     """
 
@@ -45,7 +46,10 @@ def task_chain_from_file(file_path: str) -> BaseTaskChain:
     else:
         raise ValueError('Unsupported file type. Supported types are .json, .yaml, and .yml.')
 
-    task_chain = task_chain_from_dict(task_chain_registered_class_name=file_path, template=task_chain)
+    task_chain = task_chain_from_dict(
+        task_chain_registered_class_name=file_path,
+        template_identifier=template_identifier,
+        template=task_chain)
 
     return task_chain
 

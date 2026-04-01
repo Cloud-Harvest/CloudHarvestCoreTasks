@@ -68,17 +68,41 @@ class SetTask(BaseTask):
 
                     # Special handling for date/time/datetime casting
                     case ('date' | 'time' | 'datetime'):
-                        from dateutil import parser
+                        # First, we need to standardize the input value to a datetime object. This allows us to handle
+                        # various input formats (e.g., string, date, time) and then cast to the specific type requested.
+                        # We begin by checking if the value is a string, and if so, we attempt to parse it into a
+                        # datetime object using dateutil.parser.
+                        if isinstance(self.value, str):
+                            from dateutil import parser
+                            dt_value = parser.parse(self.value)
 
-                        # Parse the input into a datetime object
-                        self.value = parser.parse(self.value)
+                        # If already a datetime, preserve it as is.
+                        elif isinstance(self.value, datetime):
+                            dt_value = self.value
 
-                        # Convert to the appropriate type, if needed
-                        if self.cast == 'date':
-                            self.value = self.value.date()
+                        # If the input value is a date, we combine it with a default time (midnight) to create a
+                        # datetime object.
+                        elif isinstance(self.value, date):
+                            dt_value = datetime.combine(self.value, time.min)
 
-                        elif self.cast == 'time':
-                            self.value = self.value.time()
+                        # If the input value is a time, we combine it with a default date (today) to create a
+                        # datetime object.
+                        elif isinstance(self.value, time):
+                            dt_value = datetime.combine(date.today(), self.value)
+
+                        else:
+                            raise TypeError(f'Cannot cast value of type {type(self.value).__name__} to {self.cast}.')
+
+                        # Now cast based on the specific type requested.
+                        match self.cast:
+                            case 'date':
+                                self.value = dt_value.date()
+
+                            case 'time':
+                                self.value = dt_value.time()
+
+                            case _:
+                                self.value = dt_value
 
                     # Default casting for other types
                     case _:

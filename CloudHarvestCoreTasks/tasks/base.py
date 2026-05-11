@@ -439,6 +439,9 @@ class BaseTask:
         Returns:
             BaseTask: The instance of the task.
         """
+        # from traceback import format_exception
+        # format_exception(ex)
+        # logger.error(f'{self.prefix}: {ex}')
         TaskError(self, ex)
         self._run_on_directive('error')
 

@@ -599,19 +599,27 @@ class HarvestUpdateTask(BaseTask):
         from CloudHarvestCoreTasks.silos import get_silo
         from pymongo import MongoClient
 
-        # On the collection where the records are being replaced
-        silo = get_silo(self.task_chain.destination_silo)
-        client: MongoClient = silo.connect()
+        try:
+            # On the collection where the records are being replaced
+            silo = get_silo(self.task_chain.destination_silo)
+            client: MongoClient = silo.connect()
 
-        collection = client[silo.database][self.task_chain.replacement_collection_name]
+            collection = client[silo.database][self.task_chain.replacement_collection_name]
 
-        # Create the UniqueIdentifier index if it doesn't exist
-        collection.create_index([('Harvest.UniqueIdentifier', 1)], unique=True)
+            # Create the UniqueIdentifier index if it doesn't exist
+            collection.create_index([('Harvest.UniqueIdentifier', 1)], unique=True)
 
-        # On the metadata collection
-        silo = get_silo('harvest-core')
-        client: MongoClient = silo.connect()
-        collection = client[silo.database]['metadata']
-        collection.create_index([('UniqueIdentifier', 1)], unique=True)
+        except Exception as ex:
+            logger.error(f'{self.prefix}: {ex}')
+
+        try:
+            # On the metadata collection
+            silo = get_silo('harvest-core')
+            client: MongoClient = silo.connect()
+            collection = client[silo.database]['metadata']
+            collection.create_index([('UniqueIdentifier', 1)], unique=True)
+
+        except Exception as ex:
+            logger.error(f'{self.prefix}: {ex}')
 
         return self

@@ -10,7 +10,7 @@ from CloudHarvestCoreTasks.chains.base import BaseTaskChain
 logger = getLogger('harvest')
 
 
-def task_chain_from_file(file_path: str) -> BaseTaskChain:
+def task_chain_from_file(file_path: str, template_identifier: str = None) -> BaseTaskChain:
     """
     Create a TaskChain from a json or yaml file. The preferred and recommended file type is yaml. The decision
     to prefer YAML over JSON is based on the fact that YAML is (typically) more Human-readable than JSON. Additionally,
@@ -20,10 +20,11 @@ def task_chain_from_file(file_path: str) -> BaseTaskChain:
     CloudHarvest uses a MongoDb backend, JSON may be more familiar to some users or even preferred when authoring
     task chains which will leverage MongoDb-orientated Tasks and TaskChains.
 
-    Args:
+    Arguments
         file_path: json or yaml file to load
+        template_identifier (str, optional): An identifier for the task chain template. Defaults to None.
 
-    Returns:
+    Returns
         BaseTaskChain
     """
 
@@ -45,12 +46,15 @@ def task_chain_from_file(file_path: str) -> BaseTaskChain:
     else:
         raise ValueError('Unsupported file type. Supported types are .json, .yaml, and .yml.')
 
-    task_chain = task_chain_from_dict(task_chain_registered_class_name=file_path, template=task_chain)
+    task_chain = task_chain_from_dict(
+        task_chain_registered_class_name=file_path,
+        template_identifier=template_identifier,
+        template=task_chain)
 
     return task_chain
 
 
-def task_chain_from_dict(template: dict, **kwargs) -> BaseTaskChain:
+def task_chain_from_dict(template: dict, template_identifier: str = None, **kwargs) -> BaseTaskChain:
     """
     Creates a task chain from a dictionary.
 
@@ -59,6 +63,7 @@ def task_chain_from_dict(template: dict, **kwargs) -> BaseTaskChain:
 
     Arguments
     template (dict): A dictionary representation of the task chain.
+    template_identifier (str, optional): An identifier for the task chain template. Defaults to None.
     **kwargs: Additional keyword arguments to pass to the task
 
     Returns:
@@ -98,7 +103,11 @@ def task_chain_from_dict(template: dict, **kwargs) -> BaseTaskChain:
     task_chain_configuration['chain_type'] = chain_class.__name__
 
     # Instantiate the task chain class.
-    result = chain_class(template=task_chain_configuration, **task_chain_configuration | kwargs)
+    result = chain_class(
+        template=task_chain_configuration,
+        template_identifier=template_identifier,
+        **task_chain_configuration | kwargs
+    )
 
     return result
 
@@ -142,9 +151,14 @@ def template_task_configuration(task_configuration: dict or BaseTask,
         # Normal task lookup
         task_class = Registry.find(result_key='cls', category='task', name=class_name)[0]
 
+    # Replace templated values in the task configuration
+    from CloudHarvestCoreTasks.templating import template_object
+    task_configuration = template_object(template=task_configuration)
+
     # Replace string object references with the objects themselves
     from CloudHarvestCoreTasks.dataset import WalkableDict
     from CloudHarvestCoreTasks.environment import Environment
+
     templated_task_configuration = WalkableDict(task_configuration).replace(
         variables={
             'chain': task_chain,                                                                            # The task chain itself

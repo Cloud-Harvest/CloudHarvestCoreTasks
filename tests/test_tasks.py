@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import tempfile
 import unittest
@@ -701,6 +701,149 @@ class TestPruneTask(BaseTestCase):
         # Check that the task chain did not result in error
         self.assertIsNone(self.task_chain.result.get('error'))
         self.assertEqual(str(self.task_chain.status), TaskStatusCodes.complete)
+
+class TestSetTask(BaseTestCase):
+    def test_str_cast(self):
+        from CloudHarvestCoreTasks.tasks.set_task import SetTask
+
+        task = SetTask(name='set_task_str',
+                       description='This is a set task with str cast',
+                       identifier='test_var_str',
+                       value=123,
+                       cast='str',
+                       clobber=True)
+
+        task.run()
+        self.assertIsInstance(task.value, str)
+        self.assertEqual(task.value, '123')
+
+    def test_int_cast(self):
+        from CloudHarvestCoreTasks.tasks.set_task import SetTask
+
+        task = SetTask(name='set_task_int',
+                       description='This is a set task with int cast',
+                       identifier='test_var_int',
+                       value='123',
+                       cast='int',
+                       clobber=True)
+
+        task.run()
+        self.assertIsInstance(task.value, int)
+        self.assertEqual(task.value, 123)
+
+    def test_float_cast(self):
+        from CloudHarvestCoreTasks.tasks.set_task import SetTask
+
+        task = SetTask(name='set_task_float',
+                       description='This is a set task with float cast',
+                       identifier='test_var_float',
+                       value='123.45',
+                       cast='float',
+                       clobber=True)
+
+        task.run()
+        self.assertIsInstance(task.value, float)
+        self.assertEqual(task.value, 123.45)
+
+    def test_bool_cast(self):
+        from CloudHarvestCoreTasks.tasks.set_task import SetTask
+
+        task = SetTask(name='set_task_bool',
+                       description='This is a set task with bool cast',
+                       identifier='test_var_bool',
+                       value='True',
+                       cast='bool',
+                       clobber=True)
+
+        task.run()
+        self.assertIsInstance(task.value, bool)
+        self.assertEqual(task.value, True)
+
+    def test_datetime_cast(self):
+        from CloudHarvestCoreTasks.tasks.set_task import SetTask
+
+        task = SetTask(name='set_task_datetime',
+                       description='This is a set task with datetime cast',
+                       identifier='test_var_datetime',
+                       value='2024-01-01T12:00:00Z',
+                       cast='datetime',
+                       clobber=True)
+
+        task.run()
+        self.assertIsInstance(task.value, datetime)
+        self.assertEqual(task.value, datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc))
+
+    def test_date_cast(self):
+        from CloudHarvestCoreTasks.tasks.set_task import SetTask
+        from datetime import date
+
+        task = SetTask(name='set_task_date',
+                       description='This is a set task with date cast',
+                       identifier='test_var_date',
+                       value='2024-01-01',
+                       cast='date',
+                       clobber=True)
+
+        task.run()
+        self.assertIsInstance(task.value, date)
+        self.assertEqual(task.value, date(2024, 1, 1))
+
+    def test_time_cast(self):
+        from CloudHarvestCoreTasks.tasks.set_task import SetTask
+        from datetime import time
+
+        task = SetTask(name='set_task_time',
+                       description='This is a set task with time cast',
+                       identifier='test_var_time',
+                       value='12:00:00',
+                       cast='time',
+                       clobber=True)
+
+        task.run()
+        self.assertIsInstance(task.value, time)
+        self.assertEqual(task.value, time(12, 0, 0))
+
+    def test_no_cast(self):
+        from CloudHarvestCoreTasks.tasks.set_task import SetTask
+
+        task = SetTask(name='set_task_no_cast',
+                       description='This is a set task with no cast',
+                       identifier='test_var_no_cast',
+                       value='123.45',
+                       clobber=True)
+
+        task.run()
+        self.assertIsInstance(task.value, str)
+        self.assertEqual(task.value, '123.45')
+
+    def test_invalid_cast_type(self):
+        from CloudHarvestCoreTasks.tasks.set_task import SetTask
+
+        task = SetTask(name='set_task_invalid_cast',
+                       description='This is a set task with invalid cast',
+                       identifier='test_var_invalid_cast',
+                       value='123.45',
+                       cast='invalid_cast',
+                       clobber=True)
+
+        task.run()
+
+        self.assertGreater(len(task.errors), 0)
+
+    def test_invalid_cast_value(self):
+        from CloudHarvestCoreTasks.tasks.set_task import SetTask
+
+        task = SetTask(name='set_task_invalid_cast',
+                       description='This is a set task with invalid cast',
+                       identifier='test_var_invalid_cast',
+                       value='some-text-here',
+                       cast='datetime',
+                       clobber=True)
+
+        task.run()
+
+        self.assertGreater(len(task.errors), 0)
+
 
 class TestWaitTask(BaseTestCase):
     def setUp(self):

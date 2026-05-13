@@ -23,6 +23,7 @@ In a Task Chain, you called this task by using the key `dataset`.
       * [drop_index](#drop_index)
       * [drop_keys](#drop_keys)
       * [flatten](#flatten)
+      * [get_attribute](#get_attribute)
       * [join](#join)
       * [limit](#limit)
       * [match_and_remove](#match_and_remove)
@@ -367,6 +368,17 @@ stages:
       preserve_lists: True
       separator: '_'
 ```
+
+#### `get_attribute`
+Retrieve an attribute from the `source_key` and stores it in the `target_key`.
+
+| Directive    | Required | Default      | Description                                                                               |
+|--------------|----------|--------------|-------------------------------------------------------------------------------------------|
+| `attribute`  | Yes      |              | The object attribute to retrieve.                                                         |
+| `source_key` | Yes      |              | The key to read attributes from.                                                          |
+| `target_key` | No       | `source_key` | The key to store the read attribute (defaults to `source_key`)                            |
+| `default`    | No       | `None`       | Value to place in `target_key` when the attribute does not exist for the retrieved value. |
+
 
 #### `join`
 Merges two DataSets based on the specified keys. The left DataSet is the one that calls this method while the

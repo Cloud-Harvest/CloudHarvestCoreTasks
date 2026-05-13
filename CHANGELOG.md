@@ -1,4 +1,9 @@
 # Changelog
+## 0.10.0
+- Changes supporting the Azure plugin
+- Expanded `DataSet` with new methods
+  - `get_attribute()` performs a `getattr()` on a key value for all records in the dataset
+
 ## 0.9.0
 - [#43](https://github.com/Cloud-Harvest/CloudHarvestCoreTasks/issues/43): created the `SetTask` which allows setting / casting variables in the task chain context.
 - `task_chain_from_dict` now accepts the `template_identifier` argument to set the `template_identifier` property on the `BaseTaskChain`. This allows us to track which template was used to create the task chain.

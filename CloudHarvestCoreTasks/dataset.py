@@ -1302,7 +1302,7 @@ class DataSet(List[WalkableDict]):
                 new_key = key.title()
 
                 # Remove characters if specified
-                for character in remove_characters:
+                for character in (remove_characters or []):
                     new_key = new_key.replace(character, replacement_character)
 
                 # Assign the new key to the record

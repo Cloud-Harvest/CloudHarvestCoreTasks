@@ -1745,4 +1745,6 @@ def perform_maths_operation(operation: VALID_MATHS_OPERATIONS, values: List[Any]
             total = max(values)
 
     finally:
-        return total
+        pass
+
+    return total

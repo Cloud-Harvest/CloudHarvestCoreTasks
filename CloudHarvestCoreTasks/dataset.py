@@ -756,6 +756,27 @@ class DataSet(List[WalkableDict]):
 
         return self
 
+    def get_attribute(self, attribute: str, source_key: str, target_key: str = None, default: str = None) -> 'DataSet':
+        """
+        Retrieves the attribute of an object and writes it to the target_key (if specified) or the source_key if
+        target_key is not specified.
+
+        Arguments
+        attribute (str): The name of the attribute to retrieve.
+        source_key (str): The key to retrieve the attribute from.
+        target_key (str, optional): The key to assign the attribute value to. If not provided, the source key is used.
+        default (str, optional): The default value to return if the attribute does not exist. Defaults to None.
+
+        Returns
+        DataSet: The updated DataSet with the attribute value assigned to the target key.
+        """
+        target_key = target_key or source_key
+
+        [
+            record.assign(target_key, getattr(record.walk(source_key), attribute, default))
+            for record in self
+        ]
+
     def join(self, data: 'DataSet', left_keys: List[str], right_keys: List[str], inner: bool = False, target_key: str = None) -> 'DataSet':
         """
         Merges two DataSets based on the specified keys. The left DataSet is the one that calls this method while the
